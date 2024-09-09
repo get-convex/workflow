@@ -5,25 +5,31 @@ import { JournalEntry, Step } from "../component/schema.js";
 import { api } from "../component/_generated/api.js";
 import { Result, UseApi } from "../types.js";
 
+export type OriginalEnv = {
+  Date: {
+    now: () => number;
+  };
+};
+
 export type WorkerResult =
   | { type: "handlerDone"; outcome: Result<any> }
   | { type: "executorBlocked"; entry: JournalEntry };
 
 export type StepRequest =
   | {
-    type: "function";
-    functionType: "query" | "mutation" | "action";
-    handle: string;
-    args: any;
+      type: "function";
+      functionType: "query" | "mutation" | "action";
+      handle: string;
+      args: any;
 
-    resolve: (result: any) => void;
-    reject: (error: any) => void;
-  }
+      resolve: (result: any) => void;
+      reject: (error: any) => void;
+    }
   | {
-    type: "sleep";
-    durationMs: number;
-    resolve: (result: any) => void;
-  };
+      type: "sleep";
+      durationMs: number;
+      resolve: (result: any) => void;
+    };
 
 export class StepExecutor {
   private nextStepNumber: number;
@@ -34,6 +40,7 @@ export class StepExecutor {
     private component: UseApi<typeof api>,
     private journalEntries: Array<JournalEntry>,
     private receiver: BaseChannel<StepRequest>,
+    private originalEnv: OriginalEnv,
   ) {
     this.nextStepNumber = journalEntries.length;
   }
@@ -112,7 +119,7 @@ export class StepExecutor {
           handle: message.handle,
           args: message.args,
           outcome: undefined,
-          startedAt: Date.now(),
+          startedAt: this.originalEnv.Date.now(),
           completedAt: undefined,
         };
         break;
@@ -122,16 +129,19 @@ export class StepExecutor {
           type: "sleep",
           inProgress: true,
           durationMs: message.durationMs,
-          deadline: Date.now() + message.durationMs,
+          deadline: this.originalEnv.Date.now() + message.durationMs,
         };
         break;
       }
     }
-    const entry = await this.ctx.runMutation(this.component.index.pushJournalEntry, {
-      workflowId: this.workflowId,
-      stepNumber,
-      step,
-    });
+    const entry = await this.ctx.runMutation(
+      this.component.index.pushJournalEntry,
+      {
+        workflowId: this.workflowId,
+        stepNumber,
+        step,
+      },
+    );
     return entry;
   }
-}    
+}

@@ -1,10 +1,15 @@
-import { api } from "../component/_generated/api.js"
+import { api } from "../component/_generated/api.js";
 import { PropertyValidators, v, Validator } from "convex/values";
 import { Result, UseApi } from "../types.js";
 import { WorkflowDefinition } from "./index.js";
 import { internalMutationGeneric, RegisteredMutation } from "convex/server";
 import { BaseChannel } from "async-channel";
-import { StepExecutor, StepRequest, WorkerResult } from "./step.js";
+import {
+  OriginalEnv,
+  StepExecutor,
+  StepRequest,
+  WorkerResult,
+} from "./step.js";
 import { StepContext } from "./stepContext.js";
 
 // This function is defined in the calling component but then gets passed by
@@ -25,18 +30,6 @@ export function workflowMutation<
     },
     returns: v.null(),
     handler: async (ctx, args) => {
-      // poll => done | notReady
-      // workflow
-      // workflowJournal
-      // let journal represent all things that we can block on
-      // - timers
-      // - function calls
-      // - external events? insert before current executing journal entry?
-      // verify workflow state
-      // load journal
-      // block on function call
-      // -> schedule action that runs function, writes result / schedules poll
-      //      
       const workflow = await ctx.runQuery(component.index.loadWorkflow, {
         workflowId: args.workflowId,
       });
@@ -54,7 +47,6 @@ export function workflowMutation<
       if (blockedBy !== null) {
         console.log(`Workflow ${args.workflowId} blocked by...`);
         console.log(`  ${blockedBy._id}: ${blockedBy.step.type}`);
-        // TODO: reschedule ourselves if needed
         return;
       }
       const journalEntries = await ctx.runQuery(component.index.loadJournal, {
@@ -68,12 +60,14 @@ export function workflowMutation<
         }
       }
       const channel = new BaseChannel<StepRequest>(0);
+      const originalEnv = setupEnvironment(channel);
       const executor = new StepExecutor(
         args.workflowId,
         ctx,
         component,
         journalEntries,
         channel,
+        originalEnv,
       );
 
       const handlerWorker = async (): Promise<WorkerResult> => {
@@ -97,7 +91,7 @@ export function workflowMutation<
             workflowId: args.workflowId,
             generationNumber: args.generationNumber,
             outcome: result.outcome,
-            now: Date.now(),
+            now: originalEnv.Date.now(),
           });
           break;
         }
@@ -105,19 +99,23 @@ export function workflowMutation<
           const { _id, step } = result.entry;
           switch (step.type) {
             case "function": {
-              await ctx.scheduler.runAfter(0, component.index.runFunction, {
-                workflowId: args.workflowId,
-                generationNumber: args.generationNumber,
-                journalId: _id,
-                functionType: step.functionType,
-                handle: step.handle,
-                args: step.args,
-              });
+              await ctx.scheduler.runAt(
+                originalEnv.Date.now(),
+                component.index.runFunction,
+                {
+                  workflowId: args.workflowId,
+                  generationNumber: args.generationNumber,
+                  journalId: _id,
+                  functionType: step.functionType,
+                  handle: step.handle,
+                  args: step.args,
+                },
+              );
               break;
             }
             case "sleep": {
-              await ctx.scheduler.runAfter(
-                step.durationMs,
+              await ctx.scheduler.runAt(
+                originalEnv.Date.now() + step.durationMs,
                 component.index.completeSleep,
                 {
                   workflowId: args.workflowId,
@@ -132,4 +130,50 @@ export function workflowMutation<
       }
     },
   }) as any;
+}
+
+function setupEnvironment(channel: BaseChannel<StepRequest>): OriginalEnv {
+  const global = globalThis as any;
+
+  global.Math.random = (...args: any[]) => {
+    throw new Error(
+      "Math.random() isn't supported within workflows. Use step.random() instead.",
+    );
+  };
+
+  const originalDate = global.Date;
+  delete global.Date;
+
+  function Date(this: any, ...args: any[]) {
+    // `Date()` was called directly, not as a constructor.
+    if (!(this instanceof Date)) {
+      const date = new (Date as any)();
+      return date.toString();
+    }
+    if (args.length === 0) {
+      const unixTsMs = Date.now();
+      return new originalDate(unixTsMs);
+    }
+    return new (originalDate as any)(...args);
+  }
+  Date.now = function () {
+    throw new Error(
+      "Date.now() isn't supported within workflows. Use step.now() instead.",
+    );
+  };
+  Date.parse = originalDate.parse;
+  Date.UTC = originalDate.UTC;
+  Date.prototype = originalDate.prototype;
+  Date.prototype.constructor = Date;
+
+  global.Date = Date;
+
+  delete global.process;
+
+  delete global.Crypto;
+  delete global.crypto;
+  delete global.CryptoKey;
+  delete global.SubtleCrypto;
+
+  return { Date: originalDate };
 }

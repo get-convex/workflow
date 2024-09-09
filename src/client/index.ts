@@ -1,6 +1,15 @@
-import { createFunctionHandle, Expand, FunctionArgs, FunctionReference, FunctionReturnType, GenericDataModel, GenericMutationCtx, RegisteredMutation, ReturnValueForOptionalValidator } from "convex/server";
-import { GenericId, ObjectType, PropertyValidators, Validator } from "convex/values";
-import { api } from "../component/_generated/api.js"
+import {
+  createFunctionHandle,
+  FunctionArgs,
+  FunctionReference,
+  FunctionReturnType,
+  GenericDataModel,
+  GenericMutationCtx,
+  RegisteredMutation,
+  ReturnValueForOptionalValidator,
+} from "convex/server";
+import { ObjectType, PropertyValidators, Validator } from "convex/values";
+import { api } from "../component/_generated/api.js";
 import { UseApi, WorkflowId } from "../types.js";
 import { workflowMutation } from "./workflowMutation.js";
 
@@ -21,8 +30,6 @@ export interface WorkflowStep {
   ): Promise<FunctionReturnType<Action>>;
 
   sleep(ms: number): Promise<void>;
-
-  // TODO: now & random & randomBytes
 }
 
 export type WorkflowDefinition<
@@ -59,11 +66,13 @@ export class WorkflowManager {
     args: FunctionArgs<F>,
   ): Promise<WorkflowId<FunctionReturnType<F>>> {
     const handle = await createFunctionHandle(workflow);
-    const workflowId = await ctx.runMutation(this.component.index.createWorkflow, {
-      workflowHandle: handle,
-      workflowArgs: args,
-    });
+    const workflowId = await ctx.runMutation(
+      this.component.index.createWorkflow,
+      {
+        workflowHandle: handle,
+        workflowArgs: args,
+      },
+    );
     return workflowId as unknown as WorkflowId<FunctionReturnType<F>>;
-  }  
+  }
 }
-

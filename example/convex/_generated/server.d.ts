@@ -152,6 +152,14 @@ export type DatabaseWriter = GenericDatabaseWriter<DataModel>;
 
 export declare const components: {
   workflow: {
+    fetch: {
+      executeFetch: FunctionReference<
+        "action",
+        "internal",
+        { body?: ArrayBuffer; headers: any; method: string; url: string },
+        { body: ArrayBuffer; headers: any; status: number; statusText: string }
+      >;
+    };
     index: {
       completeSleep: FunctionReference<
         "mutation",

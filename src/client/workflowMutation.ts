@@ -4,13 +4,9 @@ import { Result, UseApi } from "../types.js";
 import { WorkflowDefinition } from "./index.js";
 import { internalMutationGeneric, RegisteredMutation } from "convex/server";
 import { BaseChannel } from "async-channel";
-import {
-  OriginalEnv,
-  StepExecutor,
-  StepRequest,
-  WorkerResult,
-} from "./step.js";
+import { StepExecutor, StepRequest, WorkerResult } from "./step.js";
 import { StepContext } from "./stepContext.js";
+import { setupEnvironment } from "./environment.js";
 
 // This function is defined in the calling component but then gets passed by
 // function handle to the workflow component for execution. This function runs
@@ -60,7 +56,11 @@ export function workflowMutation<
         }
       }
       const channel = new BaseChannel<StepRequest>(0);
-      const originalEnv = setupEnvironment(channel);
+      const step = new StepContext(channel);
+      const originalEnv = setupEnvironment(
+        step,
+        component.fetch.executeFetch as any,
+      );
       const executor = new StepExecutor(
         args.workflowId,
         ctx,
@@ -71,7 +71,6 @@ export function workflowMutation<
       );
 
       const handlerWorker = async (): Promise<WorkerResult> => {
-        const step = new StepContext(channel);
         let outcome: Result<any>;
         try {
           const result = await registered.handler(step, workflow.args);
@@ -130,50 +129,4 @@ export function workflowMutation<
       }
     },
   }) as any;
-}
-
-function setupEnvironment(channel: BaseChannel<StepRequest>): OriginalEnv {
-  const global = globalThis as any;
-
-  global.Math.random = (...args: any[]) => {
-    throw new Error(
-      "Math.random() isn't supported within workflows. Use step.random() instead.",
-    );
-  };
-
-  const originalDate = global.Date;
-  delete global.Date;
-
-  function Date(this: any, ...args: any[]) {
-    // `Date()` was called directly, not as a constructor.
-    if (!(this instanceof Date)) {
-      const date = new (Date as any)();
-      return date.toString();
-    }
-    if (args.length === 0) {
-      const unixTsMs = Date.now();
-      return new originalDate(unixTsMs);
-    }
-    return new (originalDate as any)(...args);
-  }
-  Date.now = function () {
-    throw new Error(
-      "Date.now() isn't supported within workflows. Use step.now() instead.",
-    );
-  };
-  Date.parse = originalDate.parse;
-  Date.UTC = originalDate.UTC;
-  Date.prototype = originalDate.prototype;
-  Date.prototype.constructor = Date;
-
-  global.Date = Date;
-
-  delete global.process;
-
-  delete global.Crypto;
-  delete global.crypto;
-  delete global.CryptoKey;
-  delete global.SubtleCrypto;
-
-  return { Date: originalDate };
 }

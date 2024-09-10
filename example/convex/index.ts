@@ -18,6 +18,11 @@ export const exampleWorkflow = workflow.define({
     console.log("before sleep");
     await step.sleep(500);
     console.log("after sleep");
+
+    const resp = await fetch("https://example.com");
+    const body = await resp.text();
+    console.log(`Fetched ${body.length} bytes`);
+
     const embedding = await step.runAction(api.index.computeEmbedding, {
       transcription,
     });

@@ -10,6 +10,7 @@
  * @module
  */
 
+import type * as fetch from "../fetch.js";
 import type * as index from "../index.js";
 
 import type {
@@ -26,9 +27,18 @@ import type {
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  fetch: typeof fetch;
   index: typeof index;
 }>;
 declare const fullApiWithMounts: typeof fullApi & {
+  fetch: {
+    executeFetch: FunctionReference<
+      "action",
+      "public",
+      { body?: ArrayBuffer; headers: any; method: string; url: string },
+      { body: ArrayBuffer; headers: any; status: number; statusText: string }
+    >;
+  };
   index: {
     completeSleep: FunctionReference<
       "mutation",

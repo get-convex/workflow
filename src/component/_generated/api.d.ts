@@ -12,6 +12,7 @@
 
 import type * as fetch from "../fetch.js";
 import type * as index from "../index.js";
+import type * as model from "../model.js";
 
 import type {
   ApiFromModules,
@@ -29,8 +30,9 @@ import type {
 declare const fullApi: ApiFromModules<{
   fetch: typeof fetch;
   index: typeof index;
+  model: typeof model;
 }>;
-declare const fullApiWithMounts: typeof fullApi & {
+export type Mounts = {
   fetch: {
     executeFetch: FunctionReference<
       "action",
@@ -76,7 +78,10 @@ declare const fullApiWithMounts: typeof fullApi & {
           | {
               args: any;
               completedAt?: number;
-              functionType: "query" | "mutation" | "action";
+              functionType:
+                | { type: "query" }
+                | { type: "mutation" }
+                | { recoveryId?: string; type: "action" };
               handle: string;
               inProgress: boolean;
               outcome?:
@@ -121,11 +126,15 @@ declare const fullApiWithMounts: typeof fullApi & {
       "mutation",
       "public",
       {
+        generationNumber: number;
         step:
           | {
               args: any;
               completedAt?: number;
-              functionType: "query" | "mutation" | "action";
+              functionType:
+                | { type: "query" }
+                | { type: "mutation" }
+                | { recoveryId?: string; type: "action" };
               handle: string;
               inProgress: boolean;
               outcome?:
@@ -150,7 +159,10 @@ declare const fullApiWithMounts: typeof fullApi & {
           | {
               args: any;
               completedAt?: number;
-              functionType: "query" | "mutation" | "action";
+              functionType:
+                | { type: "query" }
+                | { type: "mutation" }
+                | { recoveryId?: string; type: "action" };
               handle: string;
               inProgress: boolean;
               outcome?:
@@ -169,12 +181,15 @@ declare const fullApiWithMounts: typeof fullApi & {
         workflowId: string;
       }
     >;
-    runFunction: FunctionReference<
-      "action",
+    startFunction: FunctionReference<
+      "mutation",
       "public",
       {
         args: any;
-        functionType: "query" | "mutation" | "action";
+        functionType:
+          | { type: "query" }
+          | { type: "mutation" }
+          | { type: "action" };
         generationNumber: number;
         handle: string;
         journalId: string;
@@ -193,7 +208,10 @@ declare const fullApiWithMounts: typeof fullApi & {
           | {
               args: any;
               completedAt?: number;
-              functionType: "query" | "mutation" | "action";
+              functionType:
+                | { type: "query" }
+                | { type: "mutation" }
+                | { recoveryId?: string; type: "action" };
               handle: string;
               inProgress: boolean;
               outcome?:
@@ -214,6 +232,10 @@ declare const fullApiWithMounts: typeof fullApi & {
     >;
   };
 };
+// For now fullApiWithMounts is only fullApi which provides
+// jump-to-definition in component client code.
+// Use Mounts for the same type without the inference.
+declare const fullApiWithMounts: typeof fullApi;
 
 export declare const api: FilterApi<
   typeof fullApiWithMounts,

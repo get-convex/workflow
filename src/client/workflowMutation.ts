@@ -7,6 +7,7 @@ import { BaseChannel } from "async-channel";
 import { StepExecutor, StepRequest, WorkerResult } from "./step.js";
 import { StepContext } from "./stepContext.js";
 import { setupEnvironment } from "./environment.js";
+import { JournalEntry } from "../component/schema.js";
 
 // This function is defined in the calling component but then gets passed by
 // function handle to the workflow component for execution. This function runs
@@ -45,9 +46,9 @@ export function workflowMutation<
         console.log(`  ${blockedBy._id}: ${blockedBy.step.type}`);
         return;
       }
-      const journalEntries = await ctx.runQuery(component.index.loadJournal, {
+      const journalEntries = (await ctx.runQuery(component.index.loadJournal, {
         workflowId: args.workflowId,
-      });
+      })) as JournalEntry[];
       for (const journalEntry of journalEntries) {
         if (journalEntry.step.inProgress) {
           throw new Error(
@@ -63,6 +64,7 @@ export function workflowMutation<
       );
       const executor = new StepExecutor(
         args.workflowId,
+        args.generationNumber,
         ctx,
         component,
         journalEntries,
@@ -98,18 +100,14 @@ export function workflowMutation<
           const { _id, step } = result.entry;
           switch (step.type) {
             case "function": {
-              await ctx.scheduler.runAt(
-                originalEnv.Date.now(),
-                component.index.runFunction,
-                {
-                  workflowId: args.workflowId,
-                  generationNumber: args.generationNumber,
-                  journalId: _id,
-                  functionType: step.functionType,
-                  handle: step.handle,
-                  args: step.args,
-                },
-              );
+              await ctx.runMutation(component.index.startFunction, {
+                workflowId: args.workflowId,
+                generationNumber: args.generationNumber,
+                journalId: _id,
+                functionType: step.functionType,
+                handle: step.handle,
+                args: step.args,
+              });            
               break;
             }
             case "sleep": {

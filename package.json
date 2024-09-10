@@ -51,15 +51,18 @@
   },
   "dependencies": {
     "async-channel": "^0.2.0",
-    "convex": "1.15.1-alpha.2"
+    "convex": "^1.15.1-alpha.3"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.1.0",
     "@eslint/js": "^9.9.1",
     "@types/node": "^18.17.0",
+    "@typescript-eslint/eslint-plugin": "^8.4.0",
+    "@typescript-eslint/parser": "^8.4.0",
     "eslint": "^9.9.1",
     "globals": "^15.9.0",
     "prettier": "3.2.5",
-    "typescript": "~5.0.3",
+    "typescript": "^5.5.0",
     "typescript-eslint": "^8.4.0"
   },
   "main": "./dist/commonjs/client/index.js",

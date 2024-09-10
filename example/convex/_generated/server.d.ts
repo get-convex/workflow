@@ -197,7 +197,10 @@ export declare const components: {
             | {
                 args: any;
                 completedAt?: number;
-                functionType: "query" | "mutation" | "action";
+                functionType:
+                  | { type: "query" }
+                  | { type: "mutation" }
+                  | { recoveryId?: string; type: "action" };
                 handle: string;
                 inProgress: boolean;
                 outcome?:
@@ -242,11 +245,15 @@ export declare const components: {
         "mutation",
         "internal",
         {
+          generationNumber: number;
           step:
             | {
                 args: any;
                 completedAt?: number;
-                functionType: "query" | "mutation" | "action";
+                functionType:
+                  | { type: "query" }
+                  | { type: "mutation" }
+                  | { recoveryId?: string; type: "action" };
                 handle: string;
                 inProgress: boolean;
                 outcome?:
@@ -271,7 +278,10 @@ export declare const components: {
             | {
                 args: any;
                 completedAt?: number;
-                functionType: "query" | "mutation" | "action";
+                functionType:
+                  | { type: "query" }
+                  | { type: "mutation" }
+                  | { recoveryId?: string; type: "action" };
                 handle: string;
                 inProgress: boolean;
                 outcome?:
@@ -290,12 +300,15 @@ export declare const components: {
           workflowId: string;
         }
       >;
-      runFunction: FunctionReference<
-        "action",
+      startFunction: FunctionReference<
+        "mutation",
         "internal",
         {
           args: any;
-          functionType: "query" | "mutation" | "action";
+          functionType:
+            | { type: "query" }
+            | { type: "mutation" }
+            | { type: "action" };
           generationNumber: number;
           handle: string;
           journalId: string;
@@ -314,7 +327,10 @@ export declare const components: {
             | {
                 args: any;
                 completedAt?: number;
-                functionType: "query" | "mutation" | "action";
+                functionType:
+                  | { type: "query" }
+                  | { type: "mutation" }
+                  | { recoveryId?: string; type: "action" };
                 handle: string;
                 inProgress: boolean;
                 outcome?:

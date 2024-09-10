@@ -7,6 +7,11 @@ import {
 } from "convex/server";
 import { WorkflowStep } from "./index.js";
 import { StepRequest } from "./step.js";
+import { FunctionType } from "../types.js";
+
+const DEFAULT_MAX_RETRIES = 0;
+const DEFAULT_RETRY_DELAY_MS = 1000;
+const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 
 export class StepContext implements WorkflowStep {
   constructor(private sender: BaseChannel<StepRequest>) {}
@@ -15,21 +20,21 @@ export class StepContext implements WorkflowStep {
     query: Query,
     args: FunctionArgs<Query>,
   ): Promise<FunctionReturnType<Query>> {
-    return await this.runFunction("query", query, args);
+    return await this.runFunction({ type: "query" }, query, args);
   }
 
   async runMutation<Mutation extends FunctionReference<"mutation", any>>(
     mutation: Mutation,
     args: FunctionArgs<Mutation>,
   ): Promise<FunctionReturnType<Mutation>> {
-    return await this.runFunction("mutation", mutation, args);
+    return await this.runFunction({ type: "mutation" }, mutation, args);
   }
 
   async runAction<Action extends FunctionReference<"action", any>>(
     action: Action,
-    args: FunctionArgs<Action>,
-  ): Promise<FunctionReturnType<Action>> {
-    return await this.runFunction("action", action, args);
+    args: FunctionArgs<Action>,    
+  ): Promise<FunctionReturnType<Action>> {        
+    return await this.runFunction({ type: "action" }, action, args);
   }
 
   async sleep(durationMs: number): Promise<void> {
@@ -42,7 +47,7 @@ export class StepContext implements WorkflowStep {
   }
 
   private async runFunction<F extends FunctionReference<any>>(
-    functionType: "query" | "mutation" | "action",
+    functionType: FunctionType,
     f: F,
     args: any,
   ): Promise<any> {

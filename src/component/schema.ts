@@ -48,9 +48,14 @@ export const step = v.union(
     inProgress: v.boolean(),
 
     functionType: v.union(
-      v.literal("query"),
-      v.literal("mutation"),
-      v.literal("action"),
+      v.object({ type: v.literal("query") }),
+      v.object({ type: v.literal("mutation") }),
+      v.object({
+        type: v.literal("action"),
+        // Actions are fallible, so we need to schedule a recovery mutation.
+        // This gets set when we start executing the action.
+        recoveryId: v.optional(v.string()),
+      }),
     ),
     handle: v.string(),
     args: v.any(),
@@ -84,10 +89,6 @@ export type JournalEntry = Infer<typeof journalDocument>;
 
 export default defineSchema({
   workflows: defineTable(workflowObject),
-
-  // use microtask queue to check when it's "empty"
-  // capture logs? only log new ones?
-
   workflowJournal: defineTable(journalObject)
     .index("workflow", ["workflowId", "stepNumber"])
     .index("inProgress", ["step.type", "step.inProgress", "workflowId"]),

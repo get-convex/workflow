@@ -1,11 +1,18 @@
 import { Expand, FunctionReference } from "convex/server";
-import { GenericId } from "convex/values";
+import { GenericId, Infer, v } from "convex/values";
 
 export type Result<T> =
   | { type: "success"; result: T }
   | { type: "error"; error: string };
 
 export type WorkflowId<T> = string & { __workflowReturns: T };
+
+export const functionType = v.union(
+  v.object({ type: v.literal("query") }),
+  v.object({ type: v.literal("mutation") }),
+  v.object({ type: v.literal("action") }),
+);
+export type FunctionType = Infer<typeof functionType>;
 
 export type UseApi<API> = Expand<{
   [mod in keyof API]: API[mod] extends FunctionReference<

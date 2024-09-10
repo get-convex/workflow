@@ -3,7 +3,7 @@ import { GenericMutationCtx, GenericDataModel } from "convex/server";
 import { convexToJson } from "convex/values";
 import { JournalEntry, Step } from "../component/schema.js";
 import { api } from "../component/_generated/api.js";
-import { Result, UseApi } from "../types.js";
+import { FunctionType, Result, UseApi } from "../types.js";
 
 export type OriginalEnv = {
   Date: {
@@ -18,7 +18,7 @@ export type WorkerResult =
 export type StepRequest =
   | {
       type: "function";
-      functionType: "query" | "mutation" | "action";
+      functionType: FunctionType;
       handle: string;
       args: any;
 
@@ -35,7 +35,7 @@ export class StepExecutor {
   private nextStepNumber: number;
   constructor(
     private workflowId: string,
-
+    private generationNumber: number,
     private ctx: GenericMutationCtx<GenericDataModel>,
     private component: UseApi<typeof api>,
     private journalEntries: Array<JournalEntry>,
@@ -134,14 +134,15 @@ export class StepExecutor {
         break;
       }
     }
-    const entry = await this.ctx.runMutation(
+    const entry = (await this.ctx.runMutation(
       this.component.index.pushJournalEntry,
       {
         workflowId: this.workflowId,
+        generationNumber: this.generationNumber,
         stepNumber,
         step,
       },
-    );
+    )) as JournalEntry;
     return entry;
   }
 }

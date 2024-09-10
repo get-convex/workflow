@@ -1,109 +1,120 @@
-# Example Convex Component: Sharded Counter
+# Convex Workflow (ALPHA)
 
-This is a Convex component, ready to be published on npm.
+This component adds durably executed _workflows_ to Convex. Combine Convex queries, mutations,
+and actions into long-lived workflows, where the system will always fully execute a workflow
+to completion.
 
-To create your own component, find and replace "counter" to your component's name.
+```ts
+import { WorkflowManager } from "@convex-dev/workflow/component";
+import { components } from "./_generated/server";
 
-To develop your component run a dev process in the example project.
+export const workflow = new WorkflowManager(components.workflow);
 
-```
-npm i
-cd example
-npm i
-npx convex dev
-```
-
-Modify the schema and index files in src/component/ to define your component.
-
-Optionally write a client forusing this component in src/client/index.ts.
-
-If you won't be adding frontend code (e.g. React components) to this
-component you can delete the following:
-
-- "prepack" and "postpack" scripts of package.json
-- "./frontend" exports in package.json
-- the "src/frontend/" directory
-- the "node10stubs.mjs" file
-
-### Component Directory structure
-
-```
-.
-├── README.md           documentation of your component
-├── package.json        component name, version number, other metadata
-├── package-lock.json   Components are like libraries, package-lock.json
-│                       is .gitignored and ignored by consumers.
-├── src
-│   ├── component/
-│   │   ├── _generated/ Files here are generated.
-│   │   ├── convex.config.ts  Name your component here and use other components
-│   │   ├── index.ts    Define functions here and in new files in this directory
-│   │   └── schema.ts   schema specific to this component
-│   ├── client.ts       "Fat" client code goes here.
-│   └── frontend/       Code intended to be used on the frontend goes here.
-│       │               Your are free to delete this if this component
-│       │               does not provide code.
-│       └── index.ts
-├── example/            example Convex app that uses this component
-│   │                   Run 'npx convex dev' from here during development.
-│   ├── package.json.ts Thick client code goes here.
-│   └── convex/
-│       ├── _generated/
-│       ├── convex.config.ts  Imports and uses this component
-│       ├── myFunctions.ts    Functions that use the component
-│       ├── schema.ts         Example app schema
-│       └── tsconfig.json
-│  
-├── dist/               Publishing artifacts will be created here.
-├── commonjs.json       Used during build by TypeScript.
-├── esm.json            Used during build by TypeScript.
-├── node10stubs.mjs     Script used during build for compatibility
-│                       with the Metro bundler used with React Native.
-├── eslint.config.mjs   Recommended lints for writing a component.
-│                       Feel free to customize it.
-└── tsconfig.json       Recommended tsconfig.json for writing a component.
-                        Some settings can be customized, some are required.
+export const exampleWorkflow = workflow.define({
+  args: {
+    storageId: v.id("_storage"),
+  },
+  handler: async (step, args) => {
+    const transcription = await step.runAction(api.index.computeTranscription, {
+      storageId: args.storageId,
+    });
+    const embedding = await step.runAction(api.index.computeEmbedding, {
+      transcription,
+    });
+    console.log(embedding);
+  },
+});
 ```
 
-### Structure of a Convex Component
+## Installation
 
-A Convex components exposes the entry point convex.config.js. The on-disk
-location of this file must be a directory containing implementation files. These
-files should be compiled to ESM.
-The package.json should contain `"type": "module"` and the tsconfig.json should
-contain `"moduleResolution": "Bundler"` or `"Node16"` in order to import other
-component definitions.
-
-In addition to convex.config.js, a component typically exposes a client that
-wraps communication with the component for use in the Convex
-environment is typically exposed as a named export `MyComponentClient` or
-`MyComponent` imported from the root package.
+First, add `@convex-dev/workflow` to your Convex project:
 
 ```
-import { MyComponentClient } from "my-convex-component";
+npm install @convex-dev/workflow
 ```
 
-When frontend code is included it is typically published at a subpath:
+Then, install the component within your `convex/convex.config.ts` file:
 
+```ts
+// convex/convex.config.ts
+import workflow from "@convex-dev/workflow/component";
+import { defineApp } from "convex/server";
+
+const app = defineApp();
+app.use(workflow);
+export default app;
 ```
-import { helper } from "my-convex-component/frontend";
-import { FrontendReactComponent } from "my-convex-component/react";
+
+Finally, create a workflow manager within your `convex/` folder, and point it
+to the installed component:
+
+```ts
+// convex/index.ts
+import { WorkflowManager } from "@convex-dev/workflow/component";
+import { components } from "./_generated/server";
+
+export const workflow = new WorkflowManager(components.workflow);
 ```
 
-Frontend code should be compiled as CommonJS code as well as ESM and make use of
-subpackage stubs (see next section).
+## Usage
 
-If you do include frontend components, prefer peer dependencies to avoid using
-more than one version of e.g. React.
+The first step is to define a workflow using `workflow.define()`. This function
+is designed to be reminiscent of defining a Convex action but with a few restrictions:
 
-### Support for Node10 module resolution
+1. The workflow must declare an argument validator.
+2. The workflow runs in the background, so it can't return a value.
+3. The workflow must be _deterministic_, so it should implement most of its logic
+   by calling out to other Convex functions. We will be lifting some of these
+   restrictions over time by implementing `Math.random()`, `Date.now()`, and
+   `fetch` within our workflow environment.
 
-The [Metro](https://reactnative.dev/docs/metro) bundler for React Native
-requires setting
-[`resolver.unstable_enablePackageExports`](https://metrobundler.dev/docs/package-exports/)
-in order to import code that lives in `dist/esm/frontend.js` from a path like
-`my-convex-component/frontend`.
+```ts
+// convex/index.ts
 
-Authors of Convex component that provide frontend components are encouraged to
-support these legacy "Node10-style" module resolution algorithms by generating
-stub directories with special pre- and post-pack scripts.
+workflow.define({
+  args: {
+    storageId: v.id("_storage"),
+  },
+  handler: async (step, args) => {
+    const transcription = await step.runAction(api.index.computeTranscription, {
+      storageId: args.storageId,
+    });
+    const embedding = await step.runAction(api.index.computeEmbedding, {
+      transcription,
+    });
+    console.log(embedding);
+  },
+});
+```
+
+Once you've defined a workflow, you can start it using `workflow.start()`, which
+will kick off execution of the workflow and return a `WorkflowId`. You can then query 
+the status of the workflow with `workflow.status()` or cancel it with `workflow.cancel()`.
+
+```ts
+// convex/index.ts
+
+export const workflowExample = mutation(async (ctx) => {
+    const workflowId = await workflow.start(ctx, api.index.exampleWorkflow, {
+        storageId: ...,
+    });
+    const status = await workflow.status(ctx, workflowId);
+    return status;
+});
+```
+
+## Limitations
+
+Convex workflows is an alpha product currently under active development. Here are
+a few limitations to keep in mind:
+
+- `console.log()` isn't currently captured, so you may see duplicate log lines
+  within your Convex dashboard.
+- We currently do not collect backtraces from within function calls from workflows.  
+- If you need to use side effects like `fetch`, `Math.random()`, or `Date.now()`, 
+  you'll need to define a separate Convex action, perform the side effects there,
+  and then call that action from the workflow with `step.runAction()`.
+- We currently don't do determinism checks, and we don't have explicit bounds on the
+  workflow engine's journal size. Workflows that run for a long time or rely on 
+  nondeterministic state, like changing environment variables, may behave unpredictably.

@@ -61,6 +61,7 @@
     "@typescript-eslint/parser": "^8.4.0",
     "eslint": "^9.9.1",
     "globals": "^15.9.0",
+    "openai": "^4.54.0",    
     "prettier": "3.2.5",
     "typescript": "^5.5.0",
     "typescript-eslint": "^8.4.0"

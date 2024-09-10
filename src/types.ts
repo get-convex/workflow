@@ -5,7 +5,7 @@ export type Result<T> =
   | { type: "success"; result: T }
   | { type: "error"; error: string };
 
-export type WorkflowId<T> = string & { __workflowReturns: T };
+export type WorkflowId = string & { __isWorkflowId: true };
 
 export const functionType = v.union(
   v.object({ type: v.literal("query") }),

@@ -42,6 +42,12 @@ export type Mounts = {
     >;
   };
   index: {
+    cancelWorkflow: FunctionReference<
+      "mutation",
+      "public",
+      { workflowId: string },
+      null
+    >;
     completeSleep: FunctionReference<
       "mutation",
       "public",
@@ -118,7 +124,8 @@ export type Mounts = {
                 | { result: any; type: "success" }
                 | { error: string; type: "error" };
               type: "completed";
-            };
+            }
+          | { canceledAt: number; type: "canceled" };
         workflowHandle: string;
       }
     >;

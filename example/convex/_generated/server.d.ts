@@ -161,6 +161,12 @@ export declare const components: {
       >;
     };
     index: {
+      cancelWorkflow: FunctionReference<
+        "mutation",
+        "internal",
+        { workflowId: string },
+        null
+      >;
       completeSleep: FunctionReference<
         "mutation",
         "internal",
@@ -237,7 +243,8 @@ export declare const components: {
                   | { result: any; type: "success" }
                   | { error: string; type: "error" };
                 type: "completed";
-              };
+              }
+            | { canceledAt: number; type: "canceled" };
           workflowHandle: string;
         }
       >;

@@ -11,9 +11,7 @@ export function setupEnvironment(
   const global = globalThis as any;
 
   global.Math.random = (...args: any[]) => {
-    throw new Error(
-      "Math.random() isn't supported within workflows. Use step.random() instead.",
-    );
+    throw new Error("Math.random() isn't currently supported within workflows");
   };
 
   const originalDate = global.Date;
@@ -32,9 +30,7 @@ export function setupEnvironment(
     return new (originalDate as any)(...args);
   }
   Date.now = function () {
-    throw new Error(
-      "Date.now() isn't supported within workflows. Use step.now() instead.",
-    );
+    throw new Error("Date.now() isn't currently supported within workflows.");
   };
   Date.parse = originalDate.parse;
   Date.UTC = originalDate.UTC;
@@ -50,9 +46,11 @@ export function setupEnvironment(
   delete global.CryptoKey;
   delete global.SubtleCrypto;
 
-  global.fetch = (input: RequestInfo | URL, init?: RequestInit) =>
-    envFetch(ctx, fetch, input, init);
-
+  global.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+    throw new Error(
+      `Fetch isn't currently supported within workflows. Perform the fetch within an action and call it with step.runAction().`,
+    );
+  };
   return { Date: originalDate };
 }
 

@@ -27,6 +27,10 @@ const workflowObject = {
       completedAt: v.number(),
       outcome,
     }),
+    v.object({
+      type: v.literal("canceled"),
+      canceledAt: v.number(),
+    }),
   ),
 
   // Internal execution status, used to totally order mutations.

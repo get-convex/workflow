@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import {
-  action,
   internalAction,
   internalMutation,
   mutation,
@@ -65,12 +64,9 @@ export const loadWorkflow = query({
   },
 });
 
-export const completeWorkflow = mutation({
+export const cancelWorkflow = mutation({
   args: {
     workflowId: v.string(),
-    generationNumber: v.number(),
-    outcome,
-    now: v.number(),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -82,11 +78,31 @@ export const completeWorkflow = mutation({
     if (!workflow) {
       throw new Error(`Workflow not found: ${workflowId}`);
     }
-    if (workflow.generationNumber !== args.generationNumber) {
-      throw new Error(`Invalid generation number: ${args.generationNumber}`);
-    }
     if (workflow.state.type !== "running") {
       throw new Error(`Workflow not running: ${workflowId}`);
+    }
+    workflow.state = { type: "canceled", canceledAt: Date.now() };
+    workflow.generationNumber += 1;
+    await ctx.db.replace(workflow._id, workflow);
+  },
+});
+
+export const completeWorkflow = mutation({
+  args: {
+    workflowId: v.string(),
+    generationNumber: v.number(),
+    outcome,
+    now: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const workflow = await getWorkflow(
+      ctx,
+      args.workflowId,
+      args.generationNumber,
+    );
+    if (workflow.state.type !== "running") {
+      throw new Error(`Workflow not running: ${args.workflowId}`);
     }
     workflow.state = {
       type: "completed",

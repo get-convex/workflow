@@ -9,26 +9,32 @@ import { StepContext } from "./stepContext.js";
 import { setupEnvironment } from "./environment.js";
 import { JournalEntry } from "../component/schema.js";
 
+const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke the workflow with ctx.runMutation() instead of workflow.start()?`;
+
 // This function is defined in the calling component but then gets passed by
 // function handle to the workflow component for execution. This function runs
 // one "poll" of the workflow, replaying its execution from the journal until
 // it blocks next.
-export function workflowMutation<
-  ArgsValidator extends PropertyValidators,
-  ReturnsValidator extends Validator<any, any, any>,
->(
+export function workflowMutation<ArgsValidator extends PropertyValidators>(
   component: UseApi<typeof api>,
-  registered: WorkflowDefinition<ArgsValidator, ReturnsValidator>,
+  registered: WorkflowDefinition<ArgsValidator>,
 ): RegisteredMutation<"internal", never, never> {
   return internalMutationGeneric({
-    args: {
-      workflowId: v.string(),
-      generationNumber: v.number(),
-    },
     returns: v.null(),
     handler: async (ctx, args) => {
+      if (Object.entries(args).length !== 2) {
+        throw new Error(INVALID_WORKFLOW_MESSAGE);
+      }
+      const workflowId = args.workflowId;
+      if (typeof workflowId !== "string") {
+        throw new Error(INVALID_WORKFLOW_MESSAGE);
+      }
+      const generationNumber = args.generationNumber;
+      if (typeof generationNumber !== "number") {
+        throw new Error(INVALID_WORKFLOW_MESSAGE);
+      }
       const workflow = await ctx.runQuery(component.index.loadWorkflow, {
-        workflowId: args.workflowId,
+        workflowId,
       });
       if (workflow.generationNumber !== args.generationNumber) {
         console.error(`Invalid generation number: ${args.generationNumber}`);
@@ -39,7 +45,7 @@ export function workflowMutation<
         return;
       }
       const blockedBy = await ctx.runQuery(component.index.workflowBlockedBy, {
-        workflowId: args.workflowId,
+        workflowId,
       });
       if (blockedBy !== null) {
         console.log(`Workflow ${args.workflowId} blocked by...`);
@@ -47,7 +53,7 @@ export function workflowMutation<
         return;
       }
       const journalEntries = (await ctx.runQuery(component.index.loadJournal, {
-        workflowId: args.workflowId,
+        workflowId,
       })) as JournalEntry[];
       for (const journalEntry of journalEntries) {
         if (journalEntry.step.inProgress) {
@@ -63,8 +69,8 @@ export function workflowMutation<
         component.fetch.executeFetch as any,
       );
       const executor = new StepExecutor(
-        args.workflowId,
-        args.generationNumber,
+        workflowId,
+        generationNumber,
         ctx,
         component,
         journalEntries,
@@ -73,10 +79,10 @@ export function workflowMutation<
       );
 
       const handlerWorker = async (): Promise<WorkerResult> => {
-        let outcome: Result<any>;
+        let outcome: Result<null>;
         try {
-          const result = await registered.handler(step, workflow.args);
-          outcome = { type: "success", result: result ?? null };
+          await registered.handler(step, workflow.args);
+          outcome = { type: "success", result: null };
         } catch (error: any) {
           outcome = { type: "error", error: error.message };
         }
@@ -89,8 +95,8 @@ export function workflowMutation<
       switch (result.type) {
         case "handlerDone": {
           await ctx.runMutation(component.index.completeWorkflow, {
-            workflowId: args.workflowId,
-            generationNumber: args.generationNumber,
+            workflowId,
+            generationNumber,
             outcome: result.outcome,
             now: originalEnv.Date.now(),
           });
@@ -101,13 +107,13 @@ export function workflowMutation<
           switch (step.type) {
             case "function": {
               await ctx.runMutation(component.index.startFunction, {
-                workflowId: args.workflowId,
-                generationNumber: args.generationNumber,
+                workflowId,
+                generationNumber,
                 journalId: _id,
                 functionType: step.functionType,
                 handle: step.handle,
                 args: step.args,
-              });            
+              });
               break;
             }
             case "sleep": {
@@ -115,8 +121,8 @@ export function workflowMutation<
                 originalEnv.Date.now() + step.durationMs,
                 component.index.completeSleep,
                 {
-                  workflowId: args.workflowId,
-                  generationNumber: args.generationNumber,
+                  workflowId,
+                  generationNumber,
                   journalId: _id,
                 },
               );

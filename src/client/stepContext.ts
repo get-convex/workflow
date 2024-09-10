@@ -32,8 +32,8 @@ export class StepContext implements WorkflowStep {
 
   async runAction<Action extends FunctionReference<"action", any>>(
     action: Action,
-    args: FunctionArgs<Action>,    
-  ): Promise<FunctionReturnType<Action>> {        
+    args: FunctionArgs<Action>,
+  ): Promise<FunctionReturnType<Action>> {
     return await this.runFunction({ type: "action" }, action, args);
   }
 

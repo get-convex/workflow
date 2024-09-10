@@ -10,6 +10,7 @@
  * @module
  */
 
+import type * as admin from "../admin.js";
 import type * as index from "../index.js";
 
 import type {
@@ -26,6 +27,7 @@ import type {
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  admin: typeof admin;
   index: typeof index;
 }>;
 declare const fullApiWithMounts: typeof fullApi;

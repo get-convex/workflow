@@ -12,7 +12,7 @@ export type OriginalEnv = {
 };
 
 export type WorkerResult =
-  | { type: "handlerDone"; outcome: Result<any> }
+  | { type: "handlerDone"; outcome: Result<null> }
   | { type: "executorBlocked"; entry: JournalEntry };
 
 export type StepRequest =

@@ -61,7 +61,7 @@ export interface WorkflowStep {
 }
 
 export type WorkflowDefinition<ArgsValidator extends PropertyValidators> = {
-  args: ArgsValidator;
+  args?: ArgsValidator;
   handler: (
     step: WorkflowStep,
     args: ObjectType<ArgsValidator>,

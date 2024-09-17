@@ -108,6 +108,7 @@ export const workflowExample = mutation(async (ctx) => {
 ```
 
 Once a workflow's completed, you can clean it up its storage with `workflow.cleanup()`.
+
 ```ts
 // convex/index.ts
 
@@ -119,6 +120,10 @@ await workflow.cleanup(ctx, workflowId);
 Convex workflows is a beta product currently under active development. Here are
 a few limitations to keep in mind:
 
+- Steps can only take in and return a total of _1 MiB_ of data within a single
+  workflow execution. If you run into journal size limits, you can work around
+  this by storing results within your worker functions and then passing IDs
+  around within the the workflow.
 - `console.log()` isn't currently captured, so you may see duplicate log lines
   within your Convex dashboard.
 - We currently do not collect backtraces from within function calls from workflows.

@@ -8,6 +8,7 @@ import { StepExecutor, StepRequest, WorkerResult } from "./step.js";
 import { StepContext } from "./stepContext.js";
 import { setupEnvironment } from "./environment.js";
 import { JournalEntry } from "../component/schema.js";
+import { checkArgs } from "./validator.js";
 
 const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke the workflow with ctx.runMutation() instead of workflow.start()?`;
 
@@ -81,6 +82,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
       const handlerWorker = async (): Promise<WorkerResult> => {
         let outcome: Result<null>;
         try {
+          checkArgs(workflow.args, registered.args);
           await registered.handler(step, workflow.args);
           outcome = { type: "success", result: null, resultSize: 0 };
         } catch (error: any) {

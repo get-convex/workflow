@@ -71,8 +71,6 @@ is designed to feel like a Convex action but with a few restrictions:
    by calling out to other Convex functions. We will be lifting some of these
    restrictions over time by implementing `Math.random()`, `Date.now()`, and
    `fetch` within our workflow environment.
-4. Workflows can't return values. You can always call out to a mutation from
-   a workflow to write out some final results.
 
 ```ts
 // convex/index.ts

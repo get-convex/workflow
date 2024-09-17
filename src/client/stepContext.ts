@@ -9,10 +9,6 @@ import { WorkflowStep } from "./index.js";
 import { StepRequest } from "./step.js";
 import { FunctionType } from "../types.js";
 
-const DEFAULT_MAX_RETRIES = 0;
-const DEFAULT_RETRY_DELAY_MS = 1000;
-const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
-
 export class StepContext implements WorkflowStep {
   constructor(private sender: BaseChannel<StepRequest>) {}
 
@@ -39,8 +35,8 @@ export class StepContext implements WorkflowStep {
 
   async sleep(durationMs: number): Promise<void> {
     let send: any;
-    const p = new Promise<void>((resolve) => {
-      send = this.sender.push({ type: "sleep", durationMs, resolve });
+    const p = new Promise<void>((resolve, reject) => {
+      send = this.sender.push({ type: "sleep", durationMs, resolve, reject });
     });
     await send;
     return p;

@@ -12,10 +12,11 @@ import {
   outcome,
   step,
   STEP_TYPES,
+  valueSize,
   Workflow,
   workflowDocument,
 } from "./schema.js";
-import { internal } from "./_generated/api.js";
+import { api, internal } from "./_generated/api.js";
 import { functionType, Result } from "../types.js";
 import { getWorkflow, getJournalEntry } from "./model.js";
 
@@ -143,6 +144,34 @@ export const workflowBlockedBy = query({
   },
 });
 
+export const cleanupWorkflow = mutation({
+  args: {
+    workflowId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const workflowId = ctx.db.normalizeId("workflows", args.workflowId);
+    if (!workflowId) {
+      throw new Error(`Invalid workflow ID: ${args.workflowId}`);
+    }
+    const workflow = await ctx.db.get(workflowId);
+    if (!workflow) {
+      throw new Error(`Workflow not found: ${workflowId}`);
+    }
+    if (workflow.state.type !== "completed") {
+      throw new Error(`Workflow not completed: ${workflowId}`);
+    }
+    await ctx.db.delete(workflowId);
+    const journalEntries = await ctx.db
+      .query("workflowJournal")
+      .withIndex("workflow", (q) => q.eq("workflowId", workflowId))
+      .collect();
+    for (const journalEntry of journalEntries) {
+      await ctx.db.delete(journalEntry._id);
+    }
+  },
+});
+
 export const loadJournal = query({
   args: {
     workflowId: v.string(),
@@ -212,6 +241,27 @@ export const pushJournalEntry = mutation({
     });
     const entry = await ctx.db.get(journalId);
     return entry! as JournalEntry;
+  },
+});
+
+export const startSleep = mutation({
+  args: {
+    workflowId: v.string(),
+    generationNumber: v.number(),
+    journalId: v.string(),
+    durationMs: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.scheduler.runAfter(
+      Date.now() + args.durationMs,
+      api.index.completeSleep,
+      {
+        workflowId: args.workflowId,
+        generationNumber: args.generationNumber,
+        journalId: args.journalId,
+      },
+    );
   },
 });
 
@@ -405,7 +455,8 @@ export const runFunction = internalAction({
         args.handle as FunctionHandle<any, any>,
         args.args,
       );
-      outcome = { type: "success", result };
+      const resultSize = valueSize(result);
+      outcome = { type: "success", result, resultSize };
     } catch (error: any) {
       outcome = { type: "error", error: error.message };
     }

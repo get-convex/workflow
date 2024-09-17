@@ -54,7 +54,7 @@ export interface WorkflowStep {
   /**
    * Sleep for a given number of milliseconds. It's totally fine for this to be
    * very long (e.g. on the order of months).
-   * 
+   *
    * @param ms - The number of milliseconds to sleep.
    */
   sleep(ms: number): Promise<void>;
@@ -152,6 +152,21 @@ export class WorkflowManager {
     workflowId: WorkflowId,
   ) {
     await ctx.runMutation(this.component.index.cancelWorkflow, {
+      workflowId,
+    });
+  }
+
+  /**
+   * Clean up a workflow's storage. The workflow must be completed.
+   *
+   * @param ctx - The Convex context.
+   * @param workflowId - The workflow ID.
+   */
+  async cleanup(
+    ctx: GenericMutationCtx<GenericDataModel>,
+    workflowId: WorkflowId,
+  ) {
+    await ctx.runMutation(this.component.index.cleanupWorkflow, {
       workflowId,
     });
   }

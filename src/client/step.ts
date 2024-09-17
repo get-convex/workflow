@@ -1,7 +1,12 @@
 import { BaseChannel } from "async-channel";
 import { GenericMutationCtx, GenericDataModel } from "convex/server";
 import { convexToJson } from "convex/values";
-import { JournalEntry, Step } from "../component/schema.js";
+import {
+  JournalEntry,
+  journalEntrySize,
+  Step,
+  valueSize,
+} from "../component/schema.js";
 import { api } from "../component/_generated/api.js";
 import { FunctionType, Result, UseApi } from "../types.js";
 
@@ -28,11 +33,17 @@ export type StepRequest =
   | {
       type: "sleep";
       durationMs: number;
+
       resolve: (result: any) => void;
+      reject: (error: any) => void;
     };
+
+const MAX_JOURNAL_SIZE = 1 << 20;
 
 export class StepExecutor {
   private nextStepNumber: number;
+  private journalEntrySize: number;
+
   constructor(
     private workflowId: string,
     private generationNumber: number,
@@ -43,6 +54,10 @@ export class StepExecutor {
     private originalEnv: OriginalEnv,
   ) {
     this.nextStepNumber = journalEntries.length;
+    this.journalEntrySize = journalEntries.reduce(
+      (size, entry) => size + journalEntrySize(entry),
+      0,
+    );
   }
   async run(): Promise<WorkerResult> {
     while (true) {
@@ -50,6 +65,10 @@ export class StepExecutor {
       const entry = this.journalEntries.shift();
       if (entry) {
         this.completeMessage(message, entry);
+        continue;
+      }
+      if (this.journalEntrySize > MAX_JOURNAL_SIZE) {
+        message.reject(journalSizeError(this.journalEntrySize));
         continue;
       }
       const newEntry = await this.pushJournalEntry(message);
@@ -118,6 +137,7 @@ export class StepExecutor {
           functionType: message.functionType,
           handle: message.handle,
           args: message.args,
+          argsSize: valueSize(message.args),
           outcome: undefined,
           startedAt: this.originalEnv.Date.now(),
           completedAt: undefined,
@@ -134,7 +154,7 @@ export class StepExecutor {
         break;
       }
     }
-    const entry = (await this.ctx.runMutation(
+    const entry = await this.ctx.runMutation(
       this.component.index.pushJournalEntry,
       {
         workflowId: this.workflowId,
@@ -142,7 +162,18 @@ export class StepExecutor {
         stepNumber,
         step,
       },
-    )) as JournalEntry;
-    return entry;
+    );
+    this.journalEntrySize += journalEntrySize(entry);
+    console.log("pushed", entry.stepNumber, this.journalEntrySize);
+    return entry as JournalEntry;
   }
+}
+
+function journalSizeError(size: number): Error {
+  const lines = [
+    `Workflow journal size limit exceeded (${size} bytes > ${MAX_JOURNAL_SIZE} bytes).`,
+    "Consider breaking up the workflow into multiple runs, using smaller step \
+    arguments or return values, or using fewer steps.",
+  ];
+  return new Error(lines.join("\n"));
 }

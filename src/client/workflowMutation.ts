@@ -82,7 +82,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         let outcome: Result<null>;
         try {
           await registered.handler(step, workflow.args);
-          outcome = { type: "success", result: null };
+          outcome = { type: "success", result: null, resultSize: 0 };
         } catch (error: any) {
           outcome = { type: "error", error: error.message };
         }
@@ -117,15 +117,12 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
               break;
             }
             case "sleep": {
-              await ctx.scheduler.runAt(
-                originalEnv.Date.now() + step.durationMs,
-                component.index.completeSleep,
-                {
-                  workflowId,
-                  generationNumber,
-                  journalId: _id,
-                },
-              );
+              await ctx.runMutation(component.index.startSleep, {
+                workflowId,
+                generationNumber,
+                journalId: _id,
+                durationMs: step.durationMs,
+              });
               break;
             }
           }

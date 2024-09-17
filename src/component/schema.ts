@@ -1,9 +1,14 @@
 import { defineSchema, defineTable } from "convex/server";
-import { Infer, v } from "convex/values";
+import { convexToJson, Infer, v, Value } from "convex/values";
+
+export function valueSize(value: Value): number {
+  return JSON.stringify(convexToJson(value)).length;
+}
 
 export const outcome = v.union(
   v.object({
     type: v.literal("success"),
+    resultSize: v.number(),
     result: v.any(),
   }),
   v.object({
@@ -11,6 +16,23 @@ export const outcome = v.union(
     error: v.string(),
   }),
 );
+export type Outcome = Infer<typeof outcome>;
+
+function outcomeSize(outcome: Outcome): number {
+  let size = 0;
+  size += outcome.type.length;
+  switch (outcome.type) {
+    case "success": {
+      size += 8 + outcome.resultSize;
+      break;
+    }
+    case "error": {
+      size += outcome.error.length;
+      break;
+    }
+  }
+  return size;
+}
 
 const workflowObject = {
   startedAt: v.number(),
@@ -62,6 +84,7 @@ export const step = v.union(
       }),
     ),
     handle: v.string(),
+    argsSize: v.number(),
     args: v.any(),
     outcome: v.optional(outcome),
 
@@ -78,6 +101,34 @@ export const step = v.union(
 );
 export type Step = Infer<typeof step>;
 
+function stepSize(step: Step): number {
+  let size = 0;
+  size += step.type.length;
+  size += 1; // inProgress
+  switch (step.type) {
+    case "function": {
+      size += step.functionType.type.length;
+      if (step.functionType.type === "action") {
+        if (step.functionType.recoveryId) {
+          size += step.functionType.recoveryId.length;
+        }
+      }
+      size += step.handle.length;
+      size += 8 + step.argsSize;
+      if (step.outcome) {
+        size += outcomeSize(step.outcome);
+      }
+      size += 8; // startedAt
+      size += 8; // completedAt
+    }
+    case "sleep": {
+      size += 8; // durationMs
+      size += 8; // deadline
+    }
+  }
+  return size;
+}
+
 const journalObject = {
   workflowId: v.string(),
   stepNumber: v.number(),
@@ -90,6 +141,16 @@ export const journalDocument = v.object({
   ...journalObject,
 });
 export type JournalEntry = Infer<typeof journalDocument>;
+
+export function journalEntrySize(entry: JournalEntry): number {
+  let size = 0;
+  size += entry._id.length;
+  size += 8; // _creationTime
+  size += entry.workflowId.length;
+  size += 8; // stepNumber
+  size += stepSize(entry.step);
+  return size;
+}
 
 export default defineSchema({
   workflows: defineTable(workflowObject),

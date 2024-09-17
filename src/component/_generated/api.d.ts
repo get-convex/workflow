@@ -48,6 +48,12 @@ export type Mounts = {
       { workflowId: string },
       null
     >;
+    cleanupWorkflow: FunctionReference<
+      "mutation",
+      "public",
+      { workflowId: string },
+      null
+    >;
     completeSleep: FunctionReference<
       "mutation",
       "public",
@@ -61,7 +67,7 @@ export type Mounts = {
         generationNumber: number;
         now: number;
         outcome:
-          | { result: any; type: "success" }
+          | { result: any; resultSize: number; type: "success" }
           | { error: string; type: "error" };
         workflowId: string;
       },
@@ -83,6 +89,7 @@ export type Mounts = {
         step:
           | {
               args: any;
+              argsSize: number;
               completedAt?: number;
               functionType:
                 | { type: "query" }
@@ -91,7 +98,7 @@ export type Mounts = {
               handle: string;
               inProgress: boolean;
               outcome?:
-                | { result: any; type: "success" }
+                | { result: any; resultSize: number; type: "success" }
                 | { error: string; type: "error" };
               startedAt: number;
               type: "function";
@@ -121,7 +128,7 @@ export type Mounts = {
           | {
               completedAt: number;
               outcome:
-                | { result: any; type: "success" }
+                | { result: any; resultSize: number; type: "success" }
                 | { error: string; type: "error" };
               type: "completed";
             }
@@ -137,6 +144,7 @@ export type Mounts = {
         step:
           | {
               args: any;
+              argsSize: number;
               completedAt?: number;
               functionType:
                 | { type: "query" }
@@ -145,7 +153,7 @@ export type Mounts = {
               handle: string;
               inProgress: boolean;
               outcome?:
-                | { result: any; type: "success" }
+                | { result: any; resultSize: number; type: "success" }
                 | { error: string; type: "error" };
               startedAt: number;
               type: "function";
@@ -165,6 +173,7 @@ export type Mounts = {
         step:
           | {
               args: any;
+              argsSize: number;
               completedAt?: number;
               functionType:
                 | { type: "query" }
@@ -173,7 +182,7 @@ export type Mounts = {
               handle: string;
               inProgress: boolean;
               outcome?:
-                | { result: any; type: "success" }
+                | { result: any; resultSize: number; type: "success" }
                 | { error: string; type: "error" };
               startedAt: number;
               type: "function";
@@ -204,6 +213,17 @@ export type Mounts = {
       },
       null
     >;
+    startSleep: FunctionReference<
+      "mutation",
+      "public",
+      {
+        durationMs: number;
+        generationNumber: number;
+        journalId: string;
+        workflowId: string;
+      },
+      null
+    >;
     workflowBlockedBy: FunctionReference<
       "query",
       "public",
@@ -214,6 +234,7 @@ export type Mounts = {
         step:
           | {
               args: any;
+              argsSize: number;
               completedAt?: number;
               functionType:
                 | { type: "query" }
@@ -222,7 +243,7 @@ export type Mounts = {
               handle: string;
               inProgress: boolean;
               outcome?:
-                | { result: any; type: "success" }
+                | { result: any; resultSize: number; type: "success" }
                 | { error: string; type: "error" };
               startedAt: number;
               type: "function";

@@ -167,6 +167,12 @@ export declare const components: {
         { workflowId: string },
         null
       >;
+      cleanupWorkflow: FunctionReference<
+        "mutation",
+        "internal",
+        { workflowId: string },
+        null
+      >;
       completeSleep: FunctionReference<
         "mutation",
         "internal",
@@ -180,7 +186,7 @@ export declare const components: {
           generationNumber: number;
           now: number;
           outcome:
-            | { result: any; type: "success" }
+            | { result: any; resultSize: number; type: "success" }
             | { error: string; type: "error" };
           workflowId: string;
         },
@@ -202,6 +208,7 @@ export declare const components: {
           step:
             | {
                 args: any;
+                argsSize: number;
                 completedAt?: number;
                 functionType:
                   | { type: "query" }
@@ -210,7 +217,7 @@ export declare const components: {
                 handle: string;
                 inProgress: boolean;
                 outcome?:
-                  | { result: any; type: "success" }
+                  | { result: any; resultSize: number; type: "success" }
                   | { error: string; type: "error" };
                 startedAt: number;
                 type: "function";
@@ -240,7 +247,7 @@ export declare const components: {
             | {
                 completedAt: number;
                 outcome:
-                  | { result: any; type: "success" }
+                  | { result: any; resultSize: number; type: "success" }
                   | { error: string; type: "error" };
                 type: "completed";
               }
@@ -256,6 +263,7 @@ export declare const components: {
           step:
             | {
                 args: any;
+                argsSize: number;
                 completedAt?: number;
                 functionType:
                   | { type: "query" }
@@ -264,7 +272,7 @@ export declare const components: {
                 handle: string;
                 inProgress: boolean;
                 outcome?:
-                  | { result: any; type: "success" }
+                  | { result: any; resultSize: number; type: "success" }
                   | { error: string; type: "error" };
                 startedAt: number;
                 type: "function";
@@ -284,6 +292,7 @@ export declare const components: {
           step:
             | {
                 args: any;
+                argsSize: number;
                 completedAt?: number;
                 functionType:
                   | { type: "query" }
@@ -292,7 +301,7 @@ export declare const components: {
                 handle: string;
                 inProgress: boolean;
                 outcome?:
-                  | { result: any; type: "success" }
+                  | { result: any; resultSize: number; type: "success" }
                   | { error: string; type: "error" };
                 startedAt: number;
                 type: "function";
@@ -323,6 +332,17 @@ export declare const components: {
         },
         null
       >;
+      startSleep: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          durationMs: number;
+          generationNumber: number;
+          journalId: string;
+          workflowId: string;
+        },
+        null
+      >;
       workflowBlockedBy: FunctionReference<
         "query",
         "internal",
@@ -333,6 +353,7 @@ export declare const components: {
           step:
             | {
                 args: any;
+                argsSize: number;
                 completedAt?: number;
                 functionType:
                   | { type: "query" }
@@ -341,7 +362,7 @@ export declare const components: {
                 handle: string;
                 inProgress: boolean;
                 outcome?:
-                  | { result: any; type: "success" }
+                  | { result: any; resultSize: number; type: "success" }
                   | { error: string; type: "error" };
                 startedAt: number;
                 type: "function";

@@ -1,5 +1,17 @@
 {
+  "name": "uses-component",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "convex dev",
+    "logs": "convex logs",
+    "lint": "tsc -p convex && eslint convex"
+  },
   "dependencies": {
-    "convex": "1"
+    "convex": "1.16.0-alpha.2"
+  },
+  "devDependencies": {
+    "eslint": "^8.55.0",
+    "typescript": "^5.2.2"
   }
 }

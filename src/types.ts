@@ -2,7 +2,7 @@ import { Expand, FunctionReference } from "convex/server";
 import { GenericId, Infer, v } from "convex/values";
 
 export type Result<T> =
-  | { type: "success"; result: T }
+  | { type: "success"; result: T; resultSize: number }
   | { type: "error"; error: string };
 
 export type WorkflowId = string & { __isWorkflowId: true };

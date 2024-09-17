@@ -1,7 +1,7 @@
-# Convex Workflow (ALPHA)
+# Convex Workflow (Beta)
 
 This component adds durably executed _workflows_ to Convex. Combine Convex queries, mutations,
-and actions into long-lived workflows, where the system will always fully execute a workflow
+and actions into long-lived workflows, and the system will always fully execute a workflow
 to completion.
 
 ```ts
@@ -25,6 +25,9 @@ export const exampleWorkflow = workflow.define({
   },
 });
 ```
+
+This component is currently in beta. It's missing some functionality, but
+what's there should work.
 
 ## Installation
 
@@ -60,7 +63,7 @@ export const workflow = new WorkflowManager(components.workflow);
 ## Usage
 
 The first step is to define a workflow using `workflow.define()`. This function
-is designed to be reminiscent of defining a Convex action but with a few restrictions:
+is designed to feel like a Convex action but with a few restrictions:
 
 1. The workflow must declare an argument validator.
 2. The workflow runs in the background, so it can't return a value.
@@ -89,7 +92,7 @@ workflow.define({
 ```
 
 Once you've defined a workflow, you can start it using `workflow.start()`, which
-will kick off execution of the workflow and return a `WorkflowId`. You can then query 
+will kick off execution of the workflow and return a `WorkflowId`. You can then query
 the status of the workflow with `workflow.status()` or cancel it with `workflow.cancel()`.
 
 ```ts
@@ -104,17 +107,21 @@ export const workflowExample = mutation(async (ctx) => {
 });
 ```
 
+Once a workflow's completed, you can clean it up its storage with `workflow.cleanup()`.
+```ts
+// convex/index.ts
+
+await workflow.cleanup(ctx, workflowId);
+```
+
 ## Limitations
 
-Convex workflows is an alpha product currently under active development. Here are
+Convex workflows is a beta product currently under active development. Here are
 a few limitations to keep in mind:
 
 - `console.log()` isn't currently captured, so you may see duplicate log lines
   within your Convex dashboard.
-- We currently do not collect backtraces from within function calls from workflows.  
-- If you need to use side effects like `fetch`, `Math.random()`, or `Date.now()`, 
+- We currently do not collect backtraces from within function calls from workflows.
+- If you need to use side effects like `fetch`, `Math.random()`, or `Date.now()`,
   you'll need to define a separate Convex action, perform the side effects there,
   and then call that action from the workflow with `step.runAction()`.
-- We currently don't do determinism checks, and we don't have explicit bounds on the
-  workflow engine's journal size. Workflows that run for a long time or rely on 
-  nondeterministic state, like changing environment variables, may behave unpredictably.

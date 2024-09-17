@@ -65,12 +65,14 @@ export const workflow = new WorkflowManager(components.workflow);
 The first step is to define a workflow using `workflow.define()`. This function
 is designed to feel like a Convex action but with a few restrictions:
 
-1. The workflow must declare an argument validator.
+1. The workflow can optionally declare an argument validator.
 2. The workflow runs in the background, so it can't return a value.
 3. The workflow must be _deterministic_, so it should implement most of its logic
    by calling out to other Convex functions. We will be lifting some of these
    restrictions over time by implementing `Math.random()`, `Date.now()`, and
    `fetch` within our workflow environment.
+4. Workflows can't return values. You can always call out to a mutation from
+   a workflow to write out some final results.
 
 ```ts
 // convex/index.ts

@@ -189,7 +189,7 @@ export const run = internalAction({
     if (!runner) {
       throw new Error(`Invalid function type: ${args.functionType.type}`);
     }
-    const start = performance.now();
+    const start = Date.now();
     try {
       logger.debug(
         `Starting execution of ${args.handle} for ${args.journalId}`,
@@ -200,14 +200,14 @@ export const run = internalAction({
         args.args,
       );
       const resultSize = valueSize(result);
-      const duration = performance.now() - start;
+      const duration = Date.now() - start;
       logger.debug(
         `Completed executing ${args.journalId} (${duration.toFixed(2)}ms): ${resultSize} bytes returned`,
         result,
       );
       outcome = { type: "success", result, resultSize };
     } catch (error: any) {
-      const duration = performance.now() - start;
+      const duration = Date.now() - start;
       logger.error(
         `Failed executing ${args.journalId} (${duration.toFixed(2)}ms): ${error.message}`,
       );

@@ -154,17 +154,13 @@ export class StepExecutor {
         break;
       }
     }
-    const entry = await this.ctx.runMutation(
-      this.component.index.pushJournalEntry,
-      {
-        workflowId: this.workflowId,
-        generationNumber: this.generationNumber,
-        stepNumber,
-        step,
-      },
-    );
+    const entry = await this.ctx.runMutation(this.component.journal.pushEntry, {
+      workflowId: this.workflowId,
+      generationNumber: this.generationNumber,
+      stepNumber,
+      step,
+    });
     this.journalEntrySize += journalEntrySize(entry);
-    console.log("pushed", entry.stepNumber, this.journalEntrySize);
     return entry as JournalEntry;
   }
 }

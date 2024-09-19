@@ -3,11 +3,12 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "dev": "convex dev",
+    "dev": "convex dev --live-component-sources",
     "logs": "convex logs",
     "lint": "tsc -p convex && eslint convex"
   },
   "dependencies": {
+    "@convex-dev/workflow": "file:..",
     "convex": "1.16.0-alpha.2"
   },
   "devDependencies": {

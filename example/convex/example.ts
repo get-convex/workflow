@@ -1,13 +1,16 @@
 import { v } from "convex/values";
-import { WorkflowManager } from "../../src/client";
-import { api } from "./_generated/api.js";
-import { action, components } from "./_generated/server";
+import { WorkflowManager } from "@convex-dev/workflow";
+import { internal } from "./_generated/api.js";
+import { components, internalAction } from "./_generated/server.js";
 import { OpenAI } from "openai";
 
 export const workflow = new WorkflowManager(components.workflow);
 
 if (!process.env.OPENAI_API_KEY) {
-  throw new Error("OPENAI_API_KEY is not configured.");
+  throw new Error(
+    "OPENAI_API_KEY is not configured.\n" +
+      "npx convex env set OPENAI_API_KEY sk-****"
+  );
 }
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -16,17 +19,20 @@ export const exampleWorkflow = workflow.define({
     storageId: v.id("_storage"),
   },
   handler: async (step, args) => {
-    const transcription = await step.runAction(api.index.computeTranscription, {
-      storageId: args.storageId,
-    });
-    const embedding = await step.runAction(api.index.computeEmbedding, {
+    const transcription = await step.runAction(
+      internal.example.computeTranscription,
+      {
+        storageId: args.storageId,
+      }
+    );
+    const embedding = await step.runAction(internal.example.computeEmbedding, {
       transcription,
     });
     console.log(embedding);
   },
 });
 
-export const computeTranscription = action({
+export const computeTranscription = internalAction({
   args: {
     storageId: v.id("_storage"),
   },
@@ -47,7 +53,7 @@ export const computeTranscription = action({
   },
 });
 
-export const computeEmbedding = action({
+export const computeEmbedding = internalAction({
   args: {
     transcription: v.string(),
   },

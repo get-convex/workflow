@@ -152,53 +152,26 @@ export type DatabaseWriter = GenericDatabaseWriter<DataModel>;
 
 export declare const components: {
   workflow: {
-    fetch: {
-      executeFetch: FunctionReference<
-        "action",
-        "internal",
-        { body?: ArrayBuffer; headers: any; method: string; url: string },
-        { body: ArrayBuffer; headers: any; status: number; statusText: string }
-      >;
-    };
-    index: {
-      cancelWorkflow: FunctionReference<
-        "mutation",
-        "internal",
-        { workflowId: string },
-        null
-      >;
-      cleanupWorkflow: FunctionReference<
-        "mutation",
-        "internal",
-        { workflowId: string },
-        null
-      >;
-      completeSleep: FunctionReference<
-        "mutation",
-        "internal",
-        { generationNumber: number; journalId: string; workflowId: string },
-        null
-      >;
-      completeWorkflow: FunctionReference<
+    functions: {
+      start: FunctionReference<
         "mutation",
         "internal",
         {
+          args: any;
+          functionType:
+            | { type: "query" }
+            | { type: "mutation" }
+            | { type: "action" };
           generationNumber: number;
-          now: number;
-          outcome:
-            | { result: any; resultSize: number; type: "success" }
-            | { error: string; type: "error" };
+          handle: string;
+          journalId: string;
           workflowId: string;
         },
         null
       >;
-      createWorkflow: FunctionReference<
-        "mutation",
-        "internal",
-        { workflowArgs: any; workflowHandle: string },
-        string
-      >;
-      loadJournal: FunctionReference<
+    };
+    journal: {
+      load: FunctionReference<
         "query",
         "internal",
         { workflowId: string },
@@ -232,30 +205,7 @@ export declare const components: {
           workflowId: string;
         }>
       >;
-      loadWorkflow: FunctionReference<
-        "query",
-        "internal",
-        { workflowId: string },
-        {
-          _creationTime: number;
-          _id: string;
-          args: any;
-          generationNumber: number;
-          startedAt: number;
-          state:
-            | { type: "running" }
-            | {
-                completedAt: number;
-                outcome:
-                  | { result: any; resultSize: number; type: "success" }
-                  | { error: string; type: "error" };
-                type: "completed";
-              }
-            | { canceledAt: number; type: "canceled" };
-          workflowHandle: string;
-        }
-      >;
-      pushJournalEntry: FunctionReference<
+      pushEntry: FunctionReference<
         "mutation",
         "internal",
         {
@@ -316,23 +266,9 @@ export declare const components: {
           workflowId: string;
         }
       >;
-      startFunction: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          args: any;
-          functionType:
-            | { type: "query" }
-            | { type: "mutation" }
-            | { type: "action" };
-          generationNumber: number;
-          handle: string;
-          journalId: string;
-          workflowId: string;
-        },
-        null
-      >;
-      startSleep: FunctionReference<
+    };
+    sleep: {
+      start: FunctionReference<
         "mutation",
         "internal",
         {
@@ -343,7 +279,9 @@ export declare const components: {
         },
         null
       >;
-      workflowBlockedBy: FunctionReference<
+    };
+    workflow: {
+      blockedBy: FunctionReference<
         "query",
         "internal",
         { workflowId: string },
@@ -376,6 +314,65 @@ export declare const components: {
           stepNumber: number;
           workflowId: string;
         } | null
+      >;
+      cancel: FunctionReference<
+        "mutation",
+        "internal",
+        { workflowId: string },
+        null
+      >;
+      cleanup: FunctionReference<
+        "mutation",
+        "internal",
+        { workflowId: string },
+        null
+      >;
+      complete: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          generationNumber: number;
+          now: number;
+          outcome:
+            | { result: any; resultSize: number; type: "success" }
+            | { error: string; type: "error" };
+          workflowId: string;
+        },
+        null
+      >;
+      create: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR";
+          workflowArgs: any;
+          workflowHandle: string;
+        },
+        string
+      >;
+      load: FunctionReference<
+        "query",
+        "internal",
+        { workflowId: string },
+        {
+          _creationTime: number;
+          _id: string;
+          args: any;
+          generationNumber: number;
+          logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR";
+          startedAt: number;
+          state:
+            | { type: "running" }
+            | {
+                completedAt: number;
+                outcome:
+                  | { result: any; resultSize: number; type: "success" }
+                  | { error: string; type: "error" };
+                type: "completed";
+              }
+            | { canceledAt: number; type: "canceled" };
+          workflowHandle: string;
+        }
       >;
     };
   };

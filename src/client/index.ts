@@ -2,7 +2,7 @@ import {
   createFunctionHandle,
   FunctionArgs,
   FunctionReference,
-  FunctionReturnType,
+  GenericActionCtx,
   GenericDataModel,
   GenericMutationCtx,
   GenericQueryCtx,
@@ -12,45 +12,16 @@ import { ObjectType, PropertyValidators } from "convex/values";
 import { api } from "../component/_generated/api.js";
 import { UseApi, WorkflowId } from "../types.js";
 import { workflowMutation } from "./workflowMutation.js";
+import { LogLevel } from "../component/schema.js";
 
-export interface WorkflowStep {
-  /**
-   * Run a query and wait for the result.
-   *
-   * @param query - The query to run.
-   * @param args - The query arguments.
-   * @returns The query result.
-   */
-  runQuery<Query extends FunctionReference<"query", any>>(
-    query: Query,
-    args: FunctionArgs<Query>,
-  ): Promise<FunctionReturnType<Query>>;
+export type { WorkflowId };
 
-  /**
-   * Run a mutation and wait for the result.
-   *
-   * @param mutation - The mutation to run.
-   * @param args - The mutation arguments.
-   * @returns The mutation result.
-   */
+type ActionCtxRunners = Pick<
+  GenericActionCtx<GenericDataModel>,
+  "runQuery" | "runMutation" | "runAction"
+>;
 
-  runMutation<Mutation extends FunctionReference<"mutation", any>>(
-    mutation: Mutation,
-    args: FunctionArgs<Mutation>,
-  ): Promise<FunctionReturnType<Mutation>>;
-
-  /**
-   * Run an action and wait for the result.
-   *
-   * @param action - The action to run.
-   * @param args - The action arguments.
-   * @returns The action result.
-   */
-  runAction<Action extends FunctionReference<"action", any>>(
-    action: Action,
-    args: FunctionArgs<Action>,
-  ): Promise<FunctionReturnType<Action>>;
-
+export type WorkflowStep = ActionCtxRunners & {
   /**
    * Sleep for a given number of milliseconds. It's totally fine for this to be
    * very long (e.g. on the order of months).
@@ -58,7 +29,7 @@ export interface WorkflowStep {
    * @param ms - The number of milliseconds to sleep.
    */
   sleep(ms: number): Promise<void>;
-}
+};
 
 export type WorkflowDefinition<ArgsValidator extends PropertyValidators> = {
   args?: ArgsValidator;
@@ -74,8 +45,32 @@ export type WorkflowStatus =
   | { type: "canceled" }
   | { type: "failed"; error: string };
 
+export type Options = {
+  logLevel?: LogLevel;
+};
+
 export class WorkflowManager {
-  constructor(private component: UseApi<typeof api>) {}
+  logLevel: LogLevel;
+
+  constructor(
+    private component: UseApi<typeof api>,
+    options?: Options,
+  ) {
+    let DEFAULT_LOG_LEVEL: LogLevel = "INFO";
+    if (process.env.WORKFLOW_LOG_LEVEL) {
+      if (
+        !["DEBUG", "INFO", "WARN", "ERROR"].includes(
+          process.env.WORKFLOW_LOG_LEVEL,
+        )
+      ) {
+        console.warn(
+          `Invalid log level (${process.env.WORKFLOW_LOG_LEVEL}), defaulting to "INFO"`,
+        );
+      }
+      DEFAULT_LOG_LEVEL = process.env.WORKFLOW_LOG_LEVEL as LogLevel;
+    }
+    this.logLevel = options?.logLevel ?? DEFAULT_LOG_LEVEL;
+  }
 
   /**
    * Define a new workflow.
@@ -98,18 +93,16 @@ export class WorkflowManager {
    * @returns The workflow ID.
    */
   async start<F extends FunctionReference<"mutation", "internal", any, any>>(
-    ctx: GenericMutationCtx<GenericDataModel>,
+    ctx: RunMutationCtx,
     workflow: F,
     args: FunctionArgs<F>,
   ): Promise<WorkflowId> {
     const handle = await createFunctionHandle(workflow);
-    const workflowId = await ctx.runMutation(
-      this.component.index.createWorkflow,
-      {
-        workflowHandle: handle,
-        workflowArgs: args,
-      },
-    );
+    const workflowId = await ctx.runMutation(this.component.workflow.create, {
+      workflowHandle: handle,
+      workflowArgs: args,
+      logLevel: this.logLevel,
+    });
     return workflowId as unknown as WorkflowId;
   }
 
@@ -121,10 +114,10 @@ export class WorkflowManager {
    * @returns The workflow status.
    */
   async status(
-    ctx: GenericQueryCtx<GenericDataModel>,
+    ctx: RunQueryCtx,
     workflowId: WorkflowId,
   ): Promise<WorkflowStatus> {
-    const workflow = await ctx.runQuery(this.component.index.loadWorkflow, {
+    const workflow = await ctx.runQuery(this.component.workflow.load, {
       workflowId,
     });
     switch (workflow.state.type) {
@@ -147,11 +140,8 @@ export class WorkflowManager {
    * @param ctx - The Convex context.
    * @param workflowId - The workflow ID.
    */
-  async cancel(
-    ctx: GenericMutationCtx<GenericDataModel>,
-    workflowId: WorkflowId,
-  ) {
-    await ctx.runMutation(this.component.index.cancelWorkflow, {
+  async cancel(ctx: RunMutationCtx, workflowId: WorkflowId) {
+    await ctx.runMutation(this.component.workflow.cancel, {
       workflowId,
     });
   }
@@ -162,12 +152,16 @@ export class WorkflowManager {
    * @param ctx - The Convex context.
    * @param workflowId - The workflow ID.
    */
-  async cleanup(
-    ctx: GenericMutationCtx<GenericDataModel>,
-    workflowId: WorkflowId,
-  ) {
-    await ctx.runMutation(this.component.index.cleanupWorkflow, {
+  async cleanup(ctx: RunMutationCtx, workflowId: WorkflowId) {
+    await ctx.runMutation(this.component.workflow.cleanup, {
       workflowId,
     });
   }
 }
+
+type RunQueryCtx = {
+  runQuery: GenericQueryCtx<GenericDataModel>["runQuery"];
+};
+type RunMutationCtx = {
+  runMutation: GenericMutationCtx<GenericDataModel>["runMutation"];
+};

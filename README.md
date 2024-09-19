@@ -15,10 +15,14 @@ export const exampleWorkflow = workflow.define({
     storageId: v.id("_storage"),
   },
   handler: async (step, args) => {
-    const transcription = await step.runAction(api.index.computeTranscription, {
+    const transcription = await step.runAction(internal.index.computeTranscription, {
       storageId: args.storageId,
     });
-    const embedding = await step.runAction(api.index.computeEmbedding, {
+    
+    // Sleep for a month after computing the transcription.
+    await step.sleep(30 * 24 * 60 * 60 * 1000);
+
+    const embedding = await step.runAction(internal.index.computeEmbedding, {
       transcription,
     });
     console.log(embedding);

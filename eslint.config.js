@@ -29,6 +29,7 @@ export default [
     rules: {
       "@typescript-eslint/no-floating-promises": "error",
       "eslint-comments/no-unused-disable": "off",
+      "@typescript-eslint/no-explicit-any": "warn",
 
       // allow (_arg: number) => {} and const _foo = 1;
       "no-unused-vars": "off",

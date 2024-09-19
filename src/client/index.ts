@@ -2,7 +2,6 @@ import {
   createFunctionHandle,
   FunctionArgs,
   FunctionReference,
-  FunctionReturnType,
   GenericActionCtx,
   GenericDataModel,
   GenericMutationCtx,
@@ -13,6 +12,7 @@ import { ObjectType, PropertyValidators } from "convex/values";
 import { api } from "../component/_generated/api.js";
 import { UseApi, WorkflowId } from "../types.js";
 import { workflowMutation } from "./workflowMutation.js";
+export type { WorkflowId };
 
 type ActionCtxRunners = Pick<
   GenericActionCtx<GenericDataModel>,

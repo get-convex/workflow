@@ -1,8 +1,8 @@
 import { v } from "convex/values";
-import { WorkflowId } from "../../src/types";
+import { WorkflowId } from "@convex-dev/workflow";
 import { mutation, query } from "./_generated/server";
-import { workflow } from ".";
-import { internal } from "./_generated/api";
+import { workflow } from "./index.js";
+import { internal } from "./_generated/api.js";
 
 export const kickoffWorkflow = mutation({
   args: {

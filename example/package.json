@@ -8,6 +8,7 @@
     "lint": "tsc -p convex && eslint convex"
   },
   "dependencies": {
+    "@convex-dev/workflow": "file:..",
     "convex": "1.16.0-alpha.2"
   },
   "devDependencies": {

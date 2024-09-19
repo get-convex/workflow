@@ -1,13 +1,16 @@
 import { v } from "convex/values";
-import { WorkflowManager } from "../../src/client";
+import { WorkflowManager } from "@convex-dev/workflow";
 import { internal } from "./_generated/api.js";
-import { components, internalAction } from "./_generated/server";
+import { components, internalAction } from "./_generated/server.js";
 import { OpenAI } from "openai";
 
 export const workflow = new WorkflowManager(components.workflow);
 
 if (!process.env.OPENAI_API_KEY) {
-  throw new Error("OPENAI_API_KEY is not configured.");
+  throw new Error(
+    "OPENAI_API_KEY is not configured.\n" +
+      "npx convex env set OPENAI_API_KEY sk-****"
+  );
 }
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -20,7 +23,7 @@ export const exampleWorkflow = workflow.define({
       internal.index.computeTranscription,
       {
         storageId: args.storageId,
-      },
+      }
     );
     const embedding = await step.runAction(internal.index.computeEmbedding, {
       transcription,

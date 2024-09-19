@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server.js";
 import { journalDocument, JournalEntry, outcome, step } from "./schema.js";
 import { getWorkflow } from "./model.js";
+import { createLogger } from "./utils.js";
 
 export const load = query({
   args: {
@@ -17,6 +18,7 @@ export const load = query({
     if (!workflow) {
       throw new Error(`Workflow not found: ${workflowId}`);
     }
+    const logger = createLogger(workflow.logLevel);
     if (workflow.state.type != "running") {
       throw new Error(`Workflow not running: ${workflowId}`);
     }
@@ -24,6 +26,7 @@ export const load = query({
       .query("workflowJournal")
       .withIndex("workflow", (q) => q.eq("workflowId", workflowId))
       .collect();
+    logger.debug(`Loaded ${entries.length} entries for ${workflowId}`);
     return entries as JournalEntry[];
   },
 });
@@ -45,6 +48,8 @@ export const pushEntry = mutation({
       args.workflowId,
       args.generationNumber,
     );
+    const logger = createLogger(workflow.logLevel);
+
     if (workflow.state.type != "running") {
       throw new Error(`Workflow not running: ${args.workflowId}`);
     }
@@ -71,6 +76,7 @@ export const pushEntry = mutation({
       step: args.step,
     });
     const entry = await ctx.db.get(journalId);
+    logger.debug(`Pushed new journal entry`, entry);
     return entry! as JournalEntry;
   },
 });

@@ -34,8 +34,18 @@ function outcomeSize(outcome: Outcome): number {
   return size;
 }
 
+export const logLevel = v.union(
+  v.literal("DEBUG"),
+  v.literal("INFO"),
+  v.literal("WARN"),
+  v.literal("ERROR"),
+);
+export type LogLevel = Infer<typeof logLevel>;
+
 const workflowObject = {
   startedAt: v.number(),
+  logLevel,
+
   workflowHandle: v.string(),
   args: v.any(),
 

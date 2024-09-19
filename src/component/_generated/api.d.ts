@@ -14,6 +14,7 @@ import type * as functions from "../functions.js";
 import type * as journal from "../journal.js";
 import type * as model from "../model.js";
 import type * as sleep from "../sleep.js";
+import type * as utils from "../utils.js";
 import type * as workflow from "../workflow.js";
 
 import type {
@@ -34,6 +35,7 @@ declare const fullApi: ApiFromModules<{
   journal: typeof journal;
   model: typeof model;
   sleep: typeof sleep;
+  utils: typeof utils;
   workflow: typeof workflow;
 }>;
 export type Mounts = {
@@ -228,7 +230,11 @@ export type Mounts = {
     create: FunctionReference<
       "mutation",
       "public",
-      { workflowArgs: any; workflowHandle: string },
+      {
+        logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR";
+        workflowArgs: any;
+        workflowHandle: string;
+      },
       string
     >;
     load: FunctionReference<
@@ -240,6 +246,7 @@ export type Mounts = {
         _id: string;
         args: any;
         generationNumber: number;
+        logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR";
         startedAt: number;
         state:
           | { type: "running" }

@@ -9,23 +9,33 @@ import {
   STEP_TYPES,
   JournalEntry,
   outcome,
+  logLevel,
 } from "./schema.js";
+import { createLogger } from "./utils.js";
 
 export const create = mutation({
   args: {
     workflowHandle: v.string(),
     workflowArgs: v.any(),
+    logLevel,
   },
   returns: v.string(),
   handler: async (ctx, args) => {
     const now = Date.now();
+    const logger = createLogger(args.logLevel);
     const workflowId = await ctx.db.insert("workflows", {
       startedAt: now,
+      logLevel: args.logLevel,
       workflowHandle: args.workflowHandle,
       args: args.workflowArgs,
       state: { type: "running" },
       generationNumber: 0,
     });
+    logger.debug(
+      `Created workflow ${workflowId}:`,
+      args.workflowArgs,
+      args.workflowHandle,
+    );
     await ctx.scheduler.runAfter(
       0,
       args.workflowHandle as FunctionHandle<"mutation", any, any>,
@@ -52,6 +62,8 @@ export const load = query({
     if (!workflow) {
       throw new Error(`Workflow not found: ${args.workflowId}`);
     }
+    const logger = createLogger(workflow.logLevel);
+    logger.debug(`Loaded workflow ${workflowId}:`, workflow);
     return workflow as Workflow;
   },
 });
@@ -70,11 +82,13 @@ export const cancel = mutation({
     if (!workflow) {
       throw new Error(`Workflow not found: ${workflowId}`);
     }
+    const logger = createLogger(workflow.logLevel);
     if (workflow.state.type !== "running") {
       throw new Error(`Workflow not running: ${workflowId}`);
     }
     workflow.state = { type: "canceled", canceledAt: Date.now() };
     workflow.generationNumber += 1;
+    logger.debug(`Canceled workflow ${workflowId}:`, workflow);
     await ctx.db.replace(workflow._id, workflow);
   },
 });
@@ -93,6 +107,7 @@ export const complete = mutation({
       args.workflowId,
       args.generationNumber,
     );
+    const logger = createLogger(workflow.logLevel);
     if (workflow.state.type !== "running") {
       throw new Error(`Workflow not running: ${args.workflowId}`);
     }
@@ -101,6 +116,7 @@ export const complete = mutation({
       completedAt: args.now,
       outcome: args.outcome,
     };
+    logger.debug(`Completed workflow ${workflow._id}:`, workflow);
     await ctx.db.replace(workflow._id, workflow);
   },
 });
@@ -115,6 +131,12 @@ export const blockedBy = query({
     if (!workflowId) {
       throw new Error(`Invalid workflow ID: ${args.workflowId}`);
     }
+    const workflow = await ctx.db.get(workflowId);
+    if (!workflow) {
+      throw new Error(`Workflow not found: ${workflowId}`);
+    }
+    const logger = createLogger(workflow.logLevel);
+
     const result = [];
     for (const stepType of STEP_TYPES) {
       const inProgressEntries = await ctx.db
@@ -129,9 +151,11 @@ export const blockedBy = query({
       result.push(...inProgressEntries);
     }
     if (result.length > 1) {
-      throw new Error("TODO: multiple in-progress entries");
+      throw new Error(`Multiple in-progress entries for ${args.workflowId}`);
     }
-    return (result[0] ?? null) as JournalEntry | null;
+    const entry = (result[0] ?? null) as JournalEntry | null;
+    logger.debug(`${args.workflowId} blocked by`, entry);
+    return entry;
   },
 });
 
@@ -149,15 +173,18 @@ export const cleanup = mutation({
     if (!workflow) {
       throw new Error(`Workflow not found: ${workflowId}`);
     }
+    const logger = createLogger(workflow.logLevel);
     if (workflow.state.type !== "completed") {
       throw new Error(`Workflow not completed: ${workflowId}`);
     }
+    logger.debug(`Cleaning up workflow ${workflowId}`, workflow);
     await ctx.db.delete(workflowId);
     const journalEntries = await ctx.db
       .query("workflowJournal")
       .withIndex("workflow", (q) => q.eq("workflowId", workflowId))
       .collect();
     for (const journalEntry of journalEntries) {
+      logger.debug("Deleting journal entry", journalEntry);
       await ctx.db.delete(journalEntry._id);
     }
   },

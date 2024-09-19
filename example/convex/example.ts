@@ -20,12 +20,12 @@ export const exampleWorkflow = workflow.define({
   },
   handler: async (step, args) => {
     const transcription = await step.runAction(
-      internal.index.computeTranscription,
+      internal.example.computeTranscription,
       {
         storageId: args.storageId,
       }
     );
-    const embedding = await step.runAction(internal.index.computeEmbedding, {
+    const embedding = await step.runAction(internal.example.computeEmbedding, {
       transcription,
     });
     console.log(embedding);

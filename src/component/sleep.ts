@@ -1,7 +1,8 @@
 import { v } from "convex/values";
-import { api, internal } from "./_generated/api.js";
+import { internal } from "./_generated/api.js";
 import { internalMutation, mutation } from "./_generated/server.js";
 import { getWorkflow, getJournalEntry } from "./model.js";
+import { createLogger } from "./utils.js";
 
 export const start = mutation({
   args: {
@@ -12,8 +13,14 @@ export const start = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await ctx.scheduler.runAfter(
-      Date.now() + args.durationMs,
+    const workflow = await getWorkflow(
+      ctx,
+      args.workflowId,
+      args.generationNumber,
+    );
+    const logger = createLogger(workflow.logLevel);
+    const sleepId = await ctx.scheduler.runAfter(
+      args.durationMs,
       internal.sleep.complete,
       {
         workflowId: args.workflowId,
@@ -21,6 +28,7 @@ export const start = mutation({
         journalId: args.journalId,
       },
     );
+    logger.debug(`Scheduled sleep @ ${sleepId}`, args);
   },
 });
 
@@ -37,6 +45,8 @@ export const complete = internalMutation({
       args.workflowId,
       args.generationNumber,
     );
+    const logger = createLogger(workflow.logLevel);
+
     if (workflow.state.type != "running") {
       throw new Error(`Workflow not running: ${args.workflowId}`);
     }
@@ -58,5 +68,6 @@ export const complete = internalMutation({
       workflowId: args.workflowId,
       generationNumber: args.generationNumber,
     });
+    logger.debug(`Completed sleep`, args, journalEntry);
   },
 });

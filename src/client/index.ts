@@ -12,6 +12,8 @@ import { ObjectType, PropertyValidators } from "convex/values";
 import { api } from "../component/_generated/api.js";
 import { UseApi, WorkflowId } from "../types.js";
 import { workflowMutation } from "./workflowMutation.js";
+import { LogLevel } from "../component/schema.js";
+
 export type { WorkflowId };
 
 type ActionCtxRunners = Pick<
@@ -43,8 +45,32 @@ export type WorkflowStatus =
   | { type: "canceled" }
   | { type: "failed"; error: string };
 
+export type Options = {
+  logLevel?: LogLevel;
+};
+
 export class WorkflowManager {
-  constructor(private component: UseApi<typeof api>) {}
+  logLevel: LogLevel;
+
+  constructor(
+    private component: UseApi<typeof api>,
+    options?: Options,
+  ) {
+    let DEFAULT_LOG_LEVEL: LogLevel = "INFO";
+    if (process.env.WORKFLOW_LOG_LEVEL) {
+      if (
+        !["DEBUG", "INFO", "WARN", "ERROR"].includes(
+          process.env.WORKFLOW_LOG_LEVEL,
+        )
+      ) {
+        console.warn(
+          `Invalid log level (${process.env.WORKFLOW_LOG_LEVEL}), defaulting to "INFO"`,
+        );
+      }
+      DEFAULT_LOG_LEVEL = process.env.WORKFLOW_LOG_LEVEL as LogLevel;
+    }
+    this.logLevel = options?.logLevel ?? DEFAULT_LOG_LEVEL;
+  }
 
   /**
    * Define a new workflow.
@@ -75,6 +101,7 @@ export class WorkflowManager {
     const workflowId = await ctx.runMutation(this.component.workflow.create, {
       workflowHandle: handle,
       workflowArgs: args,
+      logLevel: this.logLevel,
     });
     return workflowId as unknown as WorkflowId;
   }

@@ -343,7 +343,11 @@ export declare const components: {
       create: FunctionReference<
         "mutation",
         "internal",
-        { workflowArgs: any; workflowHandle: string },
+        {
+          logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR";
+          workflowArgs: any;
+          workflowHandle: string;
+        },
         string
       >;
       load: FunctionReference<
@@ -355,6 +359,7 @@ export declare const components: {
           _id: string;
           args: any;
           generationNumber: number;
+          logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR";
           startedAt: number;
           state:
             | { type: "running" }

@@ -10,9 +10,11 @@
  * @module
  */
 
-import type * as fetch from "../fetch.js";
-import type * as index from "../index.js";
+import type * as functions from "../functions.js";
+import type * as journal from "../journal.js";
 import type * as model from "../model.js";
+import type * as sleep from "../sleep.js";
+import type * as workflow from "../workflow.js";
 
 import type {
   ApiFromModules,
@@ -28,58 +30,33 @@ import type {
  * ```
  */
 declare const fullApi: ApiFromModules<{
-  fetch: typeof fetch;
-  index: typeof index;
+  functions: typeof functions;
+  journal: typeof journal;
   model: typeof model;
+  sleep: typeof sleep;
+  workflow: typeof workflow;
 }>;
 export type Mounts = {
-  fetch: {
-    executeFetch: FunctionReference<
-      "action",
-      "public",
-      { body?: ArrayBuffer; headers: any; method: string; url: string },
-      { body: ArrayBuffer; headers: any; status: number; statusText: string }
-    >;
-  };
-  index: {
-    cancelWorkflow: FunctionReference<
-      "mutation",
-      "public",
-      { workflowId: string },
-      null
-    >;
-    cleanupWorkflow: FunctionReference<
-      "mutation",
-      "public",
-      { workflowId: string },
-      null
-    >;
-    completeSleep: FunctionReference<
-      "mutation",
-      "public",
-      { generationNumber: number; journalId: string; workflowId: string },
-      null
-    >;
-    completeWorkflow: FunctionReference<
+  functions: {
+    start: FunctionReference<
       "mutation",
       "public",
       {
+        args: any;
+        functionType:
+          | { type: "query" }
+          | { type: "mutation" }
+          | { type: "action" };
         generationNumber: number;
-        now: number;
-        outcome:
-          | { result: any; resultSize: number; type: "success" }
-          | { error: string; type: "error" };
+        handle: string;
+        journalId: string;
         workflowId: string;
       },
       null
     >;
-    createWorkflow: FunctionReference<
-      "mutation",
-      "public",
-      { workflowArgs: any; workflowHandle: string },
-      string
-    >;
-    loadJournal: FunctionReference<
+  };
+  journal: {
+    load: FunctionReference<
       "query",
       "public",
       { workflowId: string },
@@ -113,30 +90,7 @@ export type Mounts = {
         workflowId: string;
       }>
     >;
-    loadWorkflow: FunctionReference<
-      "query",
-      "public",
-      { workflowId: string },
-      {
-        _creationTime: number;
-        _id: string;
-        args: any;
-        generationNumber: number;
-        startedAt: number;
-        state:
-          | { type: "running" }
-          | {
-              completedAt: number;
-              outcome:
-                | { result: any; resultSize: number; type: "success" }
-                | { error: string; type: "error" };
-              type: "completed";
-            }
-          | { canceledAt: number; type: "canceled" };
-        workflowHandle: string;
-      }
-    >;
-    pushJournalEntry: FunctionReference<
+    pushEntry: FunctionReference<
       "mutation",
       "public",
       {
@@ -197,23 +151,9 @@ export type Mounts = {
         workflowId: string;
       }
     >;
-    startFunction: FunctionReference<
-      "mutation",
-      "public",
-      {
-        args: any;
-        functionType:
-          | { type: "query" }
-          | { type: "mutation" }
-          | { type: "action" };
-        generationNumber: number;
-        handle: string;
-        journalId: string;
-        workflowId: string;
-      },
-      null
-    >;
-    startSleep: FunctionReference<
+  };
+  sleep: {
+    start: FunctionReference<
       "mutation",
       "public",
       {
@@ -224,7 +164,9 @@ export type Mounts = {
       },
       null
     >;
-    workflowBlockedBy: FunctionReference<
+  };
+  workflow: {
+    blockedBy: FunctionReference<
       "query",
       "public",
       { workflowId: string },
@@ -257,6 +199,60 @@ export type Mounts = {
         stepNumber: number;
         workflowId: string;
       } | null
+    >;
+    cancel: FunctionReference<
+      "mutation",
+      "public",
+      { workflowId: string },
+      null
+    >;
+    cleanup: FunctionReference<
+      "mutation",
+      "public",
+      { workflowId: string },
+      null
+    >;
+    complete: FunctionReference<
+      "mutation",
+      "public",
+      {
+        generationNumber: number;
+        now: number;
+        outcome:
+          | { result: any; resultSize: number; type: "success" }
+          | { error: string; type: "error" };
+        workflowId: string;
+      },
+      null
+    >;
+    create: FunctionReference<
+      "mutation",
+      "public",
+      { workflowArgs: any; workflowHandle: string },
+      string
+    >;
+    load: FunctionReference<
+      "query",
+      "public",
+      { workflowId: string },
+      {
+        _creationTime: number;
+        _id: string;
+        args: any;
+        generationNumber: number;
+        startedAt: number;
+        state:
+          | { type: "running" }
+          | {
+              completedAt: number;
+              outcome:
+                | { result: any; resultSize: number; type: "success" }
+                | { error: string; type: "error" };
+              type: "completed";
+            }
+          | { canceledAt: number; type: "canceled" };
+        workflowHandle: string;
+      }
     >;
   };
 };

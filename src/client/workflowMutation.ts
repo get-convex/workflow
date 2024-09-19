@@ -34,7 +34,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
       if (typeof generationNumber !== "number") {
         throw new Error(INVALID_WORKFLOW_MESSAGE);
       }
-      const workflow = await ctx.runQuery(component.index.loadWorkflow, {
+      const workflow = await ctx.runQuery(component.workflow.load, {
         workflowId,
       });
       if (workflow.generationNumber !== args.generationNumber) {
@@ -45,7 +45,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         console.log(`Workflow ${args.workflowId} completed, returning.`);
         return;
       }
-      const blockedBy = await ctx.runQuery(component.index.workflowBlockedBy, {
+      const blockedBy = await ctx.runQuery(component.workflow.blockedBy, {
         workflowId,
       });
       if (blockedBy !== null) {
@@ -53,7 +53,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         console.log(`  ${blockedBy._id}: ${blockedBy.step.type}`);
         return;
       }
-      const journalEntries = (await ctx.runQuery(component.index.loadJournal, {
+      const journalEntries = (await ctx.runQuery(component.journal.load, {
         workflowId,
       })) as JournalEntry[];
       for (const journalEntry of journalEntries) {
@@ -65,10 +65,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
       }
       const channel = new BaseChannel<StepRequest>(0);
       const step = new StepContext(channel);
-      const originalEnv = setupEnvironment(
-        step,
-        component.fetch.executeFetch as any,
-      );
+      const originalEnv = setupEnvironment(step);
       const executor = new StepExecutor(
         workflowId,
         generationNumber,
@@ -96,7 +93,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
       const result = await Promise.race([handlerWorker(), executorWorker()]);
       switch (result.type) {
         case "handlerDone": {
-          await ctx.runMutation(component.index.completeWorkflow, {
+          await ctx.runMutation(component.workflow.complete, {
             workflowId,
             generationNumber,
             outcome: result.outcome,
@@ -108,7 +105,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
           const { _id, step } = result.entry;
           switch (step.type) {
             case "function": {
-              await ctx.runMutation(component.index.startFunction, {
+              await ctx.runMutation(component.functions.start, {
                 workflowId,
                 generationNumber,
                 journalId: _id,
@@ -119,7 +116,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
               break;
             }
             case "sleep": {
-              await ctx.runMutation(component.index.startSleep, {
+              await ctx.runMutation(component.sleep.start, {
                 workflowId,
                 generationNumber,
                 journalId: _id,

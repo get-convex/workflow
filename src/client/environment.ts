@@ -1,13 +1,7 @@
-import { FunctionHandle, FunctionReference } from "convex/server";
 import { OriginalEnv } from "./step.js";
 import { StepContext } from "./stepContext.js";
-import { request, response } from "../component/fetch.js";
-import { Infer } from "convex/values";
 
-export function setupEnvironment(
-  ctx: StepContext,
-  fetch: FetchReference,
-): OriginalEnv {
+export function setupEnvironment(ctx: StepContext): OriginalEnv {
   const global = globalThis as any;
 
   global.Math.random = (...args: any[]) => {
@@ -52,47 +46,4 @@ export function setupEnvironment(
     );
   };
   return { Date: originalDate };
-}
-
-type FetchReference = FunctionReference<
-  "action",
-  "internal",
-  Infer<typeof request>,
-  Infer<typeof response>
->;
-
-async function envFetch(
-  ctx: StepContext,
-  componentFetch: FetchReference,
-  input: RequestInfo | URL,
-  init?: RequestInit,
-): Promise<Response> {
-  if (input instanceof Request) {
-    throw new Error(`TODO: Implement Request handling for envFetch`);
-  }
-  const method = init?.method || "GET";
-  const headers = init?.headers || {};
-  let body: ArrayBuffer | undefined;
-  if (init?.body) {
-    if (typeof init.body === "string") {
-      body = new TextEncoder().encode(init.body);
-    } else if (init.body instanceof ArrayBuffer) {
-      body = init.body;
-    } else {
-      throw new Error(
-        `TODO: Unsupported body type for envFetch: ${typeof init.body}`,
-      );
-    }
-  }
-  const resp = await ctx.runAction(componentFetch, {
-    url: input.toString(),
-    method,
-    headers,
-    body,
-  });
-  return new Response(resp.body, {
-    status: resp.status,
-    statusText: resp.statusText,
-    headers: resp.headers,
-  });
 }

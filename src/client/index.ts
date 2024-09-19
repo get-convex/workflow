@@ -103,13 +103,10 @@ export class WorkflowManager {
     args: FunctionArgs<F>,
   ): Promise<WorkflowId> {
     const handle = await createFunctionHandle(workflow);
-    const workflowId = await ctx.runMutation(
-      this.component.index.createWorkflow,
-      {
-        workflowHandle: handle,
-        workflowArgs: args,
-      },
-    );
+    const workflowId = await ctx.runMutation(this.component.workflow.create, {
+      workflowHandle: handle,
+      workflowArgs: args,
+    });
     return workflowId as unknown as WorkflowId;
   }
 
@@ -124,7 +121,7 @@ export class WorkflowManager {
     ctx: GenericQueryCtx<GenericDataModel>,
     workflowId: WorkflowId,
   ): Promise<WorkflowStatus> {
-    const workflow = await ctx.runQuery(this.component.index.loadWorkflow, {
+    const workflow = await ctx.runQuery(this.component.workflow.load, {
       workflowId,
     });
     switch (workflow.state.type) {
@@ -151,7 +148,7 @@ export class WorkflowManager {
     ctx: GenericMutationCtx<GenericDataModel>,
     workflowId: WorkflowId,
   ) {
-    await ctx.runMutation(this.component.index.cancelWorkflow, {
+    await ctx.runMutation(this.component.workflow.cancel, {
       workflowId,
     });
   }
@@ -166,7 +163,7 @@ export class WorkflowManager {
     ctx: GenericMutationCtx<GenericDataModel>,
     workflowId: WorkflowId,
   ) {
-    await ctx.runMutation(this.component.index.cleanupWorkflow, {
+    await ctx.runMutation(this.component.workflow.cleanup, {
       workflowId,
     });
   }

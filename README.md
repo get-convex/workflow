@@ -5,7 +5,7 @@ and actions into long-lived workflows, and the system will always fully execute 
 to completion.
 
 ```ts
-import { WorkflowManager } from "@convex-dev/workflow/component.config.js";
+import { WorkflowManager } from "@convex-dev/workflow";
 import { components } from "./_generated/server";
 
 export const workflow = new WorkflowManager(components.workflow);
@@ -58,7 +58,7 @@ to the installed component:
 
 ```ts
 // convex/index.ts
-import { WorkflowManager } from "@convex-dev/workflow/component.config.js";
+import { WorkflowManager } from "@convex-dev/workflow";
 import { components } from "./_generated/server";
 
 export const workflow = new WorkflowManager(components.workflow);

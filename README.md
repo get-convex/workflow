@@ -5,7 +5,7 @@ and actions into long-lived workflows, and the system will always fully execute 
 to completion.
 
 ```ts
-import { WorkflowManager } from "@convex-dev/workflow/component";
+import { WorkflowManager } from "@convex-dev/workflow/component.config.js";
 import { components } from "./_generated/server";
 
 export const workflow = new WorkflowManager(components.workflow);
@@ -41,7 +41,7 @@ Then, install the component within your `convex/convex.config.ts` file:
 
 ```ts
 // convex/convex.config.ts
-import workflow from "@convex-dev/workflow/component";
+import workflow from "@convex-dev/workflow/component.config.js";
 import { defineApp } from "convex/server";
 
 const app = defineApp();
@@ -54,7 +54,7 @@ to the installed component:
 
 ```ts
 // convex/index.ts
-import { WorkflowManager } from "@convex-dev/workflow/component";
+import { WorkflowManager } from "@convex-dev/workflow/component.config.js";
 import { components } from "./_generated/server";
 
 export const workflow = new WorkflowManager(components.workflow);

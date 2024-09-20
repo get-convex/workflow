@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@convex-dev/workflow": "file:..",
-    "convex": "1.16.0-alpha.2"
+    "convex": "^1.16.1"
   },
   "devDependencies": {
     "eslint": "^8.55.0",

@@ -1,5 +1,11 @@
 # Convex Workflow (Beta)
 
+[![npm version](https://badge.fury.io/js/@convex-dev%2Fworkflow.svg)](https://badge.fury.io/js/@convex-dev%2Fworkflow)
+
+Have you ever wanted to sleep for 7 days within a Convex function? Find yourself in callback hell chaining together
+function calls through queues? Sick of manual state management and scheduling in long-lived workflows? Convex workflows
+might just what you're looking for.
+
 This component adds durably executed _workflows_ to Convex. Combine Convex queries, mutations,
 and actions into long-lived workflows, and the system will always fully execute a workflow
 to completion.
@@ -17,9 +23,7 @@ export const exampleWorkflow = workflow.define({
   handler: async (step, args) => {
     const transcription = await step.runAction(
       internal.index.computeTranscription,
-      {
-        storageId: args.storageId,
-      },
+      { storageId: args.storageId },
     );
 
     // Sleep for a month after computing the transcription.

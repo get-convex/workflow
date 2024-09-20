@@ -23,7 +23,7 @@
      * to compile TypeScript because differences between tsconfig.json files can
      * cause the code to be compiled differently.
      */
-     "customConditions": ["@convex-dev/component-source"]
+    "customConditions": ["@convex-dev/component-source"]
   },
   "include": ["./**/*"],
   "exclude": ["./_generated"]

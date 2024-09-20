@@ -163,7 +163,7 @@ export const cleanup = mutation({
   args: {
     workflowId: v.string(),
   },
-  returns: v.null(),
+  returns: v.boolean(),
   handler: async (ctx, args) => {
     const workflowId = ctx.db.normalizeId("workflows", args.workflowId);
     if (!workflowId) {
@@ -171,11 +171,14 @@ export const cleanup = mutation({
     }
     const workflow = await ctx.db.get(workflowId);
     if (!workflow) {
-      throw new Error(`Workflow not found: ${workflowId}`);
+      return false;
     }
     const logger = createLogger(workflow.logLevel);
     if (workflow.state.type !== "completed") {
-      throw new Error(`Workflow not completed: ${workflowId}`);
+      logger.debug(
+        `Can't clean up workflow ${workflowId} since it hasn't completed.`,
+      );
+      return false;
     }
     logger.debug(`Cleaning up workflow ${workflowId}`, workflow);
     await ctx.db.delete(workflowId);
@@ -187,5 +190,6 @@ export const cleanup = mutation({
       logger.debug("Deleting journal entry", journalEntry);
       await ctx.db.delete(journalEntry._id);
     }
+    return true;
   },
 });

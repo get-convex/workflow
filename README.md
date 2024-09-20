@@ -1,7 +1,5 @@
 # Convex Workflow (Beta)
 
-[![npm version](https://badge.fury.io/js/@convex-dev%2Fworkflow.svg)](https://badge.fury.io/js/@convex-dev%2Fworkflow)
-
 Have you ever wanted to sleep for 7 days within a Convex function? Find yourself in callback hell chaining together
 function calls through queues? Sick of manual state management and scheduling in long-lived workflows? Convex workflows
 might just be what you're looking for.
@@ -37,8 +35,7 @@ This component adds durably executed _workflows_ to Convex. Combine Convex queri
 and actions into long-lived workflows, and the system will always fully execute a workflow
 to completion.
 
-This component is currently in beta. It's missing some functionality, but
-what's there should work.
+This component is currently in beta and may have some rough edges. Open a GitHub issue with any feedback or bugs you find.
 
 ## Installation
 
@@ -84,46 +81,122 @@ is designed to feel like a Convex action but with a few restrictions:
    `fetch` within our workflow environment.
 
 ```ts
-// convex/index.ts
-
-workflow.define({
-  args: {
-    storageId: v.id("_storage"),
-  },
+export const exampleWorkflow = workflow.define({
+  args: { name: v.string() },
   handler: async (step, args) => {
-    const transcription = await step.runAction(api.index.computeTranscription, {
-      storageId: args.storageId,
-    });
-    const embedding = await step.runAction(api.index.computeEmbedding, {
-      transcription,
-    });
-    console.log(embedding);
+    const queryResult = await step.runQuery(
+      internal.example.exampleQuery,
+      args,
+    );
+    const actionResult = await step.runAction(
+      internal.example.exampleAction,
+      args,
+    );
+    console.log(queryResult, actionResult);
+  },
+});
+
+export const exampleQuery = internalQuery({
+  args: { name: v.string() },
+  handler: async (ctx, args) => {
+    return `The query says... Hi ${args.name}!`;
+  },
+});
+
+export const exampleAction = internalAction({
+  args: { name: v.string() },
+  handler: async (ctx, args) => {
+    return `The action says... Hi ${args.name}!`;
   },
 });
 ```
 
-Once you've defined a workflow, you can start it using `workflow.start()`, which
-will kick off execution of the workflow and return a `WorkflowId`. You can then query
-the status of the workflow with `workflow.status()` or cancel it with `workflow.cancel()`.
+Once you've defined a workflow, you can start it from a mutation or action
+using `workflow.start()`.
 
 ```ts
-// convex/index.ts
-
-export const workflowExample = mutation(async (ctx) => {
-    const workflowId = await workflow.start(ctx, api.index.exampleWorkflow, {
-        storageId: ...,
-    });
-    const status = await workflow.status(ctx, workflowId);
-    return status;
+export const kickoffWorkflow = mutation({
+  handler: async (ctx) => {
+    const workflowId = await workflow.start(
+      ctx,
+      internal.example.exampleWorkflow,
+      {
+        name: "James",
+      },
+    );
+  },
 });
 ```
 
-Once a workflow's completed, you can clean it up its storage with `workflow.cleanup()`.
+The `workflow.start()` method returns a `WorkflowId`, which can then be used for querying
+a workflow's status.
 
 ```ts
-// convex/index.ts
+export const kickoffWorkflow = action({
+  handler: async (ctx) => {
+    const workflowId = await workflow.start(
+      ctx,
+      internal.example.exampleWorkflow,
+      {
+        name: "James",
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
-await workflow.cleanup(ctx, workflowId);
+    const status = await workflow.status(ctx, workflowId);
+    console.log("Workflow status after 1s", status);
+  },
+});
+```
+
+You can also cancel a workflow with `workflow.cancel()`, halting the workflow's execution immmediately. In-progress calls to `step.runAction()`, however, only have best-effort cancelation.
+
+```ts
+export const kickoffWorkflow = action({
+  handler: async (ctx) => {
+    const workflowId = await workflow.start(
+      ctx,
+      internal.example.exampleWorkflow,
+      {
+        name: "James",
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Cancel the workflow after 1 second.
+    await workflow.cancel(ctx, workflowId);
+  },
+});
+```
+
+After a workflow has completed, you can clean up its storage with `workflow.cleanup()`.
+Completed workflows are not automatically cleaned up by the system.
+
+```ts
+export const kickoffWorkflow = action({
+  handler: async (ctx) => {
+    const workflowId = await workflow.start(
+      ctx,
+      internal.example.exampleWorkflow,
+      {
+        name: "James",
+      },
+    );
+    try {
+      while (true) {
+        const status = await workflow.status(ctx, workflowId);
+        if (status.type === "inProgress") {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
+        console.log("Workflow completed with status:", status);
+        break;
+      }
+    } finally {
+      await workflow.cleanup(ctx, workflowId);
+    }
+  },
+});
 ```
 
 ## Limitations

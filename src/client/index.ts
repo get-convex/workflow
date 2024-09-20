@@ -147,13 +147,14 @@ export class WorkflowManager {
   }
 
   /**
-   * Clean up a workflow's storage. The workflow must be completed.
+   * Clean up a completed workflow's storage.
    *
    * @param ctx - The Convex context.
    * @param workflowId - The workflow ID.
+   * @returns - Whether the workflow's state was cleaned up.
    */
-  async cleanup(ctx: RunMutationCtx, workflowId: WorkflowId) {
-    await ctx.runMutation(this.component.workflow.cleanup, {
+  async cleanup(ctx: RunMutationCtx, workflowId: WorkflowId): Promise<boolean> {
+    return await ctx.runMutation(this.component.workflow.cleanup, {
       workflowId,
     });
   }

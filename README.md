@@ -4,11 +4,7 @@
 
 Have you ever wanted to sleep for 7 days within a Convex function? Find yourself in callback hell chaining together
 function calls through queues? Sick of manual state management and scheduling in long-lived workflows? Convex workflows
-might just what you're looking for.
-
-This component adds durably executed _workflows_ to Convex. Combine Convex queries, mutations,
-and actions into long-lived workflows, and the system will always fully execute a workflow
-to completion.
+might just be what you're looking for.
 
 ```ts
 import { WorkflowManager } from "@convex-dev/workflow";
@@ -36,6 +32,10 @@ export const exampleWorkflow = workflow.define({
   },
 });
 ```
+
+This component adds durably executed _workflows_ to Convex. Combine Convex queries, mutations,
+and actions into long-lived workflows, and the system will always fully execute a workflow
+to completion.
 
 This component is currently in beta. It's missing some functionality, but
 what's there should work.

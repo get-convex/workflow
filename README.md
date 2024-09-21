@@ -1,6 +1,8 @@
-# Convex Workflow (Beta)
+# Convex Workflow
 
 [![npm version](https://badge.fury.io/js/@convex-dev%2Fworkflow.svg?)](https://badge.fury.io/js/@convex-dev%2Fworkflow)
+
+**Note: Convex Components are currently in beta.**
 
 Have you ever wanted to sleep for 7 days within a Convex function? Find yourself in callback hell chaining together
 function calls through queues? Sick of manual state management and scheduling in long-lived workflows? Convex workflows

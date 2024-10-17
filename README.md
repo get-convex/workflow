@@ -221,5 +221,8 @@ a few limitations to keep in mind:
 - If you need to use side effects like `fetch`, `Math.random()`, or `Date.now()`,
   you'll need to define a separate Convex action, perform the side effects there,
   and then call that action from the workflow with `step.runAction()`.
+- If the implementation of the workflow meaningfully changes (steps added,
+  removed, or reordered) then it will fail with a determinism violation.
+  The implementation should stay stable for the lifetime of active workflows.
 
 <!-- END: Include on https://convex.dev/components -->

@@ -1,5 +1,5 @@
 import { api } from "../component/_generated/api.js";
-import { PropertyValidators, v, Validator } from "convex/values";
+import { PropertyValidators, v } from "convex/values";
 import { Result, UseApi } from "../types.js";
 import { WorkflowDefinition } from "./index.js";
 import { internalMutationGeneric, RegisteredMutation } from "convex/server";
@@ -82,8 +82,8 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
           checkArgs(workflow.args, registered.args);
           await registered.handler(step, workflow.args);
           outcome = { type: "success", result: null, resultSize: 0 };
-        } catch (error: any) {
-          outcome = { type: "error", error: error.message };
+        } catch (error) {
+          outcome = { type: "error", error: (error as Error).message };
         }
         return { type: "handlerDone", outcome };
       };
@@ -128,5 +128,6 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         }
       }
     },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   }) as any;
 }

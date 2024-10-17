@@ -26,10 +26,11 @@ export const exampleWorkflow = workflow.define({
         storageId: args.storageId,
       },
     );
+    console.log(transcription);
     const embedding = await step.runAction(internal.example.computeEmbedding, {
       transcription,
     });
-    console.log(embedding);
+    console.log(embedding.slice(0, 20));
   },
 });
 
@@ -43,8 +44,8 @@ export const computeTranscription = internalAction({
     if (!blob) {
       throw new Error(`Invalid storage ID: ${args.storageId}`);
     }
-    const file = new File([blob], `${args.storageId}.mp3`, {
-      type: "audio/mpeg",
+    const file = new File([blob], `${args.storageId}`, {
+      type: blob.type,
     });
     const transcription = await openai.audio.transcriptions.create({
       file,

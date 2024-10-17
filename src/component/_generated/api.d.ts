@@ -212,7 +212,7 @@ export type Mounts = {
       "mutation",
       "public",
       { workflowId: string },
-      null
+      boolean
     >;
     complete: FunctionReference<
       "mutation",
@@ -276,5 +276,7 @@ export declare const internal: FilterApi<
   typeof fullApiWithMounts,
   FunctionReference<any, "internal">
 >;
+
+export declare const components: {};
 
 /* prettier-ignore-end */

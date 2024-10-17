@@ -37,7 +37,7 @@
         "default": "./dist/commonjs/client/index.js"
       }
     },
-    "./convex.config.js": {
+    "./convex.config": {
       "import": {
         "@convex-dev/component-source": "./src/component/convex.config.ts",
         "types": "./dist/esm/component/convex.config.d.ts",
@@ -45,9 +45,11 @@
       }
     }
   },
+  "peerDependencies": {
+    "convex": "~1.16.5 || ~1.17.0"
+  },
   "dependencies": {
-    "async-channel": "^0.2.0",
-    "convex": "^1.16.1"
+    "async-channel": "^0.2.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.1.0",

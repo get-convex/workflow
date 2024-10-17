@@ -45,16 +45,12 @@ export type WorkflowStatus =
   | { type: "canceled" }
   | { type: "failed"; error: string };
 
-export type Options = {
-  logLevel?: LogLevel;
-};
-
 export class WorkflowManager {
   logLevel: LogLevel;
 
   constructor(
     private component: UseApi<typeof api>,
-    options?: Options,
+    options?: { logLevel?: LogLevel },
   ) {
     let DEFAULT_LOG_LEVEL: LogLevel = "INFO";
     if (process.env.WORKFLOW_LOG_LEVEL) {
@@ -81,6 +77,7 @@ export class WorkflowManager {
   define<ArgsValidator extends PropertyValidators>(
     workflow: WorkflowDefinition<ArgsValidator>,
   ): RegisteredMutation<"internal", ObjectType<ArgsValidator>, null> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return workflowMutation(this.component, workflow) as any;
   }
 
@@ -92,7 +89,7 @@ export class WorkflowManager {
    * @param args - The workflow arguments.
    * @returns The workflow ID.
    */
-  async start<F extends FunctionReference<"mutation", "internal", any, any>>(
+  async start<F extends FunctionReference<"mutation", "internal">>(
     ctx: RunMutationCtx,
     workflow: F,
     args: FunctionArgs<F>,

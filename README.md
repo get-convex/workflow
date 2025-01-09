@@ -11,7 +11,7 @@ Convex workflows might just be what you're looking for.
 
 ```ts
 import { WorkflowManager } from "@convex-dev/workflow";
-import { components } from "./_generated/server";
+import { components } from "./_generated/api";
 
 export const workflow = new WorkflowManager(components.workflow);
 
@@ -69,7 +69,7 @@ to the installed component:
 ```ts
 // convex/index.ts
 import { WorkflowManager } from "@convex-dev/workflow";
-import { components } from "./_generated/server";
+import { components } from "./_generated/api";
 
 export const workflow = new WorkflowManager(components.workflow);
 ```

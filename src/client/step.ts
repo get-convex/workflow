@@ -18,11 +18,12 @@ export type OriginalEnv = {
 
 export type WorkerResult =
   | { type: "handlerDone"; outcome: Result<null> }
-  | { type: "executorBlocked"; entry: JournalEntry };
+  | { type: "executorBlocked"; entry: JournalEntry; name: string };
 
 export type StepRequest =
   | {
       type: "function";
+      name: string;
       functionType: FunctionType;
       handle: string;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -75,7 +76,11 @@ export class StepExecutor {
         continue;
       }
       const newEntry = await this.pushJournalEntry(message);
-      return { type: "executorBlocked", entry: newEntry };
+      return {
+        type: "executorBlocked",
+        entry: newEntry,
+        name: message.type === "function" ? message.name : "sleep",
+      };
     }
   }
 

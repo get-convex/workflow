@@ -4,6 +4,7 @@ import {
   FunctionArgs,
   FunctionReturnType,
   createFunctionHandle,
+  getFunctionName,
 } from "convex/server";
 import { WorkflowStep } from "./index.js";
 import { StepRequest } from "./step.js";
@@ -36,7 +37,12 @@ export class StepContext implements WorkflowStep {
   async sleep(durationMs: number): Promise<void> {
     let send: any;
     const p = new Promise<void>((resolve, reject) => {
-      send = this.sender.push({ type: "sleep", durationMs, resolve, reject });
+      send = this.sender.push({
+        type: "sleep",
+        durationMs,
+        resolve,
+        reject,
+      });
     });
     await send;
     return p;
@@ -52,6 +58,7 @@ export class StepContext implements WorkflowStep {
     const p = new Promise<any>((resolve, reject) => {
       send = this.sender.push({
         type: "function",
+        name: getFunctionName(f),
         functionType,
         handle,
         args,

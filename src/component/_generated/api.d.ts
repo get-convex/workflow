@@ -53,6 +53,12 @@ export type Mounts = {
         generationNumber: number;
         handle: string;
         journalId: string;
+        name: string;
+        retryBehavior?: {
+          base: number;
+          initialBackoffMs: number;
+          maxAttempts: number;
+        };
         workflowId: string;
       },
       null

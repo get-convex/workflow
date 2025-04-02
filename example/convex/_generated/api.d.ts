@@ -55,6 +55,12 @@ export declare const components: {
           generationNumber: number;
           handle: string;
           journalId: string;
+          name: string;
+          retryBehavior?: {
+            base: number;
+            initialBackoffMs: number;
+            maxAttempts: number;
+          };
           workflowId: string;
         },
         null

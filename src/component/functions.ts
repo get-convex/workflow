@@ -10,12 +10,14 @@ import {
 import { getJournalEntry, getWorkflow } from "./model.js";
 import { outcome, valueSize } from "./schema.js";
 import { createLogger, logLevel } from "./logging.js";
-import { getDefaultLogger } from "./utils.js";
+import { getDefaultLogger, getWorkpool } from "./utils.js";
+import { vRetryBehavior } from "@convex-dev/workpool";
 
 const HEARTBEAT_INTERVAL_MS = 10 * 1000;
 
 export const start = mutation({
   args: {
+    name: v.string(),
     workflowId: v.string(),
     generationNumber: v.number(),
     journalId: v.id("journal"),
@@ -23,6 +25,7 @@ export const start = mutation({
     functionType,
     handle: v.string(),
     args: v.any(),
+    retryBehavior: v.optional(vRetryBehavior),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -35,39 +38,36 @@ export const start = mutation({
     if (!journalEntry.step.inProgress) {
       throw new Error(`Journal entry not in progress: ${args.journalId}`);
     }
-    const runId = await ctx.scheduler.runAfter(0, internal.functions.run, {
-      workflowId: args.workflowId,
-      generationNumber: args.generationNumber,
-      logLevel: logger.logLevel, // so it doesn't have to look it up
-      journalId: args.journalId,
-      functionType: journalEntry.step.functionType,
-      handle: journalEntry.step.handle,
-      args: journalEntry.step.args,
-    });
+    const workpool = await getWorkpool(ctx);
+    const runId = await workpool.enqueueAction(
+      ctx,
+      internal.functions.run,
+      {
+        workflowId: args.workflowId,
+        generationNumber: args.generationNumber,
+        logLevel: logger.logLevel, // so it doesn't have to look it up
+        journalId: args.journalId,
+        functionType: journalEntry.step.functionType,
+        handle: journalEntry.step.handle,
+        args: journalEntry.step.args,
+      },
+      {
+        // TODO: add onComplete and context to continue / fail
+        // onComplete:
+        // context:
+        name: args.name,
+        retry: args.retryBehavior,
+      },
+    );
     logger.debug(
       `Starting function run for journal entry @ ${runId}`,
       journalEntry,
     );
-    if (journalEntry.step.functionType.type === "action") {
-      const recoveryId = await ctx.scheduler.runAfter(
-        HEARTBEAT_INTERVAL_MS,
-        internal.functions.recover,
-        {
-          workflowId: args.workflowId,
-          generationNumber: args.generationNumber,
-          journalId: args.journalId,
-          runId,
-        },
-      );
-      logger.debug(
-        `Scheduling recovery for ${runId} in ${HEARTBEAT_INTERVAL_MS}ms @ ${recoveryId}`,
-      );
-      journalEntry.step.functionType.recoveryId = recoveryId;
-      await ctx.db.replace(journalEntry._id, journalEntry);
-    }
   },
 });
 
+// DEPRECATED: now with workpool we don't have a recovery bit
+// Keeping this around for existing workflows that are still running.
 export const recover = internalMutation({
   args: {
     workflowId: v.string(),
@@ -271,9 +271,9 @@ export const complete = internalMutation({
       );
       return;
     }
+    // DEPRECATED: now with workpool we don't have a recovery bit
     const recoveryIdStr = journalEntry.step.functionType.recoveryId;
     if (!recoveryIdStr) {
-      logger.debug(`${args.journalId} missing recovery ID: ${recoveryIdStr}`);
       return;
     }
     const recoveryId = ctx.db.system.normalizeId(

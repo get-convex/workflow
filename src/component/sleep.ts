@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api.js";
 import { internalMutation, mutation } from "./_generated/server.js";
 import { getWorkflow, getJournalEntry } from "./model.js";
-import { getDefaultLogger } from "./utils.js";
+import { getDefaultLogger, getWorkpool } from "./utils.js";
 import type { FunctionHandle } from "convex/server";
 
 export const start = mutation({
@@ -15,14 +15,16 @@ export const start = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const logger = await getDefaultLogger(ctx);
-    const sleepId = await ctx.scheduler.runAfter(
-      args.durationMs,
+    const workpool = await getWorkpool(ctx);
+    const sleepId = await workpool.enqueueMutation(
+      ctx,
       internal.sleep.complete,
       {
         workflowId: args.workflowId,
         generationNumber: args.generationNumber,
         journalId: args.journalId,
       },
+      { runAfter: args.durationMs },
     );
     logger.debug(`Scheduled sleep @ ${sleepId}`, args);
   },

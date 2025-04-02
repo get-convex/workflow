@@ -106,12 +106,14 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
           switch (step.type) {
             case "function": {
               await ctx.runMutation(component.functions.start, {
+                name: result.name,
                 workflowId,
                 generationNumber,
                 journalId: _id,
                 functionType: step.functionType,
                 handle: step.handle,
                 args: step.args,
+                // TODO: retryBehavior: {},
               });
               break;
             }

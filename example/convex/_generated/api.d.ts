@@ -234,7 +234,7 @@ export declare const components: {
         "mutation",
         "internal",
         {
-          logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR";
+          logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR";
           maxParallelism?: number;
           workflowArgs: any;
           workflowHandle: string;
@@ -251,8 +251,7 @@ export declare const components: {
           _id: string;
           args: any;
           generationNumber: number;
-          logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR";
-          maxParallelism?: number;
+          logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR";
           name?: string;
           startedAt: number;
           state:

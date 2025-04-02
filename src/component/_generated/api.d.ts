@@ -12,7 +12,6 @@ import type * as functions from "../functions.js";
 import type * as journal from "../journal.js";
 import type * as logging from "../logging.js";
 import type * as model from "../model.js";
-import type * as pool from "../pool.js";
 import type * as sleep from "../sleep.js";
 import type * as utils from "../utils.js";
 import type * as workflow from "../workflow.js";
@@ -36,7 +35,6 @@ declare const fullApi: ApiFromModules<{
   journal: typeof journal;
   logging: typeof logging;
   model: typeof model;
-  pool: typeof pool;
   sleep: typeof sleep;
   utils: typeof utils;
   workflow: typeof workflow;
@@ -234,7 +232,7 @@ export type Mounts = {
       "mutation",
       "public",
       {
-        logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR";
+        logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR";
         maxParallelism?: number;
         workflowArgs: any;
         workflowHandle: string;
@@ -251,8 +249,7 @@ export type Mounts = {
         _id: string;
         args: any;
         generationNumber: number;
-        logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR";
-        maxParallelism?: number;
+        logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR";
         name?: string;
         startedAt: number;
         state:

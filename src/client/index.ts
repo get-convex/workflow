@@ -13,7 +13,7 @@ import { ObjectType, PropertyValidators } from "convex/values";
 import { api } from "../component/_generated/api.js";
 import { UseApi, WorkflowId } from "../types.js";
 import { workflowMutation } from "./workflowMutation.js";
-import { LogLevel } from "../component/schema.js";
+import { LogLevel } from "../component/logging.js";
 
 export type { WorkflowId };
 

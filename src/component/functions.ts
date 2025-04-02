@@ -8,8 +8,9 @@ import {
   internalAction,
 } from "./_generated/server.js";
 import { getJournalEntry, getWorkflow } from "./model.js";
-import { logLevel, outcome, valueSize } from "./schema.js";
-import { createLogger } from "./utils.js";
+import { outcome, valueSize } from "./schema.js";
+import { createLogger, logLevel } from "./logging.js";
+import { getDefaultLogger } from "./utils.js";
 
 const HEARTBEAT_INTERVAL_MS = 10 * 1000;
 
@@ -25,12 +26,7 @@ export const start = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const workflow = await getWorkflow(
-      ctx,
-      args.workflowId,
-      args.generationNumber,
-    );
-    const logger = createLogger(workflow.logLevel);
+    const logger = await getDefaultLogger(ctx);
 
     const journalEntry = await getJournalEntry(ctx, args.journalId);
     if (journalEntry.step.type !== "function") {
@@ -41,8 +37,8 @@ export const start = mutation({
     }
     const runId = await ctx.scheduler.runAfter(0, internal.functions.run, {
       workflowId: args.workflowId,
-      logLevel: workflow.logLevel,
       generationNumber: args.generationNumber,
+      logLevel: logger.logLevel, // so it doesn't have to look it up
       journalId: args.journalId,
       functionType: journalEntry.step.functionType,
       handle: journalEntry.step.handle,
@@ -86,7 +82,7 @@ export const recover = internalMutation({
       args.workflowId,
       args.generationNumber,
     );
-    const logger = createLogger(workflow.logLevel);
+    const logger = await getDefaultLogger(ctx);
 
     const journalEntry = await getJournalEntry(ctx, args.journalId);
     const { step } = journalEntry;
@@ -181,7 +177,9 @@ export const run = internalAction({
   returns: v.null(),
   handler: async (ctx, args) => {
     const logger = createLogger(args.logLevel);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let outcome: Result<any>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const runner: any = {
       query: ctx.runQuery,
       mutation: ctx.runMutation,
@@ -207,12 +205,13 @@ export const run = internalAction({
         result,
       );
       outcome = { type: "success", result, resultSize };
-    } catch (error: any) {
+    } catch (error) {
       const duration = Date.now() - start;
+      const message = error instanceof Error ? error.message : String(error);
       logger.error(
-        `Failed executing ${args.journalId} (${duration.toFixed(2)}ms): ${error.message}`,
+        `Failed executing ${args.journalId} (${duration.toFixed(2)}ms): ${message}`,
       );
-      outcome = { type: "error", error: error.message };
+      outcome = { type: "error", error: message };
     }
     await ctx.runMutation(internal.functions.complete, {
       workflowId: args.workflowId,
@@ -237,7 +236,7 @@ export const complete = internalMutation({
       args.workflowId,
       args.generationNumber,
     );
-    const logger = createLogger(workflow.logLevel);
+    const logger = await getDefaultLogger(ctx);
 
     if (workflow.state.type != "running") {
       throw new Error(`Workflow not running: ${args.workflowId}`);

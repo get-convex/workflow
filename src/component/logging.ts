@@ -10,12 +10,12 @@ export type Logger = {
   time: (label: string) => void;
   timeEnd: (label: string) => void;
   event: (event: string, payload: Record<string, unknown>) => void;
+  logLevel: LogLevel;
 };
 
 export function createLogger(level?: LogLevel): Logger {
-  const levelIndex = ["DEBUG", "INFO", "WARN", "ERROR"].indexOf(
-    level ?? DEFAULT_LOG_LEVEL,
-  );
+  const logLevel = level ?? DEFAULT_LOG_LEVEL;
+  const levelIndex = ["DEBUG", "INFO", "WARN", "ERROR"].indexOf(logLevel);
   if (levelIndex === -1) {
     throw new Error(`Invalid log level: ${level}`);
   }
@@ -59,6 +59,7 @@ export function createLogger(level?: LogLevel): Logger {
         console.info(JSON.stringify(fullPayload));
       }
     },
+    logLevel,
   };
 }
 export const logLevel = v.union(

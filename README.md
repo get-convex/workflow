@@ -133,6 +133,56 @@ export const kickoffWorkflow = mutation({
 });
 ```
 
+### Specifying retry behavior
+
+Sometimes actions fail due to transient errors, whether it was an unreliable
+third-party API or a server restart. You can have the workflow automatically
+retry actions using best practices (exponential backoff & jitter).
+By default there are no retries, and the workflow will fail.
+
+You can specify default retry behavior for all workflows on the WorkflowManager,
+or override it on a per-workflow basis.
+
+You can also specify a custom retry behavior per-step, to opt-out of retries
+for actions that may want at-most-once semantics.
+
+```ts
+const workflow = new WorkflowManager(components.workflow, {
+  defaultRetryBehavior: {
+    maxAttempts: 3,
+    initialBackoffMs: 100,
+    base: 2,
+  },
+});
+
+export const exampleWorkflow = workflow.define({
+  args: { name: v.string() },
+  handler: async (step, args) => {
+    // Default retry behavior will be used
+    await step.action(internal.example.exampleAction, args);
+    // No retries will be attempted
+    await step.action(internal.example.exampleAction, args, {
+      retryBehavior: false,
+    });
+    // Custom retry behavior will be used
+    await step.action(internal.example.exampleAction, args, {
+      retryBehavior: {
+        maxAttempts: 2,
+        initialBackoffMs: 100,
+        base: 2,
+      },
+    });
+  },
+  defaultRetryBehavior: {
+    maxAttempts: 5,
+    initialBackoffMs: 1000,
+    base: 2,
+  },
+});
+```
+
+### Checking a workflow's status
+
 The `workflow.start()` method returns a `WorkflowId`, which can then be used for querying
 a workflow's status.
 

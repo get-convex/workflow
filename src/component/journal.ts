@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server.js";
 import { journalDocument, JournalEntry, step } from "./schema.js";
 import { getWorkflow } from "./model.js";
-import { createLogger } from "./utils.js";
+import { createLogger } from "./logging.js";
 
 export const load = query({
   args: {
@@ -39,7 +39,7 @@ export const pushEntry = mutation({
     step,
   },
   returns: journalDocument,
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<JournalEntry> => {
     if (!args.step.inProgress) {
       throw new Error(`Assertion failed: not in progress`);
     }

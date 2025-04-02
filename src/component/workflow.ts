@@ -9,21 +9,24 @@ import {
   STEP_TYPES,
   JournalEntry,
   outcome,
-  logLevel,
 } from "./schema.js";
-import { createLogger } from "./utils.js";
+import { getWorkpool, createDefaultLogger, getDefaultLogger } from "./utils.js";
+import { logLevel } from "./logging.js";
 
 export const create = mutation({
   args: {
+    workflowName: v.string(),
     workflowHandle: v.string(),
     workflowArgs: v.any(),
-    logLevel,
+    logLevel: v.optional(logLevel),
+    maxParallelism: v.optional(v.number()),
   },
   returns: v.string(),
   handler: async (ctx, args) => {
     const now = Date.now();
-    const logger = createLogger(args.logLevel);
+    const logger = await createDefaultLogger(ctx, args.logLevel);
     const workflowId = await ctx.db.insert("workflows", {
+      name: args.workflowName,
       startedAt: now,
       logLevel: args.logLevel,
       workflowHandle: args.workflowHandle,
@@ -36,13 +39,15 @@ export const create = mutation({
       args.workflowArgs,
       args.workflowHandle,
     );
-    await ctx.scheduler.runAfter(
-      0,
+    const workpool = await getWorkpool(ctx, {
+      logLevel: args.logLevel,
+      maxParallelism: args.maxParallelism,
+    });
+    await workpool.enqueueMutation(
+      ctx,
       args.workflowHandle as FunctionHandle<"mutation", any, any>,
-      {
-        workflowId,
-        generationNumber: 0,
-      },
+      { workflowId, generationNumber: 0 },
+      { name: args.workflowName },
     );
     return workflowId as string;
   },
@@ -62,7 +67,7 @@ export const load = query({
     if (!workflow) {
       throw new Error(`Workflow not found: ${args.workflowId}`);
     }
-    const logger = createLogger(workflow.logLevel);
+    const logger = await getDefaultLogger(ctx);
     logger.debug(`Loaded workflow ${workflowId}:`, workflow);
     return workflow as Workflow;
   },
@@ -82,7 +87,7 @@ export const cancel = mutation({
     if (!workflow) {
       throw new Error(`Workflow not found: ${workflowId}`);
     }
-    const logger = createLogger(workflow.logLevel);
+    const logger = await getDefaultLogger(ctx);
     if (workflow.state.type !== "running") {
       throw new Error(`Workflow not running: ${workflowId}`);
     }
@@ -107,7 +112,7 @@ export const complete = mutation({
       args.workflowId,
       args.generationNumber,
     );
-    const logger = createLogger(workflow.logLevel);
+    const logger = await getDefaultLogger(ctx);
     if (workflow.state.type !== "running") {
       throw new Error(`Workflow not running: ${args.workflowId}`);
     }
@@ -135,7 +140,7 @@ export const blockedBy = query({
     if (!workflow) {
       throw new Error(`Workflow not found: ${workflowId}`);
     }
-    const logger = createLogger(workflow.logLevel);
+    const logger = await getDefaultLogger(ctx);
 
     const result = [];
     for (const stepType of STEP_TYPES) {
@@ -173,7 +178,7 @@ export const cleanup = mutation({
     if (!workflow) {
       return false;
     }
-    const logger = createLogger(workflow.logLevel);
+    const logger = await getDefaultLogger(ctx);
     if (workflow.state.type !== "completed") {
       logger.debug(
         `Can't clean up workflow ${workflowId} since it hasn't completed.`,

@@ -1,6 +1,7 @@
 import { vWorkIdValidator } from "@convex-dev/workpool";
 import { defineSchema, defineTable } from "convex/server";
 import { convexToJson, Infer, v, Value } from "convex/values";
+import { logLevel } from "./logging.js";
 
 export function valueSize(value: Value): number {
   return JSON.stringify(convexToJson(value)).length;
@@ -35,18 +36,11 @@ function outcomeSize(outcome: Outcome): number {
   return size;
 }
 
-export const logLevel = v.union(
-  v.literal("DEBUG"),
-  v.literal("INFO"),
-  v.literal("WARN"),
-  v.literal("ERROR"),
-);
-export type LogLevel = Infer<typeof logLevel>;
-
 const workflowObject = {
   startedAt: v.number(),
-  logLevel,
-
+  // DEPRECATED: using global config instead
+  logLevel: v.optional(logLevel),
+  name: v.optional(v.string()),
   workflowHandle: v.string(),
   args: v.any(),
 
@@ -169,6 +163,10 @@ export function journalEntrySize(entry: JournalEntry): number {
 }
 
 export default defineSchema({
+  config: defineTable({
+    logLevel,
+    maxParallelism: v.optional(v.number()),
+  }),
   workflows: defineTable(workflowObject),
   workflowJournal: defineTable(journalObject)
     .index("workflow", ["workflowId", "stepNumber"])

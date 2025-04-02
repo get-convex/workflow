@@ -1,5 +1,3 @@
-/* prettier-ignore-start */
-
 /* eslint-disable */
 /**
  * Generated `api` utility.
@@ -18,6 +16,7 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+
 /**
  * A utility for referencing Convex functions in your app's API.
  *
@@ -77,7 +76,7 @@ export declare const components: {
                 functionType:
                   | { type: "query" }
                   | { type: "mutation" }
-                  | { recoveryId?: string; type: "action" };
+                  | { recoveryId?: string; type: "action"; workId?: string };
                 handle: string;
                 inProgress: boolean;
                 outcome?:
@@ -109,7 +108,7 @@ export declare const components: {
                 functionType:
                   | { type: "query" }
                   | { type: "mutation" }
-                  | { recoveryId?: string; type: "action" };
+                  | { recoveryId?: string; type: "action"; workId?: string };
                 handle: string;
                 inProgress: boolean;
                 outcome?:
@@ -138,7 +137,7 @@ export declare const components: {
                 functionType:
                   | { type: "query" }
                   | { type: "mutation" }
-                  | { recoveryId?: string; type: "action" };
+                  | { recoveryId?: string; type: "action"; workId?: string };
                 handle: string;
                 inProgress: boolean;
                 outcome?:
@@ -187,7 +186,7 @@ export declare const components: {
                 functionType:
                   | { type: "query" }
                   | { type: "mutation" }
-                  | { recoveryId?: string; type: "action" };
+                  | { recoveryId?: string; type: "action"; workId?: string };
                 handle: string;
                 inProgress: boolean;
                 outcome?:
@@ -236,8 +235,10 @@ export declare const components: {
         "internal",
         {
           logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR";
+          maxParallelism?: number;
           workflowArgs: any;
           workflowHandle: string;
+          workflowName: string;
         },
         string
       >;
@@ -251,6 +252,8 @@ export declare const components: {
           args: any;
           generationNumber: number;
           logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR";
+          maxParallelism?: number;
+          name?: string;
           startedAt: number;
           state:
             | { type: "running" }
@@ -268,5 +271,3 @@ export declare const components: {
     };
   };
 };
-
-/* prettier-ignore-end */

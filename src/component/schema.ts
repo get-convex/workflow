@@ -1,3 +1,4 @@
+import { vWorkIdValidator } from "@convex-dev/workpool";
 import { defineSchema, defineTable } from "convex/server";
 import { convexToJson, Infer, v, Value } from "convex/values";
 
@@ -88,8 +89,8 @@ export const step = v.union(
       v.object({ type: v.literal("mutation") }),
       v.object({
         type: v.literal("action"),
-        // Actions are fallible, so we need to schedule a recovery mutation.
-        // This gets set when we start executing the action.
+        workId: v.optional(vWorkIdValidator),
+        // DEPRECATED: use workId instead
         recoveryId: v.optional(v.string()),
       }),
     ),
@@ -121,6 +122,9 @@ function stepSize(step: Step): number {
       if (step.functionType.type === "action") {
         if (step.functionType.recoveryId) {
           size += step.functionType.recoveryId.length;
+        }
+        if (step.functionType.workId) {
+          size += step.functionType.workId.length;
         }
       }
       size += step.handle.length;

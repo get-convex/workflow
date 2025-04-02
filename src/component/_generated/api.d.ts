@@ -1,5 +1,3 @@
-/* prettier-ignore-start */
-
 /* eslint-disable */
 /**
  * Generated `api` utility.
@@ -12,7 +10,9 @@
 
 import type * as functions from "../functions.js";
 import type * as journal from "../journal.js";
+import type * as logging from "../logging.js";
 import type * as model from "../model.js";
+import type * as pool from "../pool.js";
 import type * as sleep from "../sleep.js";
 import type * as utils from "../utils.js";
 import type * as workflow from "../workflow.js";
@@ -22,6 +22,7 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+
 /**
  * A utility for referencing Convex functions in your app's API.
  *
@@ -33,7 +34,9 @@ import type {
 declare const fullApi: ApiFromModules<{
   functions: typeof functions;
   journal: typeof journal;
+  logging: typeof logging;
   model: typeof model;
+  pool: typeof pool;
   sleep: typeof sleep;
   utils: typeof utils;
   workflow: typeof workflow;
@@ -73,7 +76,7 @@ export type Mounts = {
               functionType:
                 | { type: "query" }
                 | { type: "mutation" }
-                | { recoveryId?: string; type: "action" };
+                | { recoveryId?: string; type: "action"; workId?: string };
               handle: string;
               inProgress: boolean;
               outcome?:
@@ -105,7 +108,7 @@ export type Mounts = {
               functionType:
                 | { type: "query" }
                 | { type: "mutation" }
-                | { recoveryId?: string; type: "action" };
+                | { recoveryId?: string; type: "action"; workId?: string };
               handle: string;
               inProgress: boolean;
               outcome?:
@@ -134,7 +137,7 @@ export type Mounts = {
               functionType:
                 | { type: "query" }
                 | { type: "mutation" }
-                | { recoveryId?: string; type: "action" };
+                | { recoveryId?: string; type: "action"; workId?: string };
               handle: string;
               inProgress: boolean;
               outcome?:
@@ -183,7 +186,7 @@ export type Mounts = {
               functionType:
                 | { type: "query" }
                 | { type: "mutation" }
-                | { recoveryId?: string; type: "action" };
+                | { recoveryId?: string; type: "action"; workId?: string };
               handle: string;
               inProgress: boolean;
               outcome?:
@@ -232,8 +235,10 @@ export type Mounts = {
       "public",
       {
         logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR";
+        maxParallelism?: number;
         workflowArgs: any;
         workflowHandle: string;
+        workflowName: string;
       },
       string
     >;
@@ -247,6 +252,8 @@ export type Mounts = {
         args: any;
         generationNumber: number;
         logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR";
+        maxParallelism?: number;
+        name?: string;
         startedAt: number;
         state:
           | { type: "running" }
@@ -277,6 +284,57 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
-
-/* prettier-ignore-end */
+export declare const components: {
+  workpool: {
+    lib: {
+      cancel: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          id: string;
+          logLevel: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
+        },
+        any
+      >;
+      cancelAll: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          before?: number;
+          logLevel: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
+        },
+        any
+      >;
+      enqueue: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          config: {
+            logLevel: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
+            maxParallelism: number;
+          };
+          fnArgs: any;
+          fnHandle: string;
+          fnName: string;
+          fnType: "action" | "mutation";
+          onComplete?: { context?: any; fnHandle: string };
+          retryBehavior?: {
+            base: number;
+            initialBackoffMs: number;
+            maxAttempts: number;
+          };
+          runAt: number;
+        },
+        string
+      >;
+      status: FunctionReference<
+        "query",
+        "internal",
+        { id: string },
+        | { previousAttempts: number; state: "pending" }
+        | { previousAttempts: number; state: "running" }
+        | { state: "finished" }
+      >;
+    };
+  };
+};

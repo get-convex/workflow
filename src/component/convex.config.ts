@@ -1,3 +1,8 @@
 import { defineComponent } from "convex/server";
+import workpool from "@convex-dev/workpool/convex.config";
 
-export default defineComponent("workflow");
+const component = defineComponent("workflow");
+
+component.use(workpool);
+
+export default component;

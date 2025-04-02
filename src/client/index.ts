@@ -6,6 +6,7 @@ import {
   GenericDataModel,
   GenericMutationCtx,
   GenericQueryCtx,
+  getFunctionName,
   RegisteredMutation,
 } from "convex/server";
 import { ObjectType, PropertyValidators } from "convex/values";
@@ -47,10 +48,10 @@ export type WorkflowStatus =
 
 export class WorkflowManager {
   logLevel: LogLevel;
-
+  maxParallelism: number | undefined;
   constructor(
     private component: UseApi<typeof api>,
-    options?: { logLevel?: LogLevel },
+    options?: { logLevel?: LogLevel; maxParallelism?: number },
   ) {
     let DEFAULT_LOG_LEVEL: LogLevel = "INFO";
     if (process.env.WORKFLOW_LOG_LEVEL) {
@@ -66,6 +67,7 @@ export class WorkflowManager {
       DEFAULT_LOG_LEVEL = process.env.WORKFLOW_LOG_LEVEL as LogLevel;
     }
     this.logLevel = options?.logLevel ?? DEFAULT_LOG_LEVEL;
+    this.maxParallelism = options?.maxParallelism;
   }
 
   /**
@@ -96,9 +98,11 @@ export class WorkflowManager {
   ): Promise<WorkflowId> {
     const handle = await createFunctionHandle(workflow);
     const workflowId = await ctx.runMutation(this.component.workflow.create, {
+      workflowName: getFunctionName(workflow),
       workflowHandle: handle,
       workflowArgs: args,
       logLevel: this.logLevel,
+      maxParallelism: this.maxParallelism,
     });
     return workflowId as unknown as WorkflowId;
   }

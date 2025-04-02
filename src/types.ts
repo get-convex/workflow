@@ -1,3 +1,4 @@
+import { WorkId } from "@convex-dev/workpool";
 import { Expand, FunctionReference } from "convex/server";
 import { GenericId, Infer, v } from "convex/values";
 
@@ -35,8 +36,10 @@ export type UseApi<API> = Expand<{
 type OpaqueIds<T> =
   T extends GenericId<infer _T>
     ? string
-    : T extends (infer U)[]
-      ? OpaqueIds<U>[]
-      : T extends object
-        ? { [K in keyof T]: OpaqueIds<T[K]> }
-        : T;
+    : T extends WorkId
+      ? string
+      : T extends (infer U)[]
+        ? OpaqueIds<U>[]
+        : T extends object
+          ? { [K in keyof T]: OpaqueIds<T[K]> }
+          : T;

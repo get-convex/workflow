@@ -195,7 +195,7 @@ export const run = internalAction({
         args.args,
       );
       const result = await runner(
-        args.handle as FunctionHandle<any, any>,
+        args.handle as FunctionHandle<"action" | "mutation" | "query">,
         args.args,
       );
       const resultSize = valueSize(result);
@@ -255,10 +255,13 @@ export const complete = internalMutation({
     journalEntry.step.outcome = args.outcome;
     journalEntry.step.completedAt = Date.now();
     await ctx.db.replace(journalEntry._id, journalEntry);
-    await ctx.runMutation(workflow.workflowHandle as any, {
-      workflowId: workflow._id,
-      generationNumber: args.generationNumber,
-    });
+    await ctx.runMutation(
+      workflow.workflowHandle as FunctionHandle<"mutation">,
+      {
+        workflowId: workflow._id,
+        generationNumber: args.generationNumber,
+      },
+    );
     logger.debug(`Completed execution of ${args.journalId}`, journalEntry);
 
     // Best effort cancel any scheduled recovery to save on function calls.

@@ -25,16 +25,19 @@ export type StepRequest =
       type: "function";
       functionType: FunctionType;
       handle: string;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       args: any;
 
-      resolve: (result: any) => void;
-      reject: (error: any) => void;
+      resolve: (result: unknown) => void;
+      reject: (error: unknown) => void;
     }
   | {
       type: "sleep";
       durationMs: number;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       resolve: (result: any) => void;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       reject: (error: any) => void;
     };
 

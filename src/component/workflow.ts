@@ -13,6 +13,7 @@ import {
 import { createDefaultLogger, getDefaultLogger } from "./utils.js";
 import { getWorkpool } from "./pool.js";
 import { logLevel } from "./logging.js";
+import { vRetryBehavior } from "@convex-dev/workpool";
 
 export const create = mutation({
   args: {
@@ -21,11 +22,14 @@ export const create = mutation({
     workflowArgs: v.any(),
     logLevel: v.optional(logLevel),
     maxParallelism: v.optional(v.number()),
+    defaultRetryBehavior: v.optional(vRetryBehavior),
+    retryActionsByDefault: v.optional(v.boolean()),
   },
   returns: v.string(),
   handler: async (ctx, args) => {
     const now = Date.now();
     const logger = await createDefaultLogger(ctx, args.logLevel);
+    const { defaultRetryBehavior, retryActionsByDefault } = args;
     const workflowId = await ctx.db.insert("workflows", {
       name: args.workflowName,
       startedAt: now,
@@ -34,6 +38,8 @@ export const create = mutation({
       args: args.workflowArgs,
       state: { type: "running" },
       generationNumber: 0,
+      defaultRetryBehavior,
+      retryActionsByDefault,
     });
     logger.debug(
       `Created workflow ${workflowId}:`,
@@ -43,6 +49,8 @@ export const create = mutation({
     const workpool = await getWorkpool(ctx, {
       logLevel: args.logLevel,
       maxParallelism: args.maxParallelism,
+      defaultRetryBehavior,
+      retryActionsByDefault,
     });
     await workpool.enqueueMutation(
       ctx,

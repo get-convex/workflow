@@ -1,4 +1,4 @@
-import { vWorkIdValidator } from "@convex-dev/workpool";
+import { vRetryBehavior, vWorkIdValidator } from "@convex-dev/workpool";
 import { defineSchema, defineTable } from "convex/server";
 import { convexToJson, Infer, v, Value } from "convex/values";
 import { logLevel } from "./logging.js";
@@ -43,6 +43,8 @@ const workflowObject = {
   name: v.optional(v.string()),
   workflowHandle: v.string(),
   args: v.any(),
+  defaultRetryBehavior: v.optional(vRetryBehavior),
+  retryActionsByDefault: v.optional(v.boolean()),
 
   // User visible workflow status.
   state: v.union(

@@ -240,8 +240,14 @@ export type Mounts = {
       "mutation",
       "public",
       {
+        defaultRetryBehavior?: {
+          base: number;
+          initialBackoffMs: number;
+          maxAttempts: number;
+        };
         logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR";
         maxParallelism?: number;
+        retryActionsByDefault?: boolean;
         workflowArgs: any;
         workflowHandle: string;
         workflowName: string;
@@ -256,9 +262,15 @@ export type Mounts = {
         _creationTime: number;
         _id: string;
         args: any;
+        defaultRetryBehavior?: {
+          base: number;
+          initialBackoffMs: number;
+          maxAttempts: number;
+        };
         generationNumber: number;
         logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR";
         name?: string;
+        retryActionsByDefault?: boolean;
         startedAt: number;
         state:
           | { type: "running" }

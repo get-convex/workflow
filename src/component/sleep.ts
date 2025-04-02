@@ -16,7 +16,16 @@ export const start = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const logger = await getDefaultLogger(ctx);
-    const workpool = await getWorkpool(ctx);
+    const workflow = await getWorkflow(
+      ctx,
+      args.workflowId,
+      args.generationNumber,
+    );
+    const { defaultRetryBehavior, retryActionsByDefault } = workflow;
+    const workpool = await getWorkpool(ctx, {
+      defaultRetryBehavior,
+      retryActionsByDefault,
+    });
     const sleepId = await workpool.enqueueMutation(
       ctx,
       internal.sleep.complete,

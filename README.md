@@ -153,20 +153,21 @@ const workflow = new WorkflowManager(components.workflow, {
     initialBackoffMs: 100,
     base: 2,
   },
+  retryActionsByDefault: false, // false is the default
 });
 
 export const exampleWorkflow = workflow.define({
   args: { name: v.string() },
   handler: async (step, args) => {
-    // Default retry behavior will be used
-    await step.action(internal.example.exampleAction, args);
+    // Uses default retry behavior & retryActionsByDefault
+    await step.runAction(internal.example.myAction, args);
+    // Retries will be attempted with the default behavior
+    await step.runAction(internal.example.myAction, args, { retry: true });
     // No retries will be attempted
-    await step.action(internal.example.exampleAction, args, {
-      retryBehavior: false,
-    });
+    await step.runAction(internal.example.myAction, args, { retry: false });
     // Custom retry behavior will be used
-    await step.action(internal.example.exampleAction, args, {
-      retryBehavior: {
+    await step.runAction(internal.example.myAction, args, {
+      retry: {
         maxAttempts: 2,
         initialBackoffMs: 100,
         base: 2,

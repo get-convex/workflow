@@ -32,6 +32,11 @@ export const start = mutation({
   handler: async (ctx, args) => {
     const logger = await getDefaultLogger(ctx);
 
+    const workflow = await getWorkflow(
+      ctx,
+      args.workflowId,
+      args.generationNumber,
+    );
     const journalEntry = await getJournalEntry(ctx, args.journalId);
     if (journalEntry.step.type !== "function") {
       throw new Error(`Journal entry not a function: ${args.journalId}`);
@@ -39,7 +44,11 @@ export const start = mutation({
     if (!journalEntry.step.inProgress) {
       throw new Error(`Journal entry not in progress: ${args.journalId}`);
     }
-    const workpool = await getWorkpool(ctx);
+    const { defaultRetryBehavior, retryActionsByDefault } = workflow;
+    const workpool = await getWorkpool(ctx, {
+      defaultRetryBehavior,
+      retryActionsByDefault,
+    });
     const runId = await workpool.enqueueAction(
       ctx,
       internal.functions.run,

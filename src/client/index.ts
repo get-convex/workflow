@@ -14,6 +14,7 @@ import { api } from "../component/_generated/api.js";
 import { UseApi, WorkflowId } from "../types.js";
 import { workflowMutation } from "./workflowMutation.js";
 import { LogLevel } from "../component/logging.js";
+import { RetryBehavior } from "@convex-dev/workpool";
 
 export type { WorkflowId };
 
@@ -47,13 +48,15 @@ export type WorkflowStatus =
   | { type: "failed"; error: string };
 
 export class WorkflowManager {
-  logLevel: LogLevel;
-  maxParallelism: number | undefined;
   constructor(
     private component: UseApi<typeof api>,
-    options?: { logLevel?: LogLevel; maxParallelism?: number },
+    private options?: {
+      logLevel?: LogLevel;
+      maxParallelism?: number;
+      defaultRetryBehavior?: RetryBehavior;
+      retryActionsByDefault?: boolean;
+    },
   ) {
-    let DEFAULT_LOG_LEVEL: LogLevel = "INFO";
     if (process.env.WORKFLOW_LOG_LEVEL) {
       if (
         !["DEBUG", "INFO", "WARN", "ERROR"].includes(
@@ -61,13 +64,15 @@ export class WorkflowManager {
         )
       ) {
         console.warn(
-          `Invalid log level (${process.env.WORKFLOW_LOG_LEVEL}), defaulting to "INFO"`,
+          `Invalid ENV log level (${process.env.WORKFLOW_LOG_LEVEL}), ignoring`,
         );
+      } else {
+        this.options = {
+          ...this.options,
+          logLevel: process.env.WORKFLOW_LOG_LEVEL as LogLevel,
+        };
       }
-      DEFAULT_LOG_LEVEL = process.env.WORKFLOW_LOG_LEVEL as LogLevel;
     }
-    this.logLevel = options?.logLevel ?? DEFAULT_LOG_LEVEL;
-    this.maxParallelism = options?.maxParallelism;
   }
 
   /**
@@ -101,8 +106,10 @@ export class WorkflowManager {
       workflowName: getFunctionName(workflow),
       workflowHandle: handle,
       workflowArgs: args,
-      logLevel: this.logLevel,
-      maxParallelism: this.maxParallelism,
+      logLevel: this.options?.logLevel,
+      maxParallelism: this.options?.maxParallelism,
+      defaultRetryBehavior: this.options?.defaultRetryBehavior,
+      retryActionsByDefault: this.options?.retryActionsByDefault,
     });
     return workflowId as unknown as WorkflowId;
   }

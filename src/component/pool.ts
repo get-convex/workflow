@@ -1,4 +1,4 @@
-import { Workpool } from "@convex-dev/workpool";
+import { RetryBehavior, Workpool } from "@convex-dev/workpool";
 import { components } from "./_generated/api.js";
 import { MutationCtx } from "./_generated/server.js";
 import { DEFAULT_LOG_LEVEL, LogLevel, createLogger } from "./logging.js";
@@ -12,9 +12,11 @@ export const DEFAULT_RETRY_BEHAVIOR = {
 
 export async function getWorkpool(
   ctx: MutationCtx,
-  opts?: {
+  opts: {
     logLevel?: LogLevel | undefined;
     maxParallelism?: number | undefined;
+    defaultRetryBehavior: RetryBehavior | undefined;
+    retryActionsByDefault: boolean | undefined;
   },
 ) {
   const config = await ctx.db.query("config").first();
@@ -39,6 +41,7 @@ export async function getWorkpool(
   return new Workpool(components.workpool, {
     logLevel,
     maxParallelism,
-    defaultRetryBehavior: DEFAULT_RETRY_BEHAVIOR,
+    defaultRetryBehavior: opts?.defaultRetryBehavior ?? DEFAULT_RETRY_BEHAVIOR,
+    retryActionsByDefault: opts?.retryActionsByDefault ?? false,
   });
 }

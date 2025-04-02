@@ -10,7 +10,8 @@ import {
 import { getJournalEntry, getWorkflow } from "./model.js";
 import { outcome, valueSize } from "./schema.js";
 import { createLogger, logLevel } from "./logging.js";
-import { getDefaultLogger, getWorkpool } from "./utils.js";
+import { getDefaultLogger } from "./utils.js";
+import { getWorkpool } from "./pool.js";
 import { vRetryBehavior } from "@convex-dev/workpool";
 
 const HEARTBEAT_INTERVAL_MS = 10 * 1000;

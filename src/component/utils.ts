@@ -1,5 +1,4 @@
-import { Workpool } from "@convex-dev/workpool";
-import { components } from "./_generated/api.js";
+import { v } from "convex/values";
 import {
   internalMutation,
   MutationCtx,
@@ -7,11 +6,10 @@ import {
 } from "./_generated/server.js";
 import {
   createLogger,
-  LogLevel,
   DEFAULT_LOG_LEVEL,
+  LogLevel,
   logLevel,
 } from "./logging.js";
-import { v } from "convex/values";
 
 export async function createDefaultLogger(
   ctx: MutationCtx,
@@ -59,30 +57,3 @@ export const updateConfig = internalMutation({
     }
   },
 });
-
-export async function getWorkpool(
-  ctx: MutationCtx,
-  opts?: {
-    logLevel?: LogLevel | undefined;
-    maxParallelism?: number | undefined;
-  },
-) {
-  const config = await ctx.db.query("config").first();
-  const logLevel = opts?.logLevel ?? config?.logLevel ?? DEFAULT_LOG_LEVEL;
-  const console = createLogger(logLevel);
-  if (config) {
-    if (opts?.logLevel && logLevel !== config.logLevel) {
-      await ctx.db.patch(config._id, { logLevel });
-    }
-    if (opts?.maxParallelism && opts.maxParallelism !== config.maxParallelism) {
-      console.warn("Updating max parallelism", opts.maxParallelism);
-      await ctx.db.patch(config._id, { maxParallelism: opts.maxParallelism });
-    }
-  } else {
-    await ctx.db.insert("config", {
-      logLevel,
-      maxParallelism: opts?.maxParallelism,
-    });
-  }
-  return new Workpool(components.workpool, { ...config, ...opts });
-}

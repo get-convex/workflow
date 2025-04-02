@@ -10,7 +10,8 @@ import {
   JournalEntry,
   outcome,
 } from "./schema.js";
-import { getWorkpool, createDefaultLogger, getDefaultLogger } from "./utils.js";
+import { createDefaultLogger, getDefaultLogger } from "./utils.js";
+import { getWorkpool } from "./pool.js";
 import { logLevel } from "./logging.js";
 
 export const create = mutation({

@@ -2,7 +2,8 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api.js";
 import { internalMutation, mutation } from "./_generated/server.js";
 import { getWorkflow, getJournalEntry } from "./model.js";
-import { getDefaultLogger, getWorkpool } from "./utils.js";
+import { getDefaultLogger } from "./utils.js";
+import { getWorkpool } from "./pool.js";
 import type { FunctionHandle } from "convex/server";
 
 export const start = mutation({

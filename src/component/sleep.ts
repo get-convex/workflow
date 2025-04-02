@@ -3,6 +3,7 @@ import { internal } from "./_generated/api.js";
 import { internalMutation, mutation } from "./_generated/server.js";
 import { getWorkflow, getJournalEntry } from "./model.js";
 import { getDefaultLogger } from "./utils.js";
+import type { FunctionHandle } from "convex/server";
 
 export const start = mutation({
   args: {
@@ -59,7 +60,8 @@ export const complete = internalMutation({
 
     journalEntry.step.inProgress = false;
     await ctx.db.replace(journalEntry._id, journalEntry);
-    await ctx.runMutation(workflow.workflowHandle as any, {
+    const handle = workflow.workflowHandle as FunctionHandle<"mutation">;
+    await ctx.runMutation(handle, {
       workflowId: args.workflowId,
       generationNumber: args.generationNumber,
     });

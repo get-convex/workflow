@@ -45,7 +45,7 @@ export const create = mutation({
     });
     await workpool.enqueueMutation(
       ctx,
-      args.workflowHandle as FunctionHandle<"mutation", any, any>,
+      args.workflowHandle as FunctionHandle<"mutation">,
       { workflowId, generationNumber: 0 },
       { name: args.workflowName },
     );

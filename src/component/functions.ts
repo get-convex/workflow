@@ -17,7 +17,7 @@ export const start = mutation({
   args: {
     workflowId: v.string(),
     generationNumber: v.number(),
-    journalId: v.string(),
+    journalId: v.id("journal"),
 
     functionType,
     handle: v.string(),
@@ -166,12 +166,13 @@ export const recover = internalMutation({
   },
 });
 
+// TODO: use snip in favor of workpool
 export const run = internalAction({
   args: {
     workflowId: v.string(),
     logLevel,
     generationNumber: v.number(),
-    journalId: v.string(),
+    journalId: v.id("journal"),
 
     functionType,
     handle: v.string(),

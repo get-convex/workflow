@@ -61,7 +61,7 @@
     "globals": "^15.9.0",
     "openai": "^4.54.0",
     "prettier": "3.2.5",
-    "typescript": "^5.5.0",
+    "typescript": "^5.8.2",
     "typescript-eslint": "^8.4.0"
   },
   "main": "./dist/commonjs/client/index.js",

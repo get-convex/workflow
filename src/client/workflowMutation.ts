@@ -37,19 +37,19 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
       const workflow = await ctx.runQuery(component.workflow.load, {
         workflowId,
       });
-      if (workflow.generationNumber !== args.generationNumber) {
-        console.error(`Invalid generation number: ${args.generationNumber}`);
+      if (workflow.generationNumber !== generationNumber) {
+        console.error(`Invalid generation number: ${generationNumber}`);
         return;
       }
       if (workflow.state.type === "completed") {
-        console.log(`Workflow ${args.workflowId} completed, returning.`);
+        console.log(`Workflow ${workflowId} completed, returning.`);
         return;
       }
       const blockedBy = await ctx.runQuery(component.workflow.blockedBy, {
         workflowId,
       });
       if (blockedBy !== null) {
-        console.log(`Workflow ${args.workflowId} blocked by...`);
+        console.log(`Workflow ${workflowId} blocked by...`);
         console.log(`  ${blockedBy._id}: ${blockedBy.step.type}`);
         return;
       }

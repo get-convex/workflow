@@ -130,10 +130,12 @@ function stepSize(step: Step): number {
       }
       size += 8; // startedAt
       size += 8; // completedAt
+      break;
     }
     case "sleep": {
       size += 8; // durationMs
       size += 8; // deadline
+      break;
     }
   }
   return size;

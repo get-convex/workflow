@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server.js";
-import { journalDocument, JournalEntry, outcome, step } from "./schema.js";
+import { journalDocument, JournalEntry, step } from "./schema.js";
 import { getWorkflow } from "./model.js";
 import { createLogger } from "./utils.js";
 

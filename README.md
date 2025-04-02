@@ -116,6 +116,8 @@ export const exampleAction = internalAction({
 });
 ```
 
+### Starting a workflow
+
 Once you've defined a workflow, you can start it from a mutation or action
 using `workflow.start()`.
 
@@ -125,9 +127,7 @@ export const kickoffWorkflow = mutation({
     const workflowId = await workflow.start(
       ctx,
       internal.example.exampleWorkflow,
-      {
-        name: "James",
-      },
+      { name: "James" },
     );
   },
 });
@@ -142,9 +142,7 @@ export const kickoffWorkflow = action({
     const workflowId = await workflow.start(
       ctx,
       internal.example.exampleWorkflow,
-      {
-        name: "James",
-      },
+      { name: "James" },
     );
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
@@ -154,7 +152,10 @@ export const kickoffWorkflow = action({
 });
 ```
 
-You can also cancel a workflow with `workflow.cancel()`, halting the workflow's execution immmediately. In-progress calls to `step.runAction()`, however, only have best-effort cancelation.
+### Canceling a workflow
+
+You can cancel a workflow with `workflow.cancel()`, halting the workflow's execution immmediately.
+In-progress calls to `step.runAction()`, however, will finish executing.
 
 ```ts
 export const kickoffWorkflow = action({
@@ -162,9 +163,7 @@ export const kickoffWorkflow = action({
     const workflowId = await workflow.start(
       ctx,
       internal.example.exampleWorkflow,
-      {
-        name: "James",
-      },
+      { name: "James" },
     );
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
@@ -173,6 +172,8 @@ export const kickoffWorkflow = action({
   },
 });
 ```
+
+### Cleaning up a workflow
 
 After a workflow has completed, you can clean up its storage with `workflow.cleanup()`.
 Completed workflows are not automatically cleaned up by the system.
@@ -183,9 +184,7 @@ export const kickoffWorkflow = action({
     const workflowId = await workflow.start(
       ctx,
       internal.example.exampleWorkflow,
-      {
-        name: "James",
-      },
+      { name: "James" },
     );
     try {
       while (true) {

@@ -11,7 +11,6 @@ import {
   outcome,
 } from "./schema.js";
 import { createDefaultLogger, getDefaultLogger } from "./utils.js";
-import { getWorkpool } from "./pool.js";
 import { logLevel } from "./logging.js";
 import { vRetryBehavior } from "@convex-dev/workpool";
 import { assert } from "convex-helpers";
@@ -21,6 +20,9 @@ export const create = mutation({
     workflowName: v.string(),
     workflowHandle: v.string(),
     workflowArgs: v.any(),
+    // TODO: ttl
+    // TODO: onComplete hook
+    // TODO: onComplete context
     logLevel: v.optional(logLevel),
     maxParallelism: v.optional(v.number()),
     defaultRetryBehavior: v.optional(vRetryBehavior),
@@ -29,7 +31,7 @@ export const create = mutation({
   returns: v.string(),
   handler: async (ctx, args) => {
     const now = Date.now();
-    const logger = await createDefaultLogger(ctx, args.logLevel);
+    const console = await createDefaultLogger(ctx, args.logLevel);
     const { defaultRetryBehavior, retryActionsByDefault } = args;
     const workflowId = await ctx.db.insert("workflows", {
       name: args.workflowName,
@@ -42,23 +44,16 @@ export const create = mutation({
       defaultRetryBehavior,
       retryActionsByDefault,
     });
-    logger.debug(
+    console.debug(
       `Created workflow ${workflowId}:`,
       args.workflowArgs,
       args.workflowHandle,
     );
-    const workpool = await getWorkpool(ctx, {
-      logLevel: args.logLevel,
-      maxParallelism: args.maxParallelism,
-      defaultRetryBehavior,
-      retryActionsByDefault,
+    // If we can't start it, may as well not create it, eh? Fail fast...
+    await ctx.runMutation(args.workflowHandle as FunctionHandle<"mutation">, {
+      workflowId,
+      generationNumber: 0,
     });
-    await workpool.enqueueMutation(
-      ctx,
-      args.workflowHandle as FunctionHandle<"mutation">,
-      { workflowId, generationNumber: 0 },
-      { name: args.workflowName },
-    );
     return workflowId as string;
   },
 });

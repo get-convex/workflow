@@ -135,25 +135,24 @@ export const kickoffWorkflow = mutation({
 ### Specifying retry behavior
 
 Sometimes actions fail due to transient errors, whether it was an unreliable
-third-party API or a server restart. You can have the workflow automatically
-retry actions using best practices (exponential backoff & jitter).
-By default there are no retries, and the workflow will fail.
+third-party API or a server restart. Worflow uses Workpool, which support
+running actions with retries (using exponential backoff & jitter 😎).
 
-You can specify default retry behavior for all workflows on the WorkflowManager,
-or override it on a per-workflow basis.
-
-You can also specify a custom retry behavior per-step, to opt-out of retries
-for actions that may want at-most-once semantics.
+You can configure default retry behavior for all actions via the workpool, and
+also specify a custom retry behavior per-step.
 
 ```ts
-const workflow = new WorkflowManager(components.workflow, {
+const workpool = new Workpool(components.workpool, {
+  // Optionally set the default retry behavior for all actions
   defaultRetryBehavior: {
     maxAttempts: 3,
     initialBackoffMs: 100,
     base: 2,
   },
-  retryActionsByDefault: false, // false is the default
+  // Optionally set whether to retry actions by default. false if not specified.
+  retryActionsByDefault: false,
 });
+const workflow = new WorkflowManager(components.workflow, { workpool });
 
 export const exampleWorkflow = workflow.define({
   args: { name: v.string() },
@@ -173,11 +172,14 @@ export const exampleWorkflow = workflow.define({
       },
     });
   },
+  // If specified, this will override the workpool's default
   defaultRetryBehavior: {
     maxAttempts: 5,
     initialBackoffMs: 1000,
     base: 2,
   },
+  // If specified, this will override the workpool's default
+  retryActionsByDefault: true,
 });
 ```
 

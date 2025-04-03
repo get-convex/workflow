@@ -2,6 +2,7 @@ import {
   createFunctionHandle,
   FunctionArgs,
   FunctionReference,
+  FunctionReturnType,
   GenericActionCtx,
   GenericDataModel,
   GenericMutationCtx,
@@ -14,17 +15,29 @@ import { api } from "../component/_generated/api.js";
 import { OpaqueIds, UseApi, WorkflowId } from "../types.js";
 import { workflowMutation } from "./workflowMutation.js";
 import { LogLevel } from "../component/logging.js";
-import { RetryBehavior } from "@convex-dev/workpool";
+import { RetryBehavior, Workpool } from "@convex-dev/workpool";
 import { Step } from "../component/schema.js";
 
 export type { WorkflowId };
 
-type ActionCtxRunners = Pick<
+export type WorkflowStep = Pick<
   GenericActionCtx<GenericDataModel>,
-  "runQuery" | "runMutation" | "runAction"
->;
-
-export type WorkflowStep = ActionCtxRunners & {
+  "runQuery" | "runMutation"
+> & {
+  /**
+   * Run an action with the given name and arguments.
+   *
+   * @param action - The action to run, like `internal.index.exampleAction`.
+   * @param args - The arguments to the action function.
+   * @param opts - Override the default retry behavior for this action.
+   */
+  runAction<Action extends FunctionReference<"action", any>>(
+    action: Action,
+    args: FunctionArgs<Action>,
+    opts?: {
+      retry?: RetryBehavior | boolean | undefined;
+    },
+  ): Promise<FunctionReturnType<Action>>;
   /**
    * Sleep for a given number of milliseconds. It's totally fine for this to be
    * very long (e.g. on the order of months).
@@ -40,6 +53,8 @@ export type WorkflowDefinition<ArgsValidator extends PropertyValidators> = {
     step: WorkflowStep,
     args: ObjectType<ArgsValidator>,
   ) => Promise<void>;
+  defaultRetryBehavior?: RetryBehavior;
+  retryActionsByDefault?: boolean;
 };
 
 export type WorkflowStatus =
@@ -51,11 +66,9 @@ export type WorkflowStatus =
 export class WorkflowManager {
   constructor(
     private component: UseApi<typeof api>,
-    private options?: {
+    private options: {
+      workpool: Workpool;
       logLevel?: LogLevel;
-      maxParallelism?: number;
-      defaultRetryBehavior?: RetryBehavior;
-      retryActionsByDefault?: boolean;
     },
   ) {
     if (process.env.WORKFLOW_LOG_LEVEL) {
@@ -85,8 +98,7 @@ export class WorkflowManager {
   define<ArgsValidator extends PropertyValidators>(
     workflow: WorkflowDefinition<ArgsValidator>,
   ): RegisteredMutation<"internal", ObjectType<ArgsValidator>, null> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return workflowMutation(this.component, workflow) as any;
+    return workflowMutation(this.component, workflow, this.options.workpool);
   }
 
   /**
@@ -108,9 +120,6 @@ export class WorkflowManager {
       workflowHandle: handle,
       workflowArgs: args,
       logLevel: this.options?.logLevel,
-      maxParallelism: this.options?.maxParallelism,
-      defaultRetryBehavior: this.options?.defaultRetryBehavior,
-      retryActionsByDefault: this.options?.retryActionsByDefault,
     });
     return workflowId as unknown as WorkflowId;
   }

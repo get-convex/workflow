@@ -3,6 +3,8 @@ import { mutation, query } from "./_generated/server.js";
 import { journalDocument, JournalEntry, step } from "./schema.js";
 import { getWorkflow } from "./model.js";
 import { createLogger } from "./logging.js";
+import { vWorkIdValidator } from "@convex-dev/workpool";
+import { assert } from "convex-helpers";
 
 export const load = query({
   args: {
@@ -78,5 +80,19 @@ export const pushEntry = mutation({
     const entry = await ctx.db.get(journalId);
     logger.debug(`Pushed new journal entry`, entry);
     return entry! as JournalEntry;
+  },
+});
+
+export const updateWorkId = mutation({
+  args: {
+    journalId: v.id("workflowJournal"),
+    workId: vWorkIdValidator,
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const journalEntry = await ctx.db.get(args.journalId);
+    assert(journalEntry, `Journal entry not found: ${args.journalId}`);
+    journalEntry.step.workId = args.workId;
+    await ctx.db.replace(args.journalId, journalEntry);
   },
 });

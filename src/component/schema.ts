@@ -1,6 +1,5 @@
 import {
   resultValidator,
-  vRetryBehavior,
   vWorkIdValidator,
   workIdValidator,
 } from "@convex-dev/workpool";
@@ -48,8 +47,6 @@ const workflowObject = {
   name: v.optional(v.string()),
   workflowHandle: v.string(),
   args: v.any(),
-  defaultRetryBehavior: v.optional(vRetryBehavior),
-  retryActionsByDefault: v.optional(v.boolean()),
 
   // User visible workflow status.
   state: v.union(
@@ -84,13 +81,12 @@ export const step = v.union(
   v.object({
     type: v.literal("function"),
     inProgress: v.boolean(),
-
+    workId: v.optional(vWorkIdValidator),
     functionType: v.union(
       v.object({ type: v.literal("query") }),
       v.object({ type: v.literal("mutation") }),
       v.object({
         type: v.literal("action"),
-        workId: v.optional(vWorkIdValidator),
         // DEPRECATED: use workId instead
         recoveryId: v.optional(v.string()),
       }),
@@ -106,6 +102,7 @@ export const step = v.union(
   v.object({
     type: v.literal("sleep"),
     inProgress: v.boolean(),
+    workId: v.optional(vWorkIdValidator),
 
     durationMs: v.number(),
     deadline: v.number(),
@@ -117,15 +114,15 @@ function stepSize(step: Step): number {
   let size = 0;
   size += step.type.length;
   size += 1; // inProgress
+  if (step.workId) {
+    size += step.workId.length;
+  }
   switch (step.type) {
     case "function": {
       size += step.functionType.type.length;
       if (step.functionType.type === "action") {
         if (step.functionType.recoveryId) {
           size += step.functionType.recoveryId.length;
-        }
-        if (step.functionType.workId) {
-          size += step.functionType.workId.length;
         }
       }
       size += step.handle.length;
@@ -172,7 +169,6 @@ export function journalEntrySize(entry: JournalEntry): number {
 export default defineSchema({
   config: defineTable({
     logLevel,
-    maxParallelism: v.optional(v.number()),
   }),
   workflows: defineTable(workflowObject),
   workflowJournal: defineTable(journalObject)

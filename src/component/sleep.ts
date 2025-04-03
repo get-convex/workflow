@@ -3,7 +3,6 @@ import { internal } from "./_generated/api.js";
 import { internalMutation, mutation } from "./_generated/server.js";
 import { getWorkflow, getJournalEntry } from "./model.js";
 import { getDefaultLogger } from "./utils.js";
-import { getWorkpool } from "./pool.js";
 import type { FunctionHandle } from "convex/server";
 
 export const start = mutation({
@@ -21,20 +20,14 @@ export const start = mutation({
       args.workflowId,
       args.generationNumber,
     );
-    const { defaultRetryBehavior, retryActionsByDefault } = workflow;
-    const workpool = await getWorkpool(ctx, {
-      defaultRetryBehavior,
-      retryActionsByDefault,
-    });
-    const sleepId = await workpool.enqueueMutation(
-      ctx,
+    const sleepId = await ctx.scheduler.runAfter(
+      args.durationMs,
       internal.sleep.complete,
       {
         workflowId: args.workflowId,
         generationNumber: args.generationNumber,
         journalId: args.journalId,
       },
-      { runAfter: args.durationMs },
     );
     logger.debug(`Scheduled sleep @ ${sleepId}`, args);
   },

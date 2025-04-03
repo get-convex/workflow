@@ -9,6 +9,7 @@ import {
 import { WorkflowStep } from "./index.js";
 import { StepRequest } from "./step.js";
 import { FunctionType } from "../types.js";
+import { RetryBehavior } from "@convex-dev/workpool";
 
 export class StepContext implements WorkflowStep {
   constructor(private sender: BaseChannel<StepRequest>) {}
@@ -30,8 +31,11 @@ export class StepContext implements WorkflowStep {
   async runAction<Action extends FunctionReference<"action", any>>(
     action: Action,
     args: FunctionArgs<Action>,
+    opts?: {
+      retry?: RetryBehavior | boolean | undefined;
+    },
   ): Promise<FunctionReturnType<Action>> {
-    return await this.runFunction({ type: "action" }, action, args);
+    return await this.runFunction({ type: "action" }, action, args, opts);
   }
 
   async sleep(durationMs: number): Promise<void> {
@@ -52,6 +56,9 @@ export class StepContext implements WorkflowStep {
     functionType: FunctionType,
     f: F,
     args: any,
+    opts?: {
+      retry?: RetryBehavior | boolean | undefined;
+    },
   ): Promise<any> {
     const handle = await createFunctionHandle(f);
     let send: any;
@@ -62,6 +69,7 @@ export class StepContext implements WorkflowStep {
         functionType,
         handle,
         args,
+        retry: opts?.retry,
         resolve,
         reject,
       });

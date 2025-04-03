@@ -56,11 +56,6 @@ export declare const components: {
           handle: string;
           journalId: string;
           name: string;
-          retryBehavior?: {
-            base: number;
-            initialBackoffMs: number;
-            maxAttempts: number;
-          };
           workflowId: string;
         },
         null
@@ -82,7 +77,7 @@ export declare const components: {
                 functionType:
                   | { type: "query" }
                   | { type: "mutation" }
-                  | { recoveryId?: string; type: "action"; workId?: string };
+                  | { recoveryId?: string; type: "action" };
                 handle: string;
                 inProgress: boolean;
                 outcome?:
@@ -90,12 +85,14 @@ export declare const components: {
                   | { error: string; type: "error" };
                 startedAt: number;
                 type: "function";
+                workId?: string;
               }
             | {
                 deadline: number;
                 durationMs: number;
                 inProgress: boolean;
                 type: "sleep";
+                workId?: string;
               };
           stepNumber: number;
           workflowId: string;
@@ -114,7 +111,7 @@ export declare const components: {
                 functionType:
                   | { type: "query" }
                   | { type: "mutation" }
-                  | { recoveryId?: string; type: "action"; workId?: string };
+                  | { recoveryId?: string; type: "action" };
                 handle: string;
                 inProgress: boolean;
                 outcome?:
@@ -122,12 +119,14 @@ export declare const components: {
                   | { error: string; type: "error" };
                 startedAt: number;
                 type: "function";
+                workId?: string;
               }
             | {
                 deadline: number;
                 durationMs: number;
                 inProgress: boolean;
                 type: "sleep";
+                workId?: string;
               };
           stepNumber: number;
           workflowId: string;
@@ -143,7 +142,7 @@ export declare const components: {
                 functionType:
                   | { type: "query" }
                   | { type: "mutation" }
-                  | { recoveryId?: string; type: "action"; workId?: string };
+                  | { recoveryId?: string; type: "action" };
                 handle: string;
                 inProgress: boolean;
                 outcome?:
@@ -151,16 +150,39 @@ export declare const components: {
                   | { error: string; type: "error" };
                 startedAt: number;
                 type: "function";
+                workId?: string;
               }
             | {
                 deadline: number;
                 durationMs: number;
                 inProgress: boolean;
                 type: "sleep";
+                workId?: string;
               };
           stepNumber: number;
           workflowId: string;
         }
+      >;
+      updateWorkId: FunctionReference<
+        "mutation",
+        "internal",
+        { journalId: string; workId: string },
+        null
+      >;
+    };
+    pool: {
+      onComplete: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          context: any;
+          result:
+            | { kind: "success"; returnValue: any }
+            | { error: string; kind: "failed" }
+            | { kind: "canceled" };
+          workId: string;
+        },
+        null
       >;
     };
     sleep: {
@@ -206,14 +228,7 @@ export declare const components: {
         "mutation",
         "internal",
         {
-          defaultRetryBehavior?: {
-            base: number;
-            initialBackoffMs: number;
-            maxAttempts: number;
-          };
           logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR";
-          maxParallelism?: number;
-          retryActionsByDefault?: boolean;
           workflowArgs: any;
           workflowHandle: string;
           workflowName: string;
@@ -236,7 +251,7 @@ export declare const components: {
                   functionType:
                     | { type: "query" }
                     | { type: "mutation" }
-                    | { recoveryId?: string; type: "action"; workId?: string };
+                    | { recoveryId?: string; type: "action" };
                   handle: string;
                   inProgress: boolean;
                   outcome?:
@@ -244,29 +259,26 @@ export declare const components: {
                     | { error: string; type: "error" };
                   startedAt: number;
                   type: "function";
+                  workId?: string;
                 }
               | {
                   deadline: number;
                   durationMs: number;
                   inProgress: boolean;
                   type: "sleep";
+                  workId?: string;
                 };
             stepNumber: number;
             workflowId: string;
           }>;
+          logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR";
           workflow: {
             _creationTime: number;
             _id: string;
             args: any;
-            defaultRetryBehavior?: {
-              base: number;
-              initialBackoffMs: number;
-              maxAttempts: number;
-            };
             generationNumber: number;
             logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR";
             name?: string;
-            retryActionsByDefault?: boolean;
             startedAt: number;
             state:
               | { type: "running" }
@@ -281,6 +293,64 @@ export declare const components: {
             workflowHandle: string;
           };
         }
+      >;
+      sleep: FunctionReference<
+        "mutation",
+        "internal",
+        { journalId: string },
+        null
+      >;
+    };
+  };
+  workpool: {
+    lib: {
+      cancel: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          id: string;
+          logLevel: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
+        },
+        any
+      >;
+      cancelAll: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          before?: number;
+          logLevel: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
+        },
+        any
+      >;
+      enqueue: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          config: {
+            logLevel: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
+            maxParallelism: number;
+          };
+          fnArgs: any;
+          fnHandle: string;
+          fnName: string;
+          fnType: "action" | "mutation" | "query";
+          onComplete?: { context?: any; fnHandle: string };
+          retryBehavior?: {
+            base: number;
+            initialBackoffMs: number;
+            maxAttempts: number;
+          };
+          runAt: number;
+        },
+        string
+      >;
+      status: FunctionReference<
+        "query",
+        "internal",
+        { id: string },
+        | { previousAttempts: number; state: "pending" }
+        | { previousAttempts: number; state: "running" }
+        | { state: "finished" }
       >;
     };
   };

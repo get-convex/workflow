@@ -49,7 +49,7 @@
     }
   },
   "peerDependencies": {
-    "@convex-dev/workpool": "^0.2.6",
+    "@convex-dev/workpool": "^0.2.7-alpha.2",
     "convex": ">=1.21.0 <1.25.0",
     "convex-helpers": "^0.1.77"
   },

@@ -4,7 +4,6 @@ import { mutation, query } from "./_generated/server.js";
 import { getWorkflow } from "./model.js";
 import {
   workflowDocument,
-  Workflow,
   journalDocument,
   STEP_TYPES,
   JournalEntry,
@@ -12,7 +11,6 @@ import {
 } from "./schema.js";
 import { createDefaultLogger, getDefaultLogger } from "./utils.js";
 import { logLevel } from "./logging.js";
-import { vRetryBehavior } from "@convex-dev/workpool";
 import { assert } from "convex-helpers";
 
 export const create = mutation({
@@ -24,15 +22,11 @@ export const create = mutation({
     // TODO: onComplete hook
     // TODO: onComplete context
     logLevel: v.optional(logLevel),
-    maxParallelism: v.optional(v.number()),
-    defaultRetryBehavior: v.optional(vRetryBehavior),
-    retryActionsByDefault: v.optional(v.boolean()),
   },
   returns: v.string(),
   handler: async (ctx, args) => {
     const now = Date.now();
     const console = await createDefaultLogger(ctx, args.logLevel);
-    const { defaultRetryBehavior, retryActionsByDefault } = args;
     const workflowId = await ctx.db.insert("workflows", {
       name: args.workflowName,
       startedAt: now,
@@ -41,8 +35,6 @@ export const create = mutation({
       args: args.workflowArgs,
       state: { type: "running" },
       generationNumber: 0,
-      defaultRetryBehavior,
-      retryActionsByDefault,
     });
     console.debug(
       `Created workflow ${workflowId}:`,
@@ -65,6 +57,7 @@ export const getStatus = query({
   returns: v.object({
     workflow: workflowDocument,
     inProgress: v.array(journalDocument),
+    logLevel: logLevel,
   }),
   handler: async (ctx, args) => {
     const workflow = await ctx.db.get(args.workflowId);
@@ -85,7 +78,7 @@ export const getStatus = query({
       result.push(...inProgressEntries);
     }
     console.debug(`${args.workflowId} blocked by`, result);
-    return { workflow, inProgress: result };
+    return { workflow, inProgress: result, logLevel: console.logLevel };
   },
 });
 
@@ -170,6 +163,17 @@ export const cleanup = mutation({
       await ctx.db.delete(journalEntry._id);
     }
     return true;
+  },
+});
+
+export const sleep = mutation({
+  args: {
+    journalId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const console = await getDefaultLogger(ctx);
+    console.debug(`Sleep over for ${args.journalId}`);
   },
 });
 

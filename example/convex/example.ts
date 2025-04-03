@@ -1,11 +1,21 @@
 import { v } from "convex/values";
 import { WorkflowManager } from "@convex-dev/workflow";
 import { internal } from "./_generated/api.js";
-import { internalAction } from "./_generated/server.js";
+import { internalAction, internalMutation } from "./_generated/server.js";
 import { components } from "./_generated/api.js";
 import { OpenAI } from "openai";
+import { Workpool } from "@convex-dev/workpool";
 
-export const workflow = new WorkflowManager(components.workflow);
+const workpool = new Workpool(components.workpool, {
+  defaultRetryBehavior: {
+    maxAttempts: 2,
+    initialBackoffMs: 1000,
+    base: 2,
+  },
+});
+export const workflow = new WorkflowManager(components.workflow, {
+  workpool,
+});
 
 if (!process.env.OPENAI_API_KEY) {
   throw new Error(
@@ -14,6 +24,20 @@ if (!process.env.OPENAI_API_KEY) {
   );
 }
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+export const startWorkflow = internalMutation({
+  args: {
+    storageId: v.id("_storage"),
+  },
+  handler: async (ctx, args) => {
+    const id: string = await workflow.start(
+      ctx,
+      internal.example.exampleWorkflow,
+      { storageId: args.storageId },
+    );
+    return id;
+  },
+});
 
 export const exampleWorkflow = workflow.define({
   args: {
@@ -27,10 +51,18 @@ export const exampleWorkflow = workflow.define({
       },
     );
     console.log(transcription);
-    const embedding = await step.runAction(internal.example.computeEmbedding, {
-      transcription,
-    });
+    const embedding = await step.runAction(
+      internal.example.computeEmbedding,
+      { transcription },
+      { retry: false },
+    );
     console.log(embedding.slice(0, 20));
+  },
+  retryActionsByDefault: false,
+  defaultRetryBehavior: {
+    maxAttempts: 5,
+    initialBackoffMs: 10,
+    base: 2,
   },
 });
 

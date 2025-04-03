@@ -9,6 +9,7 @@ import {
 } from "../component/schema.js";
 import { api } from "../component/_generated/api.js";
 import { FunctionType, Result, UseApi } from "../types.js";
+import { RetryBehavior } from "@convex-dev/workpool";
 
 export type OriginalEnv = {
   Date: {
@@ -18,7 +19,12 @@ export type OriginalEnv = {
 
 export type WorkerResult =
   | { type: "handlerDone"; outcome: Result<null> }
-  | { type: "executorBlocked"; entry: JournalEntry; name: string };
+  | {
+      type: "executorBlocked";
+      entry: JournalEntry;
+      name: string;
+      retry: RetryBehavior | boolean | undefined;
+    };
 
 export type StepRequest =
   | {
@@ -28,6 +34,7 @@ export type StepRequest =
       handle: string;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       args: any;
+      retry: RetryBehavior | boolean | undefined;
 
       resolve: (result: unknown) => void;
       reject: (error: unknown) => void;
@@ -67,6 +74,7 @@ export class StepExecutor {
     while (true) {
       const message = await this.receiver.get();
       const entry = this.journalEntries.shift();
+      // TODO: run query inline and complete the result immediately
       if (entry) {
         this.completeMessage(message, entry);
         continue;
@@ -79,7 +87,9 @@ export class StepExecutor {
       return {
         type: "executorBlocked",
         entry: newEntry,
-        name: message.type === "function" ? message.name : "sleep",
+        ...(message.type === "function"
+          ? { name: message.name, retry: message.retry }
+          : { name: "sleep", retry: undefined }),
       };
     }
   }

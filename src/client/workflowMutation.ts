@@ -1,16 +1,23 @@
-import { api } from "../component/_generated/api.js";
-import { PropertyValidators, v } from "convex/values";
-import { Result, UseApi } from "../types.js";
-import { WorkflowDefinition } from "./index.js";
-import { internalMutationGeneric, RegisteredMutation } from "convex/server";
+import { WorkId, Workpool } from "@convex-dev/workpool";
 import { BaseChannel } from "async-channel";
+import { assert } from "convex-helpers";
+import { validate } from "convex-helpers/validators";
+import {
+  FunctionHandle,
+  internalMutationGeneric,
+  RegisteredMutation,
+} from "convex/server";
+import { ObjectType, PropertyValidators, v } from "convex/values";
+import { api } from "../component/_generated/api.js";
+import { createLogger } from "../component/logging.js";
+import type { OnComplete, OnCompleteContext } from "../component/pool.js";
+import { JournalEntry } from "../component/schema.js";
+import { OpaqueIds, Result, UseApi } from "../types.js";
+import { setupEnvironment } from "./environment.js";
+import { WorkflowDefinition } from "./index.js";
 import { StepExecutor, StepRequest, WorkerResult } from "./step.js";
 import { StepContext } from "./stepContext.js";
-import { setupEnvironment } from "./environment.js";
-import { JournalEntry } from "../component/schema.js";
 import { checkArgs } from "./validator.js";
-import { validate } from "convex-helpers/validators";
-import { assert } from "convex-helpers";
 
 const workflowArgs = v.object({
   workflowId: v.id("workflows"),
@@ -25,7 +32,9 @@ const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke
 export function workflowMutation<ArgsValidator extends PropertyValidators>(
   component: UseApi<typeof api>,
   registered: WorkflowDefinition<ArgsValidator>,
-): RegisteredMutation<"internal", never, never> {
+  workpool: Workpool,
+): RegisteredMutation<"internal", ObjectType<ArgsValidator>, null> {
+  const onComplete = component.pool.onComplete as OnComplete;
   return internalMutationGeneric({
     returns: v.null(),
     handler: async (ctx, args) => {
@@ -33,10 +42,11 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         throw new Error(INVALID_WORKFLOW_MESSAGE);
       }
       const { workflowId, generationNumber } = args;
-      const { workflow, inProgress } = await ctx.runQuery(
+      const { workflow, inProgress, logLevel } = await ctx.runQuery(
         component.workflow.getStatus,
         { workflowId },
       );
+      const console = createLogger(logLevel);
       if (workflow.generationNumber !== generationNumber) {
         console.error(`Invalid generation number: ${generationNumber}`);
         return;
@@ -103,33 +113,80 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         }
         case "executorBlocked": {
           const { _id, step } = result.entry;
+          const context: OpaqueIds<OnCompleteContext> = {
+            generationNumber,
+            journalId: _id,
+          };
+          let workId: WorkId;
+          const patchedData = globalThis.Date;
+          globalThis.Date = originalEnv.Date as any;
           switch (step.type) {
             case "function": {
-              await ctx.runMutation(component.functions.start, {
-                name: result.name,
-                workflowId,
-                generationNumber,
-                journalId: _id,
-                functionType: step.functionType,
-                handle: step.handle,
-                args: step.args,
-                // TODO: retryBehavior: {},
-              });
+              switch (step.functionType.type) {
+                case "query": {
+                  workId = await workpool.enqueueQuery(
+                    ctx,
+                    step.handle as FunctionHandle<"query">,
+                    step.args,
+                    { context, onComplete, name: result.name },
+                  );
+                  break;
+                }
+                case "mutation": {
+                  workId = await workpool.enqueueMutation(
+                    ctx,
+                    step.handle as FunctionHandle<"mutation">,
+                    step.args,
+                    { context, onComplete, name: result.name },
+                  );
+                  break;
+                }
+                case "action": {
+                  const retry =
+                    result.retry === true
+                      ? registered.defaultRetryBehavior ?? true
+                      : result.retry ??
+                        (registered.retryActionsByDefault
+                          ? registered.defaultRetryBehavior
+                          : undefined);
+                  workId = await workpool.enqueueAction(
+                    ctx,
+                    step.handle as FunctionHandle<"action">,
+                    step.args,
+                    { context, onComplete, name: result.name, retry },
+                  );
+                  break;
+                }
+              }
               break;
             }
             case "sleep": {
-              await ctx.runMutation(component.sleep.start, {
-                workflowId,
-                generationNumber,
-                journalId: _id,
-                durationMs: step.durationMs,
-              });
+              workId = await workpool.enqueueMutation(
+                ctx,
+                component.workflow.sleep,
+                { journalId: _id },
+                {
+                  name: "sleep",
+                  runAfter: step.durationMs,
+                  onComplete,
+                  context,
+                },
+              );
+              console.debug(`Scheduled sleep @ ${workId}`, args);
               break;
             }
           }
+          globalThis.Date = patchedData;
+          await ctx.runMutation(component.journal.updateWorkId, {
+            journalId: _id,
+            workId,
+          });
         }
       }
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   }) as any;
 }
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const console = "THIS IS A REMINDER TO USE getDefaultLogger";

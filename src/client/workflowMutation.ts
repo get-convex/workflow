@@ -118,74 +118,37 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         }
         case "executorBlocked": {
           const { _id, step } = result.entry;
-          const context: OpaqueIds<OnCompleteContext> = {
-            generationNumber,
-            journalId: _id,
-          };
-          let workId: WorkId;
-          const patchedData = globalThis.Date;
-          globalThis.Date = originalEnv.Date as any;
           switch (step.type) {
             case "function": {
-              switch (step.functionType.type) {
-                case "query": {
-                  workId = await workpool.enqueueQuery(
-                    ctx,
-                    step.handle as FunctionHandle<"query">,
-                    step.args,
-                    { context, onComplete, name: result.name },
-                  );
-                  break;
-                }
-                case "mutation": {
-                  workId = await workpool.enqueueMutation(
-                    ctx,
-                    step.handle as FunctionHandle<"mutation">,
-                    step.args,
-                    { context, onComplete, name: result.name },
-                  );
-                  break;
-                }
-                case "action": {
-                  const retry =
-                    result.retry === true
-                      ? registered.defaultRetryBehavior ?? true
-                      : result.retry ??
-                        (registered.retryActionsByDefault
-                          ? registered.defaultRetryBehavior
-                          : undefined);
-                  workId = await workpool.enqueueAction(
-                    ctx,
-                    step.handle as FunctionHandle<"action">,
-                    step.args,
-                    { context, onComplete, name: result.name, retry },
-                  );
-                  break;
-                }
-              }
+              const retry =
+                result.retry === true
+                  ? registered.defaultRetryBehavior ?? true
+                  : result.retry ??
+                    (registered.retryActionsByDefault
+                      ? registered.defaultRetryBehavior
+                      : undefined);
+              await ctx.runMutation(component.functions.start, {
+                name: result.name,
+                workflowId,
+                generationNumber,
+                journalId: _id,
+                functionType: step.functionType,
+                handle: step.handle,
+                args: step.args,
+                retry,
+              });
               break;
             }
             case "sleep": {
-              workId = await workpool.enqueueMutation(
-                ctx,
-                component.workflow.sleep,
-                { journalId: _id },
-                {
-                  name: "sleep",
-                  runAfter: step.durationMs,
-                  onComplete,
-                  context,
-                },
-              );
-              console.debug(`Scheduled sleep @ ${workId}`, args);
+              await ctx.runMutation(component.sleep.start, {
+                workflowId,
+                generationNumber,
+                journalId: _id,
+                durationMs: step.durationMs,
+              });
               break;
             }
           }
-          globalThis.Date = patchedData;
-          await ctx.runMutation(component.journal.updateWorkId, {
-            journalId: _id,
-            workId,
-          });
         }
       }
     },

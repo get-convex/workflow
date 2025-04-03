@@ -8,12 +8,10 @@
  * @module
  */
 
-import type * as functions from "../functions.js";
 import type * as journal from "../journal.js";
 import type * as logging from "../logging.js";
 import type * as model from "../model.js";
 import type * as pool from "../pool.js";
-import type * as sleep from "../sleep.js";
 import type * as utils from "../utils.js";
 import type * as workflow from "../workflow.js";
 
@@ -32,35 +30,14 @@ import type {
  * ```
  */
 declare const fullApi: ApiFromModules<{
-  functions: typeof functions;
   journal: typeof journal;
   logging: typeof logging;
   model: typeof model;
   pool: typeof pool;
-  sleep: typeof sleep;
   utils: typeof utils;
   workflow: typeof workflow;
 }>;
 export type Mounts = {
-  functions: {
-    start: FunctionReference<
-      "mutation",
-      "public",
-      {
-        args: any;
-        functionType:
-          | { type: "query" }
-          | { type: "mutation" }
-          | { type: "action" };
-        generationNumber: number;
-        handle: string;
-        journalId: string;
-        name: string;
-        workflowId: string;
-      },
-      null
-    >;
-  };
   journal: {
     load: FunctionReference<
       "query",
@@ -181,19 +158,6 @@ export type Mounts = {
           | { error: string; kind: "failed" }
           | { kind: "canceled" };
         workId: string;
-      },
-      null
-    >;
-  };
-  sleep: {
-    start: FunctionReference<
-      "mutation",
-      "public",
-      {
-        durationMs: number;
-        generationNumber: number;
-        journalId: string;
-        workflowId: string;
       },
       null
     >;

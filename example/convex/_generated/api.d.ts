@@ -42,25 +42,6 @@ export declare const internal: FilterApi<
 
 export declare const components: {
   workflow: {
-    functions: {
-      start: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          args: any;
-          functionType:
-            | { type: "query" }
-            | { type: "mutation" }
-            | { type: "action" };
-          generationNumber: number;
-          handle: string;
-          journalId: string;
-          name: string;
-          workflowId: string;
-        },
-        null
-      >;
-    };
     journal: {
       load: FunctionReference<
         "query",
@@ -181,19 +162,6 @@ export declare const components: {
             | { error: string; kind: "failed" }
             | { kind: "canceled" };
           workId: string;
-        },
-        null
-      >;
-    };
-    sleep: {
-      start: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          durationMs: number;
-          generationNumber: number;
-          journalId: string;
-          workflowId: string;
         },
         null
       >;

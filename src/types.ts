@@ -33,7 +33,7 @@ export type UseApi<API> = Expand<{
     : UseApi<API[mod]>;
 }>;
 
-type OpaqueIds<T> =
+export type OpaqueIds<T> =
   T extends GenericId<infer _T>
     ? string
     : T extends WorkId

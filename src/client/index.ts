@@ -11,10 +11,11 @@ import {
 } from "convex/server";
 import { ObjectType, PropertyValidators } from "convex/values";
 import { api } from "../component/_generated/api.js";
-import { UseApi, WorkflowId } from "../types.js";
+import { OpaqueIds, UseApi, WorkflowId } from "../types.js";
 import { workflowMutation } from "./workflowMutation.js";
 import { LogLevel } from "../component/logging.js";
 import { RetryBehavior } from "@convex-dev/workpool";
+import { Step } from "../component/schema.js";
 
 export type { WorkflowId };
 
@@ -42,7 +43,7 @@ export type WorkflowDefinition<ArgsValidator extends PropertyValidators> = {
 };
 
 export type WorkflowStatus =
-  | { type: "inProgress" }
+  | { type: "inProgress"; running: OpaqueIds<Step>[] }
   | { type: "completed" }
   | { type: "canceled" }
   | { type: "failed"; error: string };
@@ -125,12 +126,14 @@ export class WorkflowManager {
     ctx: RunQueryCtx,
     workflowId: WorkflowId,
   ): Promise<WorkflowStatus> {
-    const workflow = await ctx.runQuery(this.component.workflow.load, {
-      workflowId,
-    });
+    const { workflow, inProgress } = await ctx.runQuery(
+      this.component.workflow.getStatus,
+      { workflowId },
+    );
+    const running = inProgress.map((entry) => entry.step);
     switch (workflow.state.type) {
       case "running":
-        return { type: "inProgress" };
+        return { type: "inProgress", running };
       case "canceled":
         return { type: "canceled" };
       case "completed":

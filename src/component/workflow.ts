@@ -14,6 +14,7 @@ import { createDefaultLogger, getDefaultLogger } from "./utils.js";
 import { getWorkpool } from "./pool.js";
 import { logLevel } from "./logging.js";
 import { vRetryBehavior } from "@convex-dev/workpool";
+import { assert } from "convex-helpers";
 
 export const create = mutation({
   args: {
@@ -62,23 +63,34 @@ export const create = mutation({
   },
 });
 
-export const load = query({
+export const getStatus = query({
   args: {
-    workflowId: v.string(),
+    workflowId: v.id("workflows"),
   },
-  returns: workflowDocument,
+  returns: v.object({
+    workflow: workflowDocument,
+    inProgress: v.array(journalDocument),
+  }),
   handler: async (ctx, args) => {
-    const workflowId = ctx.db.normalizeId("workflows", args.workflowId);
-    if (!workflowId) {
-      throw new Error(`Invalid workflow ID: ${args.workflowId}`);
+    const workflow = await ctx.db.get(args.workflowId);
+    assert(workflow, `Workflow not found: ${args.workflowId}`);
+    const console = await getDefaultLogger(ctx);
+
+    const result: JournalEntry[] = [];
+    for (const stepType of STEP_TYPES) {
+      const inProgressEntries = await ctx.db
+        .query("workflowJournal")
+        .withIndex("inProgress", (q) =>
+          q
+            .eq("step.type", stepType)
+            .eq("step.inProgress", true)
+            .eq("workflowId", args.workflowId),
+        )
+        .collect();
+      result.push(...inProgressEntries);
     }
-    const workflow = await ctx.db.get(workflowId);
-    if (!workflow) {
-      throw new Error(`Workflow not found: ${args.workflowId}`);
-    }
-    const logger = await getDefaultLogger(ctx);
-    logger.debug(`Loaded workflow ${workflowId}:`, workflow);
-    return workflow as Workflow;
+    console.debug(`${args.workflowId} blocked by`, result);
+    return { workflow, inProgress: result };
   },
 });
 

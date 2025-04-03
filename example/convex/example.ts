@@ -1,12 +1,133 @@
 import { v } from "convex/values";
-import { WorkflowManager } from "@convex-dev/workflow";
+import { WorkflowId, WorkflowManager } from "@convex-dev/workflow";
 import { internal } from "./_generated/api.js";
 import { internalAction, internalMutation } from "./_generated/server.js";
 import { components } from "./_generated/api.js";
-import { OpenAI } from "openai";
+import { vWorkflowId } from "@convex-dev/workflow";
 
 export const workflow = new WorkflowManager(components.workflow, {
   workpoolOptions: {
     maxParallelism: 1,
+  },
+});
+
+export const startWorkflow = internalMutation({
+  args: {
+    location: v.string(),
+  },
+  returns: v.string(),
+  handler: async (ctx, args) => {
+    const id: WorkflowId = await workflow.start(
+      ctx,
+      internal.example.exampleWorkflow,
+      args,
+    );
+    await ctx.db.insert("flows", {
+      workflowId: id,
+      in: args.location,
+      out: null,
+    });
+    return id;
+  },
+});
+
+export const exampleWorkflow = workflow.define({
+  args: {
+    location: v.string(),
+  },
+  handler: async (step, args) => {
+    const { latitude, longitude, name } = await step.runAction(
+      internal.example.getGeocoding,
+      args,
+    );
+    const weather = await step.runAction(internal.example.getWeather, {
+      latitude,
+      longitude,
+    });
+    console.log(
+      `Weather in ${name}: ${weather.temperature}°C, ${weather.windSpeed} km/h, ${weather.windGust} km/h`,
+    );
+  },
+  workpoolOptions: {
+    retryActionsByDefault: true,
+  },
+});
+
+export const getGeocoding = internalAction({
+  args: {
+    location: v.string(),
+  },
+  returns: v.object({
+    latitude: v.number(),
+    longitude: v.number(),
+    name: v.string(),
+  }),
+  handler: async (_ctx, { location }) => {
+    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`;
+    const geocodingResponse = await fetch(geocodingUrl);
+    const geocodingData = (await geocodingResponse.json()) as {
+      results: {
+        latitude: number;
+        longitude: number;
+        name: string;
+      }[];
+    };
+
+    if (!geocodingData.results?.[0]) {
+      throw new Error(`Location '${location}' not found`);
+    }
+
+    const { latitude, longitude, name } = geocodingData.results[0];
+    return { latitude, longitude, name };
+  },
+});
+
+export const getWeather = internalAction({
+  args: {
+    latitude: v.number(),
+    longitude: v.number(),
+  },
+  returns: v.object({
+    temperature: v.number(),
+    windSpeed: v.number(),
+    windGust: v.number(),
+  }),
+  handler: async (_ctx, { latitude, longitude }) => {
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code`;
+
+    const response = await fetch(weatherUrl);
+    const data = (await response.json()) as {
+      current: {
+        time: string;
+        temperature_2m: number;
+        wind_speed_10m: number;
+        wind_gusts_10m: number;
+      };
+    };
+    return {
+      temperature: data.current.temperature_2m,
+      windSpeed: data.current.wind_speed_10m,
+      windGust: data.current.wind_gusts_10m,
+    };
+  },
+});
+
+export const updateFlow = internalMutation({
+  args: {
+    workflowId: vWorkflowId,
+    out: v.any(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const flow = await ctx.db
+      .query("flows")
+      .withIndex("workflowId", (q) => q.eq("workflowId", args.workflowId))
+      .first();
+    if (!flow) {
+      throw new Error(`Flow not found: ${args.workflowId}`);
+    }
+    await ctx.db.patch(flow._id, {
+      out: args.out,
+    });
   },
 });

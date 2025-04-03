@@ -2,22 +2,6 @@ import { v } from "convex/values";
 import { WorkflowId } from "@convex-dev/workflow";
 import { mutation, query } from "./_generated/server";
 import { workflow } from "./example";
-import { internal } from "./_generated/api";
-
-export const kickoffWorkflow = mutation({
-  args: {
-    storageId: v.id("_storage"),
-  },
-  returns: v.string(),
-  handler: async (ctx, args) => {
-    const workflowId: string = await workflow.start(
-      ctx,
-      internal.example.exampleWorkflow,
-      { storageId: args.storageId },
-    );
-    return workflowId;
-  },
-});
 
 export const getWorkflowStatus = query({
   args: {

@@ -1,8 +1,9 @@
 import { WorkId } from "@convex-dev/workpool";
 import { Expand, FunctionReference } from "convex/server";
-import { GenericId, Infer, v } from "convex/values";
+import { GenericId, v, VString } from "convex/values";
 
 export type WorkflowId = string & { __isWorkflowId: true };
+export const vWorkflowId = v.string() as VString<WorkflowId>;
 
 export type UseApi<API> = Expand<{
   [mod in keyof API]: API[mod] extends FunctionReference<

@@ -15,12 +15,12 @@ import { OpaqueIds, UseApi, WorkflowId } from "../types.js";
 import { workflowMutation } from "./workflowMutation.js";
 import {
   NameOption,
-  RetryBehavior,
   RetryOption,
   SchedulerOptions,
   WorkpoolOptions,
   WorkpoolRetryOptions,
 } from "@convex-dev/workpool";
+export { vWorkflowId } from "../types.js";
 import { Step } from "../component/schema.js";
 
 export type { WorkflowId };

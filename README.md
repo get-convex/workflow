@@ -47,7 +47,7 @@ Open a [GitHub issue](https://github.com/get-convex/workflow/issues) with any fe
 First, add `@convex-dev/workflow` to your Convex project:
 
 ```sh
-npm install @convex-dev/workflow
+npm install @convex-dev/workflow @convex-dev/workpool
 ```
 
 Then, install the component within your `convex/convex.config.ts` file:
@@ -55,10 +55,12 @@ Then, install the component within your `convex/convex.config.ts` file:
 ```ts
 // convex/convex.config.ts
 import workflow from "@convex-dev/workflow/convex.config";
+import workpool from "@convex-dev/workpool/convex.config";
 import { defineApp } from "convex/server";
 
 const app = defineApp();
 app.use(workflow);
+app.use(workpool);
 export default app;
 ```
 
@@ -69,8 +71,10 @@ to the installed component:
 // convex/index.ts
 import { WorkflowManager } from "@convex-dev/workflow";
 import { components } from "./_generated/api";
+import { Workpool } from "@convex-dev/workpool";
 
-export const workflow = new WorkflowManager(components.workflow);
+const workpool = new Workpool(components.workpool);
+export const workflow = new WorkflowManager(components.workflow, { workpool });
 ```
 
 ## Usage

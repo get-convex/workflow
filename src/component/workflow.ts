@@ -96,32 +96,26 @@ export const getStatus = query({
 
 export const cancel = mutation({
   args: {
-    workflowId: v.string(),
+    workflowId: v.id("workflows"),
   },
   returns: v.null(),
-  handler: async (ctx, args) => {
-    const workflowId = ctx.db.normalizeId("workflows", args.workflowId);
-    if (!workflowId) {
-      throw new Error(`Invalid workflow ID: ${args.workflowId}`);
-    }
+  handler: async (ctx, { workflowId }) => {
     const workflow = await ctx.db.get(workflowId);
-    if (!workflow) {
-      throw new Error(`Workflow not found: ${workflowId}`);
-    }
-    const logger = await getDefaultLogger(ctx);
-    if (workflow.state.type !== "running") {
-      throw new Error(`Workflow not running: ${workflowId}`);
-    }
+    assert(workflow, `Workflow not found: ${workflowId}`);
+    const console = await getDefaultLogger(ctx);
+    assert(workflow.state.type === "running", `Not running: ${workflowId}`);
     workflow.state = { type: "canceled", canceledAt: Date.now() };
     workflow.generationNumber += 1;
-    logger.debug(`Canceled workflow ${workflowId}:`, workflow);
+    console.debug(`Canceled workflow ${workflowId}:`, workflow);
+    // TODO: Call onComplete hook
+    // TODO: delete everything unless ttl is set
     await ctx.db.replace(workflow._id, workflow);
   },
 });
 
 export const complete = mutation({
   args: {
-    workflowId: v.string(),
+    workflowId: v.id("workflows"),
     generationNumber: v.number(),
     outcome,
     now: v.number(),
@@ -142,46 +136,10 @@ export const complete = mutation({
       completedAt: args.now,
       outcome: args.outcome,
     };
+    // TODO: Call onComplete hook
+    // TODO: delete everything unless ttl is set
     logger.debug(`Completed workflow ${workflow._id}:`, workflow);
     await ctx.db.replace(workflow._id, workflow);
-  },
-});
-
-export const blockedBy = query({
-  args: {
-    workflowId: v.string(),
-  },
-  returns: v.union(journalDocument, v.null()),
-  handler: async (ctx, args) => {
-    const workflowId = ctx.db.normalizeId("workflows", args.workflowId);
-    if (!workflowId) {
-      throw new Error(`Invalid workflow ID: ${args.workflowId}`);
-    }
-    const workflow = await ctx.db.get(workflowId);
-    if (!workflow) {
-      throw new Error(`Workflow not found: ${workflowId}`);
-    }
-    const logger = await getDefaultLogger(ctx);
-
-    const result = [];
-    for (const stepType of STEP_TYPES) {
-      const inProgressEntries = await ctx.db
-        .query("workflowJournal")
-        .withIndex("inProgress", (q) =>
-          q
-            .eq("step.type", stepType)
-            .eq("step.inProgress", true)
-            .eq("workflowId", args.workflowId),
-        )
-        .collect();
-      result.push(...inProgressEntries);
-    }
-    if (result.length > 1) {
-      throw new Error(`Multiple in-progress entries for ${args.workflowId}`);
-    }
-    const entry = (result[0] ?? null) as JournalEntry | null;
-    logger.debug(`${args.workflowId} blocked by`, entry);
-    return entry;
   },
 });
 
@@ -219,3 +177,6 @@ export const cleanup = mutation({
     return true;
   },
 });
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const console = "THIS IS A REMINDER TO USE getDefaultLogger";

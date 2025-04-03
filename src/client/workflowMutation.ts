@@ -9,7 +9,13 @@ import { StepContext } from "./stepContext.js";
 import { setupEnvironment } from "./environment.js";
 import { JournalEntry } from "../component/schema.js";
 import { checkArgs } from "./validator.js";
+import { validate } from "convex-helpers/validators";
+import { assert } from "convex-helpers";
 
+const workflowArgs = v.object({
+  workflowId: v.id("workflows"),
+  generationNumber: v.number(),
+});
 const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke the workflow with ctx.runMutation() instead of workflow.start()?`;
 
 // This function is defined in the calling component but then gets passed by
@@ -23,20 +29,14 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
   return internalMutationGeneric({
     returns: v.null(),
     handler: async (ctx, args) => {
-      if (Object.entries(args).length !== 2) {
+      if (!validate(workflowArgs, args)) {
         throw new Error(INVALID_WORKFLOW_MESSAGE);
       }
-      const workflowId = args.workflowId;
-      if (typeof workflowId !== "string") {
-        throw new Error(INVALID_WORKFLOW_MESSAGE);
-      }
-      const generationNumber = args.generationNumber;
-      if (typeof generationNumber !== "number") {
-        throw new Error(INVALID_WORKFLOW_MESSAGE);
-      }
-      const workflow = await ctx.runQuery(component.workflow.load, {
-        workflowId,
-      });
+      const { workflowId, generationNumber } = args;
+      const { workflow, inProgress } = await ctx.runQuery(
+        component.workflow.getStatus,
+        { workflowId },
+      );
       if (workflow.generationNumber !== generationNumber) {
         console.error(`Invalid generation number: ${generationNumber}`);
         return;
@@ -45,23 +45,23 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         console.log(`Workflow ${workflowId} completed, returning.`);
         return;
       }
-      const blockedBy = await ctx.runQuery(component.workflow.blockedBy, {
-        workflowId,
-      });
-      if (blockedBy !== null) {
-        console.log(`Workflow ${workflowId} blocked by...`);
-        console.log(`  ${blockedBy._id}: ${blockedBy.step.type}`);
+      if (inProgress.length > 0) {
+        console.log(
+          `Workflow ${workflowId} blocked by ` +
+            inProgress
+              .map((entry) => `${entry._id}: ${entry.step.type}`)
+              .join(", "),
+        );
         return;
       }
       const journalEntries = (await ctx.runQuery(component.journal.load, {
         workflowId,
       })) as JournalEntry[];
       for (const journalEntry of journalEntries) {
-        if (journalEntry.step.inProgress) {
-          throw new Error(
-            `Assertion failed: not blocked but have in-progress journal entry`,
-          );
-        }
+        assert(
+          !journalEntry.step.inProgress,
+          `Assertion failed: not blocked but have in-progress journal entry`,
+        );
       }
       const channel = new BaseChannel<StepRequest>(0);
       const step = new StepContext(channel);

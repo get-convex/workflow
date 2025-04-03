@@ -4,17 +4,11 @@ import { internal } from "./_generated/api.js";
 import { internalAction, internalMutation } from "./_generated/server.js";
 import { components } from "./_generated/api.js";
 import { OpenAI } from "openai";
-import { Workpool } from "@convex-dev/workpool";
 
-const workpool = new Workpool(components.workpool, {
-  defaultRetryBehavior: {
-    maxAttempts: 2,
-    initialBackoffMs: 1000,
-    base: 2,
-  },
-});
 export const workflow = new WorkflowManager(components.workflow, {
-  workpool,
+  workpoolOptions: {
+    maxParallelism: 1,
+  },
 });
 
 if (!process.env.OPENAI_API_KEY) {
@@ -58,11 +52,13 @@ export const exampleWorkflow = workflow.define({
     );
     console.log(embedding.slice(0, 20));
   },
-  retryActionsByDefault: false,
-  defaultRetryBehavior: {
-    maxAttempts: 5,
-    initialBackoffMs: 10,
-    base: 2,
+  workpoolOptions: {
+    retryActionsByDefault: false,
+    defaultRetryBehavior: {
+      maxAttempts: 5,
+      initialBackoffMs: 10,
+      base: 2,
+    },
   },
 });
 

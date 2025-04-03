@@ -2,18 +2,7 @@ import { WorkId } from "@convex-dev/workpool";
 import { Expand, FunctionReference } from "convex/server";
 import { GenericId, Infer, v } from "convex/values";
 
-export type Result<T> =
-  | { type: "success"; result: T; resultSize: number }
-  | { type: "error"; error: string };
-
 export type WorkflowId = string & { __isWorkflowId: true };
-
-export const functionType = v.union(
-  v.object({ type: v.literal("query") }),
-  v.object({ type: v.literal("mutation") }),
-  v.object({ type: v.literal("action") }),
-);
-export type FunctionType = Infer<typeof functionType>;
 
 export type UseApi<API> = Expand<{
   [mod in keyof API]: API[mod] extends FunctionReference<

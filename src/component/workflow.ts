@@ -1,38 +1,33 @@
+import { vResultValidator } from "@convex-dev/workpool";
+import { assert } from "convex-helpers";
 import { FunctionHandle } from "convex/server";
 import { v } from "convex/values";
-import { mutation, query, QueryCtx } from "./_generated/server.js";
-import { getWorkflow } from "./model.js";
-import {
-  workflowDocument,
-  Workflow,
-  journalDocument,
-  STEP_TYPES,
-  JournalEntry,
-  outcome,
-} from "./schema.js";
-import { createDefaultLogger, getDefaultLogger } from "./utils.js";
-import { logLevel } from "./logging.js";
-import { assert } from "convex-helpers";
 import { Id } from "./_generated/dataModel.js";
+import { mutation, MutationCtx, query, QueryCtx } from "./_generated/server.js";
+import { createLogger, Logger, logLevel } from "./logging.js";
+import { getWorkflow } from "./model.js";
+import { getWorkpool, workpoolOptions } from "./pool.js";
+import { journalDocument, JournalEntry, workflowDocument } from "./schema.js";
+import { getDefaultLogger, updateConfig } from "./utils.js";
 
 export const create = mutation({
   args: {
     workflowName: v.string(),
     workflowHandle: v.string(),
     workflowArgs: v.any(),
+    maxParallelism: v.optional(v.number()),
     // TODO: ttl
     // TODO: onComplete hook
     // TODO: onComplete context
-    logLevel: v.optional(logLevel),
   },
   returns: v.string(),
   handler: async (ctx, args) => {
     const now = Date.now();
-    const console = await createDefaultLogger(ctx, args.logLevel);
+    const console = await getDefaultLogger(ctx);
+    await updateMaxParallelism(ctx, console, args.maxParallelism);
     const workflowId = await ctx.db.insert("workflows", {
       name: args.workflowName,
       startedAt: now,
-      logLevel: args.logLevel,
       workflowHandle: args.workflowHandle,
       args: args.workflowArgs,
       state: { type: "running" },
@@ -73,18 +68,13 @@ export async function getStatusHandler(
   const console = await getDefaultLogger(ctx);
 
   const result: JournalEntry[] = [];
-  for (const stepType of STEP_TYPES) {
-    const inProgressEntries = await ctx.db
-      .query("workflowJournal")
-      .withIndex("inProgress", (q) =>
-        q
-          .eq("step.type", stepType)
-          .eq("step.inProgress", true)
-          .eq("workflowId", args.workflowId),
-      )
-      .collect();
-    result.push(...inProgressEntries);
-  }
+  const inProgressEntries = await ctx.db
+    .query("steps")
+    .withIndex("inProgress", (q) =>
+      q.eq("step.inProgress", true).eq("workflowId", args.workflowId),
+    )
+    .collect();
+  result.push(...inProgressEntries);
   console.debug(`${args.workflowId} blocked by`, result);
   return { workflow, inProgress: result, logLevel: console.logLevel };
 }
@@ -95,9 +85,18 @@ export const cancel = mutation({
   },
   returns: v.null(),
   handler: async (ctx, { workflowId }) => {
-    const workflow = await ctx.db.get(workflowId);
-    assert(workflow, `Workflow not found: ${workflowId}`);
-    const console = await getDefaultLogger(ctx);
+    const { workflow, inProgress, logLevel } = await getStatusHandler(ctx, {
+      workflowId,
+    });
+    const console = createLogger(logLevel);
+    if (inProgress.length > 0) {
+      const workpool = await getWorkpool(ctx, {});
+      for (const step of inProgress) {
+        if (step.step.workId) {
+          await workpool.cancel(ctx, step.step.workId);
+        }
+      }
+    }
     assert(workflow.state.type === "running", `Not running: ${workflowId}`);
     workflow.state = { type: "canceled", canceledAt: Date.now() };
     workflow.generationNumber += 1;
@@ -112,7 +111,7 @@ export const complete = mutation({
   args: {
     workflowId: v.id("workflows"),
     generationNumber: v.number(),
-    outcome,
+    runResult: vResultValidator,
     now: v.number(),
   },
   returns: v.null(),
@@ -129,7 +128,7 @@ export const complete = mutation({
     workflow.state = {
       type: "completed",
       completedAt: args.now,
-      outcome: args.outcome,
+      runResult: args.runResult,
     };
     // TODO: Call onComplete hook
     // TODO: delete everything unless ttl is set
@@ -162,7 +161,7 @@ export const cleanup = mutation({
     logger.debug(`Cleaning up workflow ${workflowId}`, workflow);
     await ctx.db.delete(workflowId);
     const journalEntries = await ctx.db
-      .query("workflowJournal")
+      .query("steps")
       .withIndex("workflow", (q) => q.eq("workflowId", workflowId))
       .collect();
     for (const journalEntry of journalEntries) {
@@ -173,16 +172,21 @@ export const cleanup = mutation({
   },
 });
 
-export const sleep = mutation({
-  args: {
-    journalId: v.string(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const console = await getDefaultLogger(ctx);
-    console.debug(`Sleep over for ${args.journalId}`);
-  },
-});
+async function updateMaxParallelism(
+  ctx: MutationCtx,
+  console: Logger,
+  maxParallelism: number | undefined,
+) {
+  const config = await ctx.db.query("config").first();
+  if (config) {
+    if (maxParallelism && maxParallelism !== config.maxParallelism) {
+      console.warn("Updating max parallelism to", maxParallelism);
+      await ctx.db.patch(config._id, { maxParallelism });
+    }
+  } else {
+    await ctx.db.insert("config", { maxParallelism });
+  }
+}
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const console = "THIS IS A REMINDER TO USE getDefaultLogger";

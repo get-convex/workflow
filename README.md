@@ -47,7 +47,7 @@ Open a [GitHub issue](https://github.com/get-convex/workflow/issues) with any fe
 First, add `@convex-dev/workflow` to your Convex project:
 
 ```sh
-npm install @convex-dev/workflow @convex-dev/workpool
+npm install @convex-dev/workflow
 ```
 
 Then, install the component within your `convex/convex.config.ts` file:
@@ -55,12 +55,10 @@ Then, install the component within your `convex/convex.config.ts` file:
 ```ts
 // convex/convex.config.ts
 import workflow from "@convex-dev/workflow/convex.config";
-import workpool from "@convex-dev/workpool/convex.config";
 import { defineApp } from "convex/server";
 
 const app = defineApp();
 app.use(workflow);
-app.use(workpool);
 export default app;
 ```
 
@@ -71,10 +69,8 @@ to the installed component:
 // convex/index.ts
 import { WorkflowManager } from "@convex-dev/workflow";
 import { components } from "./_generated/api";
-import { Workpool } from "@convex-dev/workpool";
 
-const workpool = new Workpool(components.workpool);
-export const workflow = new WorkflowManager(components.workflow, { workpool });
+export const workflow = new WorkflowManager(components.workflow);
 ```
 
 ## Usage
@@ -139,24 +135,41 @@ export const kickoffWorkflow = mutation({
 ### Specifying retry behavior
 
 Sometimes actions fail due to transient errors, whether it was an unreliable
-third-party API or a server restart. Worflow uses Workpool, which support
-running actions with retries (using exponential backoff & jitter 😎).
+third-party API or a server restart. You can have the workflow automatically
+retry actions using best practices (exponential backoff & jitter).
+By default there are no retries, and the workflow will fail.
 
-You can configure default retry behavior for all actions via the workpool, and
-also specify a custom retry behavior per-step.
+You can specify default retry behavior for all workflows on the WorkflowManager,
+or override it on a per-workflow basis.
+
+You can also specify a custom retry behavior per-step, to opt-out of retries
+for actions that may want at-most-once semantics.
+
+Workpool options:
+
+If you specify any of these, it will override the
+[DEFAULT_RETRY_BEHAVIOR](./src/component/pool.ts).
+
+- `defaultRetryBehavior`: The default retry behavior for all workflows.
+  - `maxAttempts`: The maximum number of attempts to retry an action.
+  - `initialBackoffMs`: The initial backoff time in milliseconds.
+  - `base`: The base multiplier for the backoff. Default is 2.
+- `retryActionsByDefault`: Whether to retry actions, by default is false.
+  - If you specify a retry behavior at the step level, it will always retry.
+
+At the step level, you can also specify `true` or `false` to disable or use
+the default policy.
 
 ```ts
-const workpool = new Workpool(components.workpool, {
-  // Optionally set the default retry behavior for all actions
+const workflow = new WorkflowManager(components.workflow, {
   defaultRetryBehavior: {
     maxAttempts: 3,
     initialBackoffMs: 100,
     base: 2,
   },
-  // Optionally set whether to retry actions by default. false if not specified.
-  retryActionsByDefault: false,
+  // If specified, this sets the defaults, overridden per-workflow or per-step.
+  workpoolOptions: { ... }
 });
-const workflow = new WorkflowManager(components.workflow, { workpool });
 
 export const exampleWorkflow = workflow.define({
   args: { name: v.string() },
@@ -169,21 +182,27 @@ export const exampleWorkflow = workflow.define({
     await step.runAction(internal.example.myAction, args, { retry: false });
     // Custom retry behavior will be used
     await step.runAction(internal.example.myAction, args, {
-      retry: {
-        maxAttempts: 2,
-        initialBackoffMs: 100,
-        base: 2,
-      },
+      retry: { maxAttempts: 2, initialBackoffMs: 100, base: 2 },
     });
   },
-  // If specified, this will override the workpool's default
-  defaultRetryBehavior: {
-    maxAttempts: 5,
-    initialBackoffMs: 1000,
-    base: 2,
+  // If specified, this will override the workflow manager's default
+  workpoolOptions: { ... },
+});
+```
+
+### Specifying how many workflows can run in parallel
+
+You can specify how many workflows can run in parallel by setting the `maxParallelism`
+workpool option. This defaults to 50.
+
+```ts
+const workflow = new WorkflowManager(components.workflow, {
+  workpoolOptions: {
+    // You must only set this to one value per components.xyz!
+    // You can set different values if you "use" multiple different components
+    // in convex.config.ts.
+    maxParallelism: 10,
   },
-  // If specified, this will override the workpool's default
-  retryActionsByDefault: true,
 });
 ```
 

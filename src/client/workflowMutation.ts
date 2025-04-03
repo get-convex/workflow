@@ -1,23 +1,18 @@
-import { WorkId, Workpool } from "@convex-dev/workpool";
 import { BaseChannel } from "async-channel";
 import { assert } from "convex-helpers";
 import { validate } from "convex-helpers/validators";
-import {
-  FunctionHandle,
-  internalMutationGeneric,
-  RegisteredMutation,
-} from "convex/server";
+import { internalMutationGeneric, RegisteredMutation } from "convex/server";
 import { ObjectType, PropertyValidators, v } from "convex/values";
 import { api } from "../component/_generated/api.js";
 import { createLogger } from "../component/logging.js";
-import type { OnComplete, OnCompleteContext } from "../component/pool.js";
 import { JournalEntry } from "../component/schema.js";
-import { OpaqueIds, Result, UseApi } from "../types.js";
+import { UseApi } from "../types.js";
 import { setupEnvironment } from "./environment.js";
 import { WorkflowDefinition } from "./index.js";
 import { StepExecutor, StepRequest, WorkerResult } from "./step.js";
 import { StepContext } from "./stepContext.js";
 import { checkArgs } from "./validator.js";
+import { RunResult } from "@convex-dev/workpool";
 
 const workflowArgs = v.object({
   workflowId: v.id("workflows"),
@@ -32,9 +27,7 @@ const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke
 export function workflowMutation<ArgsValidator extends PropertyValidators>(
   component: UseApi<typeof api>,
   registered: WorkflowDefinition<ArgsValidator>,
-  workpool: Workpool,
 ): RegisteredMutation<"internal", ObjectType<ArgsValidator>, null> {
-  const onComplete = component.pool.onComplete as OnComplete;
   return internalMutationGeneric({
     returns: v.null(),
     handler: async (ctx, args) => {
@@ -50,7 +43,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         await ctx.runMutation(component.workflow.complete, {
           workflowId,
           generationNumber,
-          outcome: { type: "error", error: "Failed to load journal" },
+          runResult: { kind: "failed", error: "Failed to load journal" },
           now: Date.now(),
         });
         return;
@@ -67,7 +60,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         console.log(
           `Workflow ${workflowId} blocked by ` +
             inProgress
-              .map((entry) => `${entry._id}: ${entry.step.type}`)
+              .map((entry) => `${entry.step.name} (${entry._id})`)
               .join(", "),
         );
         return;
@@ -89,18 +82,19 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         journalEntries as JournalEntry[],
         channel,
         originalEnv,
+        registered.workpoolOptions,
       );
 
       const handlerWorker = async (): Promise<WorkerResult> => {
-        let outcome: Result<null>;
+        let runResult: RunResult;
         try {
           checkArgs(workflow.args, registered.args);
           await registered.handler(step, workflow.args);
-          outcome = { type: "success", result: null, resultSize: 0 };
+          runResult = { kind: "success", returnValue: null };
         } catch (error) {
-          outcome = { type: "error", error: (error as Error).message };
+          runResult = { kind: "failed", error: (error as Error).message };
         }
-        return { type: "handlerDone", outcome };
+        return { type: "handlerDone", runResult };
       };
       const executorWorker = async (): Promise<WorkerResult> => {
         return await executor.run();
@@ -111,44 +105,14 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
           await ctx.runMutation(component.workflow.complete, {
             workflowId,
             generationNumber,
-            outcome: result.outcome,
+            runResult: result.runResult,
             now: originalEnv.Date.now(),
           });
           break;
         }
         case "executorBlocked": {
-          const { _id, step } = result.entry;
-          switch (step.type) {
-            case "function": {
-              const retry =
-                result.retry === true
-                  ? registered.defaultRetryBehavior ?? true
-                  : result.retry ??
-                    (registered.retryActionsByDefault
-                      ? registered.defaultRetryBehavior
-                      : undefined);
-              await ctx.runMutation(component.functions.start, {
-                name: result.name,
-                workflowId,
-                generationNumber,
-                journalId: _id,
-                functionType: step.functionType,
-                handle: step.handle,
-                args: step.args,
-                retry,
-              });
-              break;
-            }
-            case "sleep": {
-              await ctx.runMutation(component.sleep.start, {
-                workflowId,
-                generationNumber,
-                journalId: _id,
-                durationMs: step.durationMs,
-              });
-              break;
-            }
-          }
+          // Nothing to do, we already started steps in the StepExecutor.
+          break;
         }
       }
     },

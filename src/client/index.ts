@@ -3,7 +3,6 @@ import {
   FunctionArgs,
   FunctionReference,
   FunctionReturnType,
-  GenericActionCtx,
   GenericDataModel,
   GenericMutationCtx,
   GenericQueryCtx,
@@ -14,37 +13,57 @@ import { ObjectType, PropertyValidators } from "convex/values";
 import { api } from "../component/_generated/api.js";
 import { OpaqueIds, UseApi, WorkflowId } from "../types.js";
 import { workflowMutation } from "./workflowMutation.js";
-import { LogLevel } from "../component/logging.js";
-import { RetryBehavior, Workpool } from "@convex-dev/workpool";
+import {
+  NameOption,
+  RetryBehavior,
+  RetryOption,
+  SchedulerOptions,
+  WorkpoolOptions,
+  WorkpoolRetryOptions,
+} from "@convex-dev/workpool";
 import { Step } from "../component/schema.js";
 
 export type { WorkflowId };
 
-export type WorkflowStep = Pick<
-  GenericActionCtx<GenericDataModel>,
-  "runQuery" | "runMutation"
-> & {
+export type WorkflowStep = {
+  /**
+   * Run a query with the given name and arguments.
+   *
+   * @param query - The query to run, like `internal.index.exampleQuery`.
+   * @param args - The arguments to the query function.
+   * @param opts - Options for scheduling and naming the query.
+   */
+  runQuery<Query extends FunctionReference<"query", any>>(
+    query: Query,
+    args: FunctionArgs<Query>,
+    opts?: NameOption & SchedulerOptions,
+  ): Promise<FunctionReturnType<Query>>;
+
+  /**
+   * Run a mutation with the given name and arguments.
+   *
+   * @param mutation - The mutation to run, like `internal.index.exampleMutation`.
+   * @param args - The arguments to the mutation function.
+   * @param opts - Options for scheduling and naming the mutation.
+   */
+  runMutation<Mutation extends FunctionReference<"mutation", any>>(
+    mutation: Mutation,
+    args: FunctionArgs<Mutation>,
+    opts?: NameOption & SchedulerOptions,
+  ): Promise<FunctionReturnType<Mutation>>;
+
   /**
    * Run an action with the given name and arguments.
    *
    * @param action - The action to run, like `internal.index.exampleAction`.
    * @param args - The arguments to the action function.
-   * @param opts - Override the default retry behavior for this action.
+   * @param opts - Options for retrying, scheduling and naming the action.
    */
   runAction<Action extends FunctionReference<"action", any>>(
     action: Action,
     args: FunctionArgs<Action>,
-    opts?: {
-      retry?: RetryBehavior | boolean | undefined;
-    },
+    opts?: RetryOption,
   ): Promise<FunctionReturnType<Action>>;
-  /**
-   * Sleep for a given number of milliseconds. It's totally fine for this to be
-   * very long (e.g. on the order of months).
-   *
-   * @param ms - The number of milliseconds to sleep.
-   */
-  sleep(ms: number): Promise<void>;
 };
 
 export type WorkflowDefinition<ArgsValidator extends PropertyValidators> = {
@@ -53,8 +72,7 @@ export type WorkflowDefinition<ArgsValidator extends PropertyValidators> = {
     step: WorkflowStep,
     args: ObjectType<ArgsValidator>,
   ) => Promise<void>;
-  defaultRetryBehavior?: RetryBehavior;
-  retryActionsByDefault?: boolean;
+  workpoolOptions?: WorkpoolRetryOptions;
 };
 
 export type WorkflowStatus =
@@ -66,28 +84,10 @@ export type WorkflowStatus =
 export class WorkflowManager {
   constructor(
     private component: UseApi<typeof api>,
-    private options: {
-      workpool: Workpool;
-      logLevel?: LogLevel;
+    public options?: {
+      workpoolOptions: WorkpoolOptions;
     },
-  ) {
-    if (process.env.WORKFLOW_LOG_LEVEL) {
-      if (
-        !["DEBUG", "INFO", "WARN", "ERROR"].includes(
-          process.env.WORKFLOW_LOG_LEVEL,
-        )
-      ) {
-        console.warn(
-          `Invalid ENV log level (${process.env.WORKFLOW_LOG_LEVEL}), ignoring`,
-        );
-      } else {
-        this.options = {
-          ...this.options,
-          logLevel: process.env.WORKFLOW_LOG_LEVEL as LogLevel,
-        };
-      }
-    }
-  }
+  ) {}
 
   /**
    * Define a new workflow.
@@ -98,7 +98,8 @@ export class WorkflowManager {
   define<ArgsValidator extends PropertyValidators>(
     workflow: WorkflowDefinition<ArgsValidator>,
   ): RegisteredMutation<"internal", ObjectType<ArgsValidator>, null> {
-    return workflowMutation(this.component, workflow, this.options.workpool);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return workflowMutation(this.component, workflow);
   }
 
   /**
@@ -119,7 +120,7 @@ export class WorkflowManager {
       workflowName: getFunctionName(workflow),
       workflowHandle: handle,
       workflowArgs: args,
-      logLevel: this.options?.logLevel,
+      maxParallelism: this.options?.workpoolOptions?.maxParallelism,
     });
     return workflowId as unknown as WorkflowId;
   }
@@ -146,10 +147,12 @@ export class WorkflowManager {
       case "canceled":
         return { type: "canceled" };
       case "completed":
-        if (workflow.state.outcome.type === "success") {
+        if (workflow.state.runResult.kind === "success") {
           return { type: "completed" };
+        } else if (workflow.state.runResult.kind === "failed") {
+          return { type: "failed", error: workflow.state.runResult.error };
         } else {
-          return { type: "failed", error: workflow.state.outcome.error };
+          return { type: "canceled" };
         }
     }
   }

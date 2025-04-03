@@ -1,39 +1,34 @@
 import {
   resultValidator,
+  vResultValidator,
+  RunResult,
+  vRetryBehavior,
   vWorkIdValidator,
   workIdValidator,
 } from "@convex-dev/workpool";
 import { defineSchema, defineTable } from "convex/server";
 import { convexToJson, Infer, v, Value } from "convex/values";
 import { logLevel } from "./logging.js";
+import { literals } from "convex-helpers/validators";
+import { workpoolOptions } from "./pool.js";
 
 export function valueSize(value: Value): number {
   return JSON.stringify(convexToJson(value)).length;
 }
 
-export const outcome = v.union(
-  v.object({
-    type: v.literal("success"),
-    resultSize: v.number(),
-    result: v.any(),
-  }),
-  v.object({
-    type: v.literal("error"),
-    error: v.string(),
-  }),
-);
-export type Outcome = Infer<typeof outcome>;
-
-function outcomeSize(outcome: Outcome): number {
+export function resultSize(result: RunResult): number {
   let size = 0;
-  size += outcome.type.length;
-  switch (outcome.type) {
+  size += result.kind.length;
+  switch (result.kind) {
     case "success": {
-      size += 8 + outcome.resultSize;
+      size += 8 + valueSize(result.returnValue);
       break;
     }
-    case "error": {
-      size += outcome.error.length;
+    case "failed": {
+      size += result.error.length;
+      break;
+    }
+    case "canceled": {
       break;
     }
   }
@@ -56,7 +51,7 @@ const workflowObject = {
     v.object({
       type: v.literal("completed"),
       completedAt: v.number(),
-      outcome,
+      runResult: vResultValidator,
     }),
     v.object({
       type: v.literal("canceled"),
@@ -75,71 +70,37 @@ export const workflowDocument = v.object({
 });
 export type Workflow = Infer<typeof workflowDocument>;
 
-export const STEP_TYPES = ["function", "sleep"] as const;
+export const step = v.object({
+  name: v.string(),
+  inProgress: v.boolean(),
+  workId: v.optional(vWorkIdValidator),
+  functionType: literals("query", "mutation", "action"),
+  handle: v.string(),
+  argsSize: v.number(),
+  args: v.any(),
+  runResult: v.optional(vResultValidator),
 
-export const step = v.union(
-  v.object({
-    type: v.literal("function"),
-    inProgress: v.boolean(),
-    workId: v.optional(vWorkIdValidator),
-    functionType: v.union(
-      v.object({ type: v.literal("query") }),
-      v.object({ type: v.literal("mutation") }),
-      v.object({
-        type: v.literal("action"),
-        // DEPRECATED: use workId instead
-        recoveryId: v.optional(v.string()),
-      }),
-    ),
-    handle: v.string(),
-    argsSize: v.number(),
-    args: v.any(),
-    outcome: v.optional(outcome),
-
-    startedAt: v.number(),
-    completedAt: v.optional(v.number()),
-  }),
-  v.object({
-    type: v.literal("sleep"),
-    inProgress: v.boolean(),
-    workId: v.optional(vWorkIdValidator),
-
-    durationMs: v.number(),
-    deadline: v.number(),
-  }),
-);
+  startedAt: v.number(),
+  completedAt: v.optional(v.number()),
+});
 export type Step = Infer<typeof step>;
 
 function stepSize(step: Step): number {
   let size = 0;
-  size += step.type.length;
+  size += step.name.length;
   size += 1; // inProgress
   if (step.workId) {
     size += step.workId.length;
   }
-  switch (step.type) {
-    case "function": {
-      size += step.functionType.type.length;
-      if (step.functionType.type === "action") {
-        if (step.functionType.recoveryId) {
-          size += step.functionType.recoveryId.length;
-        }
-      }
-      size += step.handle.length;
-      size += 8 + step.argsSize;
-      if (step.outcome) {
-        size += outcomeSize(step.outcome);
-      }
-      size += 8; // startedAt
-      size += 8; // completedAt
-      break;
-    }
-    case "sleep": {
-      size += 8; // durationMs
-      size += 8; // deadline
-      break;
-    }
+  size += step.functionType.length;
+  size += step.handle.length;
+  // TODO: start time, for scheduled steps
+  size += 8 + step.argsSize;
+  if (step.runResult) {
+    size += resultSize(step.runResult);
   }
+  size += 8; // startedAt
+  size += 8; // completedAt
   return size;
 }
 
@@ -168,12 +129,13 @@ export function journalEntrySize(entry: JournalEntry): number {
 
 export default defineSchema({
   config: defineTable({
-    logLevel,
+    logLevel: v.optional(logLevel),
+    maxParallelism: v.optional(v.number()),
   }),
   workflows: defineTable(workflowObject),
-  workflowJournal: defineTable(journalObject)
+  steps: defineTable(journalObject)
     .index("workflow", ["workflowId", "stepNumber"])
-    .index("inProgress", ["step.type", "step.inProgress", "workflowId"]),
+    .index("inProgress", ["step.inProgress", "workflowId"]),
   onCompleteFailures: defineTable({
     workId: workIdValidator,
     result: resultValidator,

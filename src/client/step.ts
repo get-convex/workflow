@@ -1,5 +1,9 @@
 import { BaseChannel } from "async-channel";
-import { GenericMutationCtx, GenericDataModel } from "convex/server";
+import {
+  GenericMutationCtx,
+  GenericDataModel,
+  FunctionType,
+} from "convex/server";
 import { convexToJson } from "convex/values";
 import {
   JournalEntry,
@@ -8,8 +12,14 @@ import {
   valueSize,
 } from "../component/schema.js";
 import { api } from "../component/_generated/api.js";
-import { FunctionType, Result, UseApi } from "../types.js";
-import { RetryBehavior } from "@convex-dev/workpool";
+import { UseApi } from "../types.js";
+import {
+  RetryBehavior,
+  WorkpoolOptions,
+  RunResult,
+  SchedulerOptions,
+} from "@convex-dev/workpool";
+import { startStep } from "../component/journal.js";
 
 export type OriginalEnv = {
   Date: {
@@ -18,41 +28,25 @@ export type OriginalEnv = {
 };
 
 export type WorkerResult =
-  | { type: "handlerDone"; outcome: Result<null> }
-  | {
-      type: "executorBlocked";
-      entry: JournalEntry;
-      name: string;
-      retry: RetryBehavior | boolean | undefined;
-    };
+  | { type: "handlerDone"; runResult: RunResult }
+  | { type: "executorBlocked" };
 
-export type StepRequest =
-  | {
-      type: "function";
-      name: string;
-      functionType: FunctionType;
-      handle: string;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      args: any;
-      retry: RetryBehavior | boolean | undefined;
+export type StepRequest = {
+  name: string;
+  functionType: FunctionType;
+  handle: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  args: any;
+  retry: RetryBehavior | boolean | undefined;
+  schedulerOptions: SchedulerOptions;
 
-      resolve: (result: unknown) => void;
-      reject: (error: unknown) => void;
-    }
-  | {
-      type: "sleep";
-      durationMs: number;
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      resolve: (result: any) => void;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      reject: (error: any) => void;
-    };
+  resolve: (result: unknown) => void;
+  reject: (error: unknown) => void;
+};
 
 const MAX_JOURNAL_SIZE = 1 << 20;
 
 export class StepExecutor {
-  private nextStepNumber: number;
   private journalEntrySize: number;
 
   constructor(
@@ -63,8 +57,8 @@ export class StepExecutor {
     private journalEntries: Array<JournalEntry>,
     private receiver: BaseChannel<StepRequest>,
     private originalEnv: OriginalEnv,
+    private workpoolOptions: WorkpoolOptions | undefined,
   ) {
-    this.nextStepNumber = journalEntries.length;
     this.journalEntrySize = journalEntries.reduce(
       (size, entry) => size + journalEntrySize(entry),
       0,
@@ -74,22 +68,23 @@ export class StepExecutor {
     while (true) {
       const message = await this.receiver.get();
       const entry = this.journalEntries.shift();
-      // TODO: run query inline and complete the result immediately
+      // why not to run queries inline: they fetch too much data internally
       if (entry) {
         this.completeMessage(message, entry);
         continue;
       }
+      // TODO: is this too late?
       if (this.journalEntrySize > MAX_JOURNAL_SIZE) {
         message.reject(journalSizeError(this.journalEntrySize));
         continue;
       }
-      const newEntry = await this.pushJournalEntry(message);
+      // TODO: fetch all journal entries and start them
+      /*
+      so, once we decide that we’re going to return executorBlocked, we look at the number of buffered entries in the channel (https://kyle1320.github.io/async-channel/classes/channel.html#buffersize), drain those with await this.receiver.get() (which we know won’t block)
+      */
+      await this.startStep(message);
       return {
         type: "executorBlocked",
-        entry: newEntry,
-        ...(message.type === "function"
-          ? { name: message.name, retry: message.retry }
-          : { name: "sleep", retry: undefined }),
       };
     }
   }
@@ -100,85 +95,53 @@ export class StepExecutor {
         `Assertion failed: not blocked but have in-progress journal entry`,
       );
     }
-    switch (message.type) {
-      case "function": {
-        if (entry.step.type !== "function") {
-          throw new Error(
-            `Journal entry mismatch: ${message.type} !== ${entry.step.type}`,
-          );
-        }
-        const stepArgsJson = JSON.stringify(convexToJson(entry.step.args));
-        const messageArgsJson = JSON.stringify(convexToJson(message.args));
-        if (stepArgsJson !== messageArgsJson) {
-          throw new Error(
-            `Journal entry mismatch: ${entry.step.args} !== ${message.args}`,
-          );
-        }
-        if (entry.step.outcome === undefined) {
-          throw new Error(
-            `Assertion failed: no outcome for completed function call`,
-          );
-        }
-        if (entry.step.outcome.type === "success") {
-          message.resolve(entry.step.outcome.result);
-        } else {
-          message.reject(new Error(entry.step.outcome.error));
-        }
-        return;
-      }
-      case "sleep": {
-        if (entry.step.type !== "sleep") {
-          throw new Error(
-            `Journal entry mismatch: ${message.type} !== ${entry.step.type}`,
-          );
-        }
-        if (entry.step.durationMs !== message.durationMs) {
-          throw new Error(
-            `Journal entry mismatch: ${entry.step.durationMs} !== ${message.durationMs}`,
-          );
-        }
-        message.resolve(undefined);
-        return;
-      }
+    const stepArgsJson = JSON.stringify(convexToJson(entry.step.args));
+    const messageArgsJson = JSON.stringify(convexToJson(message.args));
+    if (stepArgsJson !== messageArgsJson) {
+      throw new Error(
+        `Journal entry mismatch: ${entry.step.args} !== ${message.args}`,
+      );
+    }
+    if (entry.step.runResult === undefined) {
+      throw new Error(
+        `Assertion failed: no outcome for completed function call`,
+      );
+    }
+    switch (entry.step.runResult.kind) {
+      case "success":
+        message.resolve(entry.step.runResult.returnValue);
+        break;
+      case "failed":
+        message.reject(new Error(entry.step.runResult.error));
+        break;
+      case "canceled":
+        message.reject(new Error("Canceled"));
+        break;
     }
   }
 
-  async pushJournalEntry(message: StepRequest): Promise<JournalEntry> {
-    const stepNumber = this.nextStepNumber;
-    this.nextStepNumber += 1;
-    let step: Step;
-    switch (message.type) {
-      case "function": {
-        step = {
-          type: "function",
-          inProgress: true,
-          functionType: message.functionType,
-          handle: message.handle,
-          args: message.args,
-          argsSize: valueSize(message.args),
-          outcome: undefined,
-          startedAt: this.originalEnv.Date.now(),
-          completedAt: undefined,
-        };
-        break;
-      }
-      case "sleep": {
-        step = {
-          type: "sleep",
-          inProgress: true,
-          durationMs: message.durationMs,
-          deadline: this.originalEnv.Date.now() + message.durationMs,
-        };
-        break;
-      }
-    }
+  async startStep(message: StepRequest): Promise<JournalEntry> {
+    const step = {
+      inProgress: true,
+      name: message.name,
+      functionType: message.functionType,
+      handle: message.handle,
+      args: message.args,
+      argsSize: valueSize(message.args),
+      outcome: undefined,
+      startedAt: this.originalEnv.Date.now(),
+      completedAt: undefined,
+    };
+
     const entry = (await this.ctx.runMutation(
-      this.component.journal.pushEntry,
+      this.component.journal.startStep,
       {
         workflowId: this.workflowId,
         generationNumber: this.generationNumber,
-        stepNumber,
         step,
+        name: message.name,
+        retry: message.retry,
+        workpoolOptions: this.workpoolOptions,
       },
     )) as JournalEntry;
     this.journalEntrySize += journalEntrySize(entry);

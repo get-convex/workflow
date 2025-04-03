@@ -17,6 +17,7 @@
     "build:esm": "tsc --project ./esm.json && echo '{\\n  \"type\": \"module\"\\n}' > dist/esm/package.json",
     "build:cjs": "tsc --project ./commonjs.json && echo '{\\n  \"type\": \"commonjs\"\\n}' > dist/commonjs/package.json",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "alpha": "rm -rf dist && npm run build && npm run test && npm version prerelease --preid alpha && npm publish --tag alpha && git push --tags",
     "release": "rm -rf dist && npm run build && npm run test && npm version patch && npm publish && git push --tags",
     "prepare": "npm run build"
@@ -49,7 +50,7 @@
   },
   "peerDependencies": {
     "@convex-dev/workpool": "^0.2.6",
-    "convex": "~1.16.5 || >=1.17.0 <1.25.0"
+    "convex": ">=1.21.0 <1.25.0"
   },
   "dependencies": {
     "async-channel": "^0.2.0"
@@ -65,7 +66,8 @@
     "openai": "^4.54.0",
     "prettier": "3.2.5",
     "typescript": "^5.8.2",
-    "typescript-eslint": "^8.4.0"
+    "typescript-eslint": "^8.4.0",
+    "vitest": "^3.1.1"
   },
   "main": "./dist/commonjs/client/index.js",
   "types": "./dist/commonjs/client/index.d.ts",

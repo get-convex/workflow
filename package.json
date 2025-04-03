@@ -50,7 +50,8 @@
   },
   "peerDependencies": {
     "@convex-dev/workpool": "^0.2.6",
-    "convex": ">=1.21.0 <1.25.0"
+    "convex": ">=1.21.0 <1.25.0",
+    "convex-helpers": "^0.1.77"
   },
   "dependencies": {
     "async-channel": "^0.2.0"

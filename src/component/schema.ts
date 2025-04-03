@@ -1,4 +1,9 @@
-import { vRetryBehavior, vWorkIdValidator } from "@convex-dev/workpool";
+import {
+  resultValidator,
+  vRetryBehavior,
+  vWorkIdValidator,
+  workIdValidator,
+} from "@convex-dev/workpool";
 import { defineSchema, defineTable } from "convex/server";
 import { convexToJson, Infer, v, Value } from "convex/values";
 import { logLevel } from "./logging.js";
@@ -142,7 +147,7 @@ function stepSize(step: Step): number {
 }
 
 const journalObject = {
-  workflowId: v.string(),
+  workflowId: v.id("workflows"),
   stepNumber: v.number(),
   step,
 };
@@ -173,4 +178,9 @@ export default defineSchema({
   workflowJournal: defineTable(journalObject)
     .index("workflow", ["workflowId", "stepNumber"])
     .index("inProgress", ["step.type", "step.inProgress", "workflowId"]),
+  onCompleteFailures: defineTable({
+    workId: workIdValidator,
+    result: resultValidator,
+    context: v.any(),
+  }),
 });

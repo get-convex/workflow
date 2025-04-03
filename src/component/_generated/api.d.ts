@@ -177,40 +177,6 @@ export type Mounts = {
     >;
   };
   workflow: {
-    blockedBy: FunctionReference<
-      "query",
-      "public",
-      { workflowId: string },
-      {
-        _creationTime: number;
-        _id: string;
-        step:
-          | {
-              args: any;
-              argsSize: number;
-              completedAt?: number;
-              functionType:
-                | { type: "query" }
-                | { type: "mutation" }
-                | { recoveryId?: string; type: "action"; workId?: string };
-              handle: string;
-              inProgress: boolean;
-              outcome?:
-                | { result: any; resultSize: number; type: "success" }
-                | { error: string; type: "error" };
-              startedAt: number;
-              type: "function";
-            }
-          | {
-              deadline: number;
-              durationMs: number;
-              inProgress: boolean;
-              type: "sleep";
-            };
-        stepNumber: number;
-        workflowId: string;
-      } | null
-    >;
     cancel: FunctionReference<
       "mutation",
       "public",
@@ -254,35 +220,66 @@ export type Mounts = {
       },
       string
     >;
-    load: FunctionReference<
+    getStatus: FunctionReference<
       "query",
       "public",
       { workflowId: string },
       {
-        _creationTime: number;
-        _id: string;
-        args: any;
-        defaultRetryBehavior?: {
-          base: number;
-          initialBackoffMs: number;
-          maxAttempts: number;
+        inProgress: Array<{
+          _creationTime: number;
+          _id: string;
+          step:
+            | {
+                args: any;
+                argsSize: number;
+                completedAt?: number;
+                functionType:
+                  | { type: "query" }
+                  | { type: "mutation" }
+                  | { recoveryId?: string; type: "action"; workId?: string };
+                handle: string;
+                inProgress: boolean;
+                outcome?:
+                  | { result: any; resultSize: number; type: "success" }
+                  | { error: string; type: "error" };
+                startedAt: number;
+                type: "function";
+              }
+            | {
+                deadline: number;
+                durationMs: number;
+                inProgress: boolean;
+                type: "sleep";
+              };
+          stepNumber: number;
+          workflowId: string;
+        }>;
+        workflow: {
+          _creationTime: number;
+          _id: string;
+          args: any;
+          defaultRetryBehavior?: {
+            base: number;
+            initialBackoffMs: number;
+            maxAttempts: number;
+          };
+          generationNumber: number;
+          logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR";
+          name?: string;
+          retryActionsByDefault?: boolean;
+          startedAt: number;
+          state:
+            | { type: "running" }
+            | {
+                completedAt: number;
+                outcome:
+                  | { result: any; resultSize: number; type: "success" }
+                  | { error: string; type: "error" };
+                type: "completed";
+              }
+            | { canceledAt: number; type: "canceled" };
+          workflowHandle: string;
         };
-        generationNumber: number;
-        logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR";
-        name?: string;
-        retryActionsByDefault?: boolean;
-        startedAt: number;
-        state:
-          | { type: "running" }
-          | {
-              completedAt: number;
-              outcome:
-                | { result: any; resultSize: number; type: "success" }
-                | { error: string; type: "error" };
-              type: "completed";
-            }
-          | { canceledAt: number; type: "canceled" };
-        workflowHandle: string;
       }
     >;
   };

@@ -134,8 +134,11 @@ export const onComplete = internalMutation({
     await ctx.db.replace(journalEntry._id, journalEntry);
     console.debug(`Completed execution of ${journalId}`, journalEntry);
     if (workflow.state.type === "running") {
-      // TODO: scheduler.runAfter(0?
-      await ctx.runMutation(
+      // TODO: Technically this doesn't obey the workpool, but...
+      // it's better than calling it directly, and enqueuing can now happen
+      // in the root component.
+      await ctx.scheduler.runAfter(
+        0,
         workflow.workflowHandle as FunctionHandle<"mutation">,
         {
           workflowId: workflow._id,

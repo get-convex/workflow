@@ -121,7 +121,13 @@ export const startStep = mutation({
         break;
       }
     }
-    logger.debug(`Started step ${stepNumber}`, entry);
+
+    console.event("started", {
+      workflowId: workflow._id,
+      workflowName: workflow.name,
+      stepName: step.name,
+      stepNumber,
+    });
     return entry! as JournalEntry;
   },
 });

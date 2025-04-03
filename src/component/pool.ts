@@ -111,6 +111,14 @@ export const onComplete = internalMutation({
     const workflow = await getWorkflow(ctx, workflowId, generationNumber);
     journalEntry.step.inProgress = false;
     journalEntry.step.completedAt = Date.now();
+    console.event("stepCompleted", {
+      workflowId,
+      workflowName: workflow.name,
+      status: args.result.kind,
+      stepName: journalEntry.step.name,
+      stepNumber: journalEntry.stepNumber,
+      durationMs: journalEntry.step.completedAt - journalEntry.step.startedAt,
+    });
     switch (args.result.kind) {
       case "success":
         journalEntry.step.runResult = {

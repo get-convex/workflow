@@ -5,6 +5,7 @@ export const DEFAULT_LOG_LEVEL: LogLevel = "WARN";
 export type Logger = {
   debug: (...args: unknown[]) => void;
   info: (...args: unknown[]) => void;
+  log: (...args: unknown[]) => void;
   warn: (...args: unknown[]) => void;
   error: (...args: unknown[]) => void;
   time: (label: string) => void;
@@ -23,6 +24,11 @@ export function createLogger(level?: LogLevel): Logger {
     debug: (...args: unknown[]) => {
       if (levelIndex <= 0) {
         console.debug(...args);
+      }
+    },
+    log: (...args: unknown[]) => {
+      if (levelIndex <= 1) {
+        console.info(...args);
       }
     },
     info: (...args: unknown[]) => {

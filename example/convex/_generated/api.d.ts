@@ -10,6 +10,7 @@
 
 import type * as admin from "../admin.js";
 import type * as example from "../example.js";
+import type * as transcription from "../transcription.js";
 
 import type {
   ApiFromModules,
@@ -28,6 +29,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   example: typeof example;
+  transcription: typeof transcription;
 }>;
 declare const fullApiWithMounts: typeof fullApi;
 

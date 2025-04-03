@@ -40,7 +40,6 @@ This component adds durably executed _workflows_ to Convex. Combine Convex queri
 and actions into long-lived workflows, and the system will always fully execute a workflow
 to completion.
 
-This component is currently in beta and may have some rough edges.
 Open a [GitHub issue](https://github.com/get-convex/workflow/issues) with any feedback or bugs you find.
 
 ## Installation
@@ -256,21 +255,21 @@ export const kickoffWorkflow = action({
 
 ## Limitations
 
-Convex workflows is a beta product currently under active development. Here are
-a few limitations to keep in mind:
+Here are a few limitations to keep in mind:
 
 - Steps can only take in and return a total of _1 MiB_ of data within a single
   workflow execution. If you run into journal size limits, you can work around
-  this by storing results within your worker functions and then passing IDs
+  this by storing results in the DB from your step functions and passing IDs
   around within the the workflow.
 - `console.log()` isn't currently captured, so you may see duplicate log lines
-  within your Convex dashboard.
+  within your Convex dashboard if you log within the workflow definition.
 - We currently do not collect backtraces from within function calls from workflows.
 - If you need to use side effects like `fetch`, `Math.random()`, or `Date.now()`,
-  you'll need to define a separate Convex action, perform the side effects there,
-  and then call that action from the workflow with `step.runAction()`.
+  you'll need to do that in a step, not in the workflow definition.
 - If the implementation of the workflow meaningfully changes (steps added,
   removed, or reordered) then it will fail with a determinism violation.
   The implementation should stay stable for the lifetime of active workflows.
+  See [this issue](https://github.com/get-convex/workflow/issues/35) for ideas
+  on how to make this better.
 
 <!-- END: Include on https://convex.dev/components -->

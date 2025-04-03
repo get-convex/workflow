@@ -42,11 +42,19 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         throw new Error(INVALID_WORKFLOW_MESSAGE);
       }
       const { workflowId, generationNumber } = args;
-      const { workflow, inProgress, logLevel } = await ctx.runQuery(
-        component.workflow.getStatus,
-        { workflowId },
-      );
+      const { workflow, inProgress, logLevel, journalEntries, ok } =
+        await ctx.runQuery(component.journal.load, { workflowId });
       const console = createLogger(logLevel);
+      if (!ok) {
+        console.error(`Failed to load journal for ${workflowId}`);
+        await ctx.runMutation(component.workflow.complete, {
+          workflowId,
+          generationNumber,
+          outcome: { type: "error", error: "Failed to load journal" },
+          now: Date.now(),
+        });
+        return;
+      }
       if (workflow.generationNumber !== generationNumber) {
         console.error(`Invalid generation number: ${generationNumber}`);
         return;
@@ -64,9 +72,6 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         );
         return;
       }
-      const journalEntries = (await ctx.runQuery(component.journal.load, {
-        workflowId,
-      })) as JournalEntry[];
       for (const journalEntry of journalEntries) {
         assert(
           !journalEntry.step.inProgress,
@@ -81,7 +86,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         generationNumber,
         ctx,
         component,
-        journalEntries,
+        journalEntries as JournalEntry[],
         channel,
         originalEnv,
       );

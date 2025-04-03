@@ -1,35 +1,49 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server.js";
-import { journalDocument, JournalEntry, step } from "./schema.js";
+import {
+  journalDocument,
+  JournalEntry,
+  step,
+  workflowDocument,
+} from "./schema.js";
 import { getWorkflow } from "./model.js";
-import { createLogger } from "./logging.js";
+import { createLogger, logLevel } from "./logging.js";
 import { vWorkIdValidator } from "@convex-dev/workpool";
 import { assert } from "convex-helpers";
+import { getStatusHandler } from "./workflow.js";
 
 export const load = query({
   args: {
-    workflowId: v.string(),
+    workflowId: v.id("workflows"),
   },
-  returns: v.array(journalDocument),
-  handler: async (ctx, args) => {
-    const workflowId = ctx.db.normalizeId("workflows", args.workflowId);
-    if (!workflowId) {
-      throw new Error(`Invalid workflow ID: ${args.workflowId}`);
-    }
-    const workflow = await ctx.db.get(workflowId);
-    if (!workflow) {
-      throw new Error(`Workflow not found: ${workflowId}`);
-    }
-    const logger = createLogger(workflow.logLevel);
-    if (workflow.state.type != "running") {
-      throw new Error(`Workflow not running: ${workflowId}`);
-    }
-    const entries = await ctx.db
+  returns: v.object({
+    workflow: workflowDocument,
+    inProgress: v.array(journalDocument),
+    journalEntries: v.array(journalDocument),
+    ok: v.boolean(),
+    logLevel,
+  }),
+  handler: async (ctx, { workflowId }) => {
+    const { workflow, inProgress, logLevel } = await getStatusHandler(ctx, {
+      workflowId,
+    });
+    const journalEntries: JournalEntry[] = [];
+    let sizeSoFar = 0;
+    for await (const entry of ctx.db
       .query("workflowJournal")
-      .withIndex("workflow", (q) => q.eq("workflowId", workflowId))
-      .collect();
-    logger.debug(`Loaded ${entries.length} entries for ${workflowId}`);
-    return entries as JournalEntry[];
+      .withIndex("workflow", (q) => q.eq("workflowId", workflowId))) {
+      journalEntries.push(entry);
+      if (entry.step.type === "function") {
+        sizeSoFar += entry.step.argsSize;
+        if (entry.step.outcome?.type === "success") {
+          sizeSoFar += entry.step.outcome.resultSize;
+        }
+      }
+      if (sizeSoFar > 4 * 1024 * 1024) {
+        return { journalEntries, ok: false, workflow, inProgress, logLevel };
+      }
+    }
+    return { journalEntries, ok: true, workflow, inProgress, logLevel };
   },
 });
 

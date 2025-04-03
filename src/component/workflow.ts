@@ -1,9 +1,10 @@
 import { FunctionHandle } from "convex/server";
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server.js";
+import { mutation, query, QueryCtx } from "./_generated/server.js";
 import { getWorkflow } from "./model.js";
 import {
   workflowDocument,
+  Workflow,
   journalDocument,
   STEP_TYPES,
   JournalEntry,
@@ -12,6 +13,7 @@ import {
 import { createDefaultLogger, getDefaultLogger } from "./utils.js";
 import { logLevel } from "./logging.js";
 import { assert } from "convex-helpers";
+import { Id } from "./_generated/dataModel.js";
 
 export const create = mutation({
   args: {
@@ -59,28 +61,33 @@ export const getStatus = query({
     inProgress: v.array(journalDocument),
     logLevel: logLevel,
   }),
-  handler: async (ctx, args) => {
-    const workflow = await ctx.db.get(args.workflowId);
-    assert(workflow, `Workflow not found: ${args.workflowId}`);
-    const console = await getDefaultLogger(ctx);
-
-    const result: JournalEntry[] = [];
-    for (const stepType of STEP_TYPES) {
-      const inProgressEntries = await ctx.db
-        .query("workflowJournal")
-        .withIndex("inProgress", (q) =>
-          q
-            .eq("step.type", stepType)
-            .eq("step.inProgress", true)
-            .eq("workflowId", args.workflowId),
-        )
-        .collect();
-      result.push(...inProgressEntries);
-    }
-    console.debug(`${args.workflowId} blocked by`, result);
-    return { workflow, inProgress: result, logLevel: console.logLevel };
-  },
+  handler: getStatusHandler,
 });
+
+export async function getStatusHandler(
+  ctx: QueryCtx,
+  args: { workflowId: Id<"workflows"> },
+) {
+  const workflow = await ctx.db.get(args.workflowId);
+  assert(workflow, `Workflow not found: ${args.workflowId}`);
+  const console = await getDefaultLogger(ctx);
+
+  const result: JournalEntry[] = [];
+  for (const stepType of STEP_TYPES) {
+    const inProgressEntries = await ctx.db
+      .query("workflowJournal")
+      .withIndex("inProgress", (q) =>
+        q
+          .eq("step.type", stepType)
+          .eq("step.inProgress", true)
+          .eq("workflowId", args.workflowId),
+      )
+      .collect();
+    result.push(...inProgressEntries);
+  }
+  console.debug(`${args.workflowId} blocked by`, result);
+  return { workflow, inProgress: result, logLevel: console.logLevel };
+}
 
 export const cancel = mutation({
   args: {

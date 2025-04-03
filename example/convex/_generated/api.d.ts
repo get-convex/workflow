@@ -97,20 +97,14 @@ export declare const components: {
             _id: string;
             args: any;
             generationNumber: number;
-            logLevel?: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
+            logLevel?: any;
             name?: string;
-            startedAt: number;
-            state:
-              | { type: "running" }
-              | {
-                  completedAt: number;
-                  runResult:
-                    | { kind: "success"; returnValue: any }
-                    | { error: string; kind: "failed" }
-                    | { kind: "canceled" };
-                  type: "completed";
-                }
-              | { canceledAt: number; type: "canceled" };
+            runResult?:
+              | { kind: "success"; returnValue: any }
+              | { error: string; kind: "failed" }
+              | { kind: "canceled" };
+            startedAt?: any;
+            state?: any;
             workflowHandle: string;
           };
         }
@@ -244,20 +238,14 @@ export declare const components: {
             _id: string;
             args: any;
             generationNumber: number;
-            logLevel?: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
+            logLevel?: any;
             name?: string;
-            startedAt: number;
-            state:
-              | { type: "running" }
-              | {
-                  completedAt: number;
-                  runResult:
-                    | { kind: "success"; returnValue: any }
-                    | { error: string; kind: "failed" }
-                    | { kind: "canceled" };
-                  type: "completed";
-                }
-              | { canceledAt: number; type: "canceled" };
+            runResult?:
+              | { kind: "success"; returnValue: any }
+              | { error: string; kind: "failed" }
+              | { kind: "canceled" };
+            startedAt?: any;
+            state?: any;
             workflowHandle: string;
           };
         }

@@ -27,10 +27,8 @@ export const create = mutation({
     await updateMaxParallelism(ctx, console, args.maxParallelism);
     const workflowId = await ctx.db.insert("workflows", {
       name: args.workflowName,
-      startedAt: now,
       workflowHandle: args.workflowHandle,
       args: args.workflowArgs,
-      state: { type: "running" },
       generationNumber: 0,
     });
     console.debug(
@@ -97,8 +95,8 @@ export const cancel = mutation({
         }
       }
     }
-    assert(workflow.state.type === "running", `Not running: ${workflowId}`);
-    workflow.state = { type: "canceled", canceledAt: Date.now() };
+    assert(workflow.runResult === undefined, `Not running: ${workflowId}`);
+    workflow.runResult = { kind: "canceled" };
     workflow.generationNumber += 1;
     console.debug(`Canceled workflow ${workflowId}:`, workflow);
     // TODO: Call onComplete hook
@@ -121,18 +119,20 @@ export const complete = mutation({
       args.workflowId,
       args.generationNumber,
     );
-    const logger = await getDefaultLogger(ctx);
-    if (workflow.state.type !== "running") {
-      throw new Error(`Workflow not running: ${args.workflowId}`);
+    const console = await getDefaultLogger(ctx);
+    if (workflow.runResult) {
+      throw new Error(`Workflow not running: ${workflow}`);
     }
-    workflow.state = {
-      type: "completed",
-      completedAt: args.now,
-      runResult: args.runResult,
-    };
+    workflow.runResult = args.runResult;
+    console.event("completed", {
+      workflowId: workflow._id,
+      name: workflow.name,
+      status: workflow.runResult.kind,
+      overallDurationMs: Date.now() - workflow._creationTime,
+    });
     // TODO: Call onComplete hook
     // TODO: delete everything unless ttl is set
-    logger.debug(`Completed workflow ${workflow._id}:`, workflow);
+    console.debug(`Completed workflow ${workflow._id}:`, workflow);
     await ctx.db.replace(workflow._id, workflow);
   },
 });
@@ -152,7 +152,7 @@ export const cleanup = mutation({
       return false;
     }
     const logger = await getDefaultLogger(ctx);
-    if (workflow.state.type !== "completed") {
+    if (workflow.runResult?.kind !== "success") {
       logger.debug(
         `Can't clean up workflow ${workflowId} since it hasn't completed.`,
       );

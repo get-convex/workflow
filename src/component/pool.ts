@@ -66,6 +66,7 @@ export async function getWorkpool(
 export const onCompleteContext = v.object({
   generationNumber: v.number(),
   stepId: v.id("steps"),
+  workpoolOptions: v.optional(workpoolOptions),
 });
 
 export type OnCompleteContext = Infer<typeof onCompleteContext>;
@@ -99,13 +100,9 @@ export const onComplete = internalMutation({
         : undefined;
     if (error) {
       await ctx.db.patch(workflowId, {
-        state: {
-          type: "completed",
-          completedAt: Date.now(),
-          runResult: {
-            kind: "failed",
-            error,
-          },
+        runResult: {
+          kind: "failed",
+          error,
         },
       });
       return;
@@ -135,17 +132,15 @@ export const onComplete = internalMutation({
     }
     await ctx.db.replace(journalEntry._id, journalEntry);
     console.debug(`Completed execution of ${stepId}`, journalEntry);
-    if (workflow.state.type === "running") {
+    if (workflow.runResult === undefined) {
       // TODO: Technically this doesn't obey the workpool, but...
       // it's better than calling it directly, and enqueuing can now happen
       // in the root component.
-      await ctx.scheduler.runAfter(
-        0,
+      const workpool = await getWorkpool(ctx, args.context.workpoolOptions);
+      await workpool.enqueueMutation(
+        ctx,
         workflow.workflowHandle as FunctionHandle<"mutation">,
-        {
-          workflowId: workflow._id,
-          generationNumber,
-        },
+        { workflowId: workflow._id, generationNumber },
       );
     } else {
       console.error(

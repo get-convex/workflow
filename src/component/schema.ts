@@ -9,7 +9,7 @@ import {
 import { defineSchema, defineTable } from "convex/server";
 import { convexToJson, Infer, v, Value } from "convex/values";
 import { logLevel } from "./logging.js";
-import { literals } from "convex-helpers/validators";
+import { deprecated, literals } from "convex-helpers/validators";
 import { workpoolOptions } from "./pool.js";
 
 export function valueSize(value: Value): number {
@@ -36,28 +36,15 @@ export function resultSize(result: RunResult): number {
 }
 
 const workflowObject = {
-  startedAt: v.number(),
-  // DEPRECATED: using global config instead
-  logLevel: v.optional(logLevel),
   name: v.optional(v.string()),
   workflowHandle: v.string(),
   args: v.any(),
 
-  // User visible workflow status.
-  state: v.union(
-    v.object({
-      type: v.literal("running"),
-    }),
-    v.object({
-      type: v.literal("completed"),
-      completedAt: v.number(),
-      runResult: vResultValidator,
-    }),
-    v.object({
-      type: v.literal("canceled"),
-      canceledAt: v.number(),
-    }),
-  ),
+  logLevel: deprecated,
+  startedAt: deprecated,
+  state: deprecated,
+  // undefined
+  runResult: v.optional(vResultValidator),
 
   // Internal execution status, used to totally order mutations.
   generationNumber: v.number(),

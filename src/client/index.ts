@@ -141,19 +141,15 @@ export class WorkflowManager {
       { workflowId },
     );
     const running = inProgress.map((entry) => entry.step);
-    switch (workflow.state.type) {
-      case "running":
+    switch (workflow.runResult?.kind) {
+      case undefined:
         return { type: "inProgress", running };
       case "canceled":
         return { type: "canceled" };
-      case "completed":
-        if (workflow.state.runResult.kind === "success") {
-          return { type: "completed" };
-        } else if (workflow.state.runResult.kind === "failed") {
-          return { type: "failed", error: workflow.state.runResult.error };
-        } else {
-          return { type: "canceled" };
-        }
+      case "failed":
+        return { type: "failed", error: workflow.runResult.error };
+      case "success":
+        return { type: "completed" };
     }
   }
 

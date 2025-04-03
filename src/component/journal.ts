@@ -15,6 +15,7 @@ import { getStatusHandler } from "./workflow.js";
 import { getWorkpool, OnCompleteContext, workpoolOptions } from "./pool.js";
 import { internal } from "./_generated/api.js";
 import { FunctionHandle } from "convex/server";
+import { getDefaultLogger } from "./utils.js";
 
 export const load = query({
   args: {
@@ -66,9 +67,9 @@ export const startStep = mutation({
       args.workflowId,
       args.generationNumber,
     );
-    const logger = createLogger(workflow.logLevel);
+    const console = await getDefaultLogger(ctx);
 
-    if (workflow.state.type != "running") {
+    if (workflow.runResult !== undefined) {
       throw new Error(`Workflow not running: ${args.workflowId}`);
     }
     const maxEntry = await ctx.db

@@ -89,7 +89,7 @@ export function createLogger(level?: LogLevel): Logger {
     },
     event: (event: string, payload: Record<string, unknown>) => {
       const fullPayload = {
-        component: "workpool",
+        component: "workflow",
         event,
         ...payload,
       };

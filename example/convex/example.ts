@@ -23,13 +23,14 @@ export const exampleWorkflow = workflow.define({
     // inference cycle by specifying the return type explicitly.
   ): Promise<{
     name: string;
-    temperature: number;
+    celsius: number;
+    farenheit: number;
     windSpeed: number;
     windGust: number;
   }> => {
     // Run in parallel!
     const [{ latitude, longitude, name }, weather2] = await Promise.all([
-      step.runAction(internal.example.getGeocoding, args, { runAfter: 10000 }),
+      step.runAction(internal.example.getGeocoding, args, { runAfter: 100 }),
       step.runAction(internal.example.getGeocoding, args, { retry: true }),
     ]);
     console.log("Is geocoding is consistent?", latitude === weather2.latitude);
@@ -38,12 +39,13 @@ export const exampleWorkflow = workflow.define({
       latitude,
       longitude,
     });
-    const farenheit = (weather.temperature * 9) / 5 + 32;
+    const celsius = weather.temperature;
+    const farenheit = (celsius * 9) / 5 + 32;
     const { temperature, windSpeed, windGust } = weather;
     console.log(
       `Weather in ${name}: ${farenheit.toFixed(1)}°F (${temperature}°C), ${windSpeed} km/h, ${windGust} km/h`,
     );
-    return { name, temperature, windSpeed, windGust };
+    return { name, celsius, farenheit, windSpeed, windGust };
   },
   workpoolOptions: {
     retryActionsByDefault: true,
@@ -51,7 +53,8 @@ export const exampleWorkflow = workflow.define({
   // If you also want to run runtime validation on the return value.
   returns: v.object({
     name: v.string(),
-    temperature: v.number(),
+    celsius: v.number(),
+    farenheit: v.number(),
     windSpeed: v.number(),
     windGust: v.number(),
   }),

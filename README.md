@@ -7,13 +7,15 @@
 Have you ever wanted to run a series of functions reliably and durably, where
 each can have its own retry behavior, the overall workflow will survive server
 restarts, and you can have long-running workflows spanning months that can be
-canceled?
+canceled? Do you want to observe the status of a workflow reactively, as well as
+the results written from each step?
 
 And do you want to do this with code, instead of a DSL?
 
 Welcome to the world of Convex workflows.
 
-- Run workflows asynchronously, and reactively observe their status.
+- Run workflows asynchronously, and observe their status reactively via
+  subscriptions, from one or many users simultaneously, even on page refreshes.
 - Workflows can run for months, and survive server restarts. You can specify
   delays or custom times to run each step.
 - Run steps in parallel, or in sequence.
@@ -218,7 +220,7 @@ export const exampleWorkflow = workflow.define({
 });
 ```
 
-Note: it will not proceed until all steps fired off at once have completed.
+Note: The workflow will not proceed until all steps fired off at once have completed.
 
 ### Specifying retry behavior
 

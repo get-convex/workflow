@@ -95,7 +95,7 @@ export type WorkflowStep = {
   runAction<Action extends FunctionReference<"action", any>>(
     action: Action,
     args: FunctionArgs<Action>,
-    opts?: RetryOption,
+    opts?: NameOption & SchedulerOptions & RetryOption,
   ): Promise<FunctionReturnType<Action>>;
 };
 
@@ -140,7 +140,11 @@ export class WorkflowManager {
   >(
     workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator, ReturnValue>,
   ): RegisteredMutation<"internal", ObjectType<ArgsValidator>, void> {
-    return workflowMutation(this.component, workflow);
+    return workflowMutation(
+      this.component,
+      workflow,
+      this.options?.workpoolOptions,
+    );
   }
 
   /**

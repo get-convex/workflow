@@ -140,6 +140,7 @@ export class StepExecutor {
         name: message.name,
         retry: message.retry,
         workpoolOptions: this.workpoolOptions,
+        schedulerOptions: message.schedulerOptions,
       },
     )) as JournalEntry;
     this.journalEntrySize += journalEntrySize(entry);

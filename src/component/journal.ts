@@ -56,6 +56,12 @@ export const startStep = mutation({
     step,
     workpoolOptions: v.optional(workpoolOptions),
     retry: v.optional(v.union(v.boolean(), vRetryBehavior)),
+    schedulerOptions: v.optional(
+      v.union(
+        v.object({ runAt: v.optional(v.number()) }),
+        v.object({ runAfter: v.optional(v.number()) }),
+      ),
+    ),
   },
   returns: journalDocument,
   handler: async (ctx, args): Promise<JournalEntry> => {
@@ -98,7 +104,7 @@ export const startStep = mutation({
           ctx,
           step.handle as FunctionHandle<"query">,
           step.args,
-          { context, onComplete, name },
+          { context, onComplete, name, ...args.schedulerOptions },
         );
         break;
       }
@@ -107,7 +113,7 @@ export const startStep = mutation({
           ctx,
           step.handle as FunctionHandle<"mutation">,
           step.args,
-          { context, onComplete, name },
+          { context, onComplete, name, ...args.schedulerOptions },
         );
         break;
       }
@@ -116,7 +122,7 @@ export const startStep = mutation({
           ctx,
           step.handle as FunctionHandle<"action">,
           step.args,
-          { context, onComplete, name, retry },
+          { context, onComplete, name, retry, ...args.schedulerOptions },
         );
         break;
       }

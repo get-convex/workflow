@@ -17,7 +17,7 @@ import { WorkflowDefinition } from "./index.js";
 import { StepExecutor, StepRequest, WorkerResult } from "./step.js";
 import { StepContext } from "./stepContext.js";
 import { checkArgs } from "./validator.js";
-import { RunResult } from "@convex-dev/workpool";
+import { RunResult, WorkpoolOptions } from "@convex-dev/workpool";
 
 const workflowArgs = v.object({
   workflowId: v.id("workflows"),
@@ -32,7 +32,12 @@ const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke
 export function workflowMutation<ArgsValidator extends PropertyValidators>(
   component: UseApi<typeof api>,
   registered: WorkflowDefinition<ArgsValidator, any, any>,
+  defaultWorkpoolOptions?: WorkpoolOptions,
 ): RegisteredMutation<"internal", ObjectType<ArgsValidator>, void> {
+  const workpoolOptions = {
+    ...defaultWorkpoolOptions,
+    ...registered.workpoolOptions,
+  };
   return internalMutationGeneric({
     handler: async (ctx, args) => {
       if (!validate(workflowArgs, args)) {
@@ -86,7 +91,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         journalEntries as JournalEntry[],
         channel,
         originalEnv,
-        registered.workpoolOptions,
+        workpoolOptions,
       );
 
       const handlerWorker = async (): Promise<WorkerResult> => {

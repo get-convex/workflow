@@ -115,6 +115,7 @@ export type Mounts = {
         retry?:
           | boolean
           | { base: number; initialBackoffMs: number; maxAttempts: number };
+        schedulerOptions?: { runAt?: number } | { runAfter?: number };
         step: {
           args: any;
           argsSize: number;

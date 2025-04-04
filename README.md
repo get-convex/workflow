@@ -4,10 +4,25 @@
 
 <!-- START: Include on https://convex.dev/components -->
 
-Have you ever wanted to sleep for 7 days within a Convex function?
-Find yourself in callback hell chaining together function calls through queues?
-Sick of manual state management and scheduling in long-lived workflows?
-Convex workflows might just be what you're looking for.
+Have you ever wanted to run a series of functions reliably and durably, where
+each can have its own retry behavior, the overall workflow will survive server
+restarts, and you can have long-running workflows spanning months that can be
+canceled?
+
+And do you want to do this with code, instead of a DSL?
+
+Welcome to the world of Convex workflows.
+
+- Run workflows asynchronously, and reactively observe their status.
+- Workflows can run for months, and survive server restarts. You can specify
+  delays or custom times to run each step.
+- Run steps in parallel, or in sequence.
+- Output from previous steps is available to pass to subsequent steps.
+- Run queries, mutations, and actions.
+- Specify retry behavior on a per-step basis, along with a default policy.
+- Specify how many workflows can run in parallel to manage load.
+- Cancel long-running workflows.
+- Clean up workflows after they're done.
 
 ```ts
 import { WorkflowManager } from "@convex-dev/workflow";
@@ -25,12 +40,12 @@ export const exampleWorkflow = workflow.define({
       { storageId: args.storageId },
     );
 
-    // Sleep for a month after computing the transcription.
-    await step.sleep(30 * 24 * 60 * 60 * 1000);
-
-    const embedding = await step.runAction(internal.index.computeEmbedding, {
-      transcription,
-    });
+    const embedding = await step.runAction(
+      internal.index.computeEmbedding,
+      { transcription },
+      // Run this a month after the transcription is computed.
+      { runAfter: 30 * 24 * 60 * 60 * 1000 },
+    );
     console.log(embedding);
   },
 });
@@ -87,16 +102,16 @@ is designed to feel like a Convex action but with a few restrictions:
 ```ts
 export const exampleWorkflow = workflow.define({
   args: { name: v.string() },
-  handler: async (step, args) => {
+  handler: async (step, args): Promise<string> => {
     const queryResult = await step.runQuery(
       internal.example.exampleQuery,
       args,
     );
     const actionResult = await step.runAction(
       internal.example.exampleAction,
-      args,
+      { queryResult }, // pass in results from previous steps!
     );
-    console.log(queryResult, actionResult);
+    return actionResult;
   },
 });
 
@@ -108,9 +123,9 @@ export const exampleQuery = internalQuery({
 });
 
 export const exampleAction = internalAction({
-  args: { name: v.string() },
+  args: { queryResult: v.string() },
   handler: async (ctx, args) => {
-    return `The action says... Hi ${args.name}!`;
+    return args.queryResult + " The action says... Hi back!";
   },
 });
 ```
@@ -131,6 +146,79 @@ export const kickoffWorkflow = mutation({
   },
 });
 ```
+
+### Handling the workflow's result with onComplete
+
+You can handle the workflow's result with `onComplete`. This is useful for
+cleaning up any resources used by the workflow.
+
+Note: when you return things from a workflow, you'll need to specify the return
+type of your `handler` to break type cycles due to using `internal.*` functions
+in the body, which then inform the type of the workflow, which is included in
+the `internal.*` type.
+
+You can also specify a `returns` validator to do runtime validation on the
+return value. If it fails, your `onComplete` handler will be called with an
+error instead of success. You can also do validation in the `onComplete` handler
+to have more control over handling that situation.
+
+```ts
+import { vWorkflowId } from "@convex-dev/workflow";
+import { vResultValidator } from "@convex-dev/workpool";
+
+export const foo = mutation({
+  handler: async (ctx) => {
+    const name = "James";
+    const workflowId = await workflow.start(
+      ctx,
+      internal.example.exampleWorkflow,
+      { name },
+      {
+        onComplete: internal.example.handleOnComplete,
+        context: name, // can be anything
+      },
+    );
+  },
+});
+
+export const handleOnComplete = mutation({
+  args: {
+    workflowId: vWorkflowId,
+    result: vResultValidator,
+    context: v.any(), // used to pass through data from the start site.
+  }
+  handler: async (ctx, args) => {
+    const name = (args.context as { name: string }).name;
+    if (args.result.kind === "success") {
+      const text = args.result.returnValue;
+      console.log(`${name} result: ${text}`);
+    } else if (args.result.kind === "error") {
+      console.error("Workflow failed", args.result.error);
+    } else if (args.result.kind === "canceled") {
+      console.log("Workflow canceled", args.context);
+    }
+  },
+});
+```
+
+### Running steps in parallel
+
+You can run steps in parallel by calling `step.runAction()` multiple times in
+a `Promise.all()` call.
+
+```ts
+export const exampleWorkflow = workflow.define({
+  args: { name: v.string() },
+  handler: async (step, args) => {
+    const [result1, result2] = await Promise.all([
+      step.runAction(internal.example.myAction, args),
+      step.runAction(internal.example.myAction, args),
+    ]);
+  },
+});
+```
+
+Note: it will not proceed until all steps fired off at once have completed.
 
 ### Specifying retry behavior
 
@@ -277,6 +365,22 @@ export const kickoffWorkflow = action({
   },
 });
 ```
+
+### Specifying a custom name for a step
+
+You can specify a custom name for a step by passing a `name` option to the step.
+
+```ts
+export const exampleWorkflow = workflow.define({
+  args: { name: v.string() },
+  handler: async (step, args) => {
+    await step.runAction(internal.example.myAction, args, { name: "FOO" });
+  },
+});
+```
+
+This allows the events emitted to your logs to be more descriptive.
+By default it uses the `file/folder:function` name.
 
 ## Limitations
 

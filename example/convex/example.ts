@@ -27,16 +27,12 @@ export const exampleWorkflow = workflow.define({
     windSpeed: number;
     windGust: number;
   }> => {
-    const [{ latitude, longitude, name }, _weather2] = await Promise.all([
-      step.runAction(internal.example.getGeocoding, args, {
-        name: "FOOOO",
-        runAfter: 10000,
-      }),
-      step.runAction(internal.example.getGeocoding, args, {
-        name: "BAROOOO",
-      }),
+    // Run in parallel!
+    const [{ latitude, longitude, name }, weather2] = await Promise.all([
+      step.runAction(internal.example.getGeocoding, args, { runAfter: 10000 }),
+      step.runAction(internal.example.getGeocoding, args, { retry: true }),
     ]);
-    console.log("Geocoding", { latitude, _weather2 });
+    console.log("Is geocoding is consistent?", latitude === weather2.latitude);
 
     const weather = await step.runAction(internal.example.getWeather, {
       latitude,

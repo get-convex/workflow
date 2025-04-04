@@ -6,9 +6,9 @@ import { Id } from "./_generated/dataModel.js";
 import { mutation, MutationCtx, query, QueryCtx } from "./_generated/server.js";
 import { createLogger, Logger, logLevel } from "./logging.js";
 import { getWorkflow } from "./model.js";
-import { getWorkpool, workpoolOptions } from "./pool.js";
+import { getWorkpool } from "./pool.js";
 import { journalDocument, JournalEntry, workflowDocument } from "./schema.js";
-import { getDefaultLogger, updateConfig } from "./utils.js";
+import { getDefaultLogger } from "./utils.js";
 
 export const create = mutation({
   args: {

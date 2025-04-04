@@ -13,18 +13,19 @@ export const workflow = new WorkflowManager(components.workflow, {
 
 export const startWorkflow = internalMutation({
   args: {
-    location: v.string(),
+    location: v.optional(v.string()),
   },
   returns: v.string(),
   handler: async (ctx, args) => {
+    const location = args.location ?? "San Francisco";
     const id: WorkflowId = await workflow.start(
       ctx,
       internal.example.exampleWorkflow,
-      args,
+      { location },
     );
     await ctx.db.insert("flows", {
       workflowId: id,
-      in: args.location,
+      in: location,
       out: null,
     });
     return id;
@@ -44,8 +45,9 @@ export const exampleWorkflow = workflow.define({
       latitude,
       longitude,
     });
+    const farenheit = (weather.temperature * 9) / 5 + 32;
     console.log(
-      `Weather in ${name}: ${weather.temperature}°C, ${weather.windSpeed} km/h, ${weather.windGust} km/h`,
+      `Weather in ${name}: ${farenheit.toFixed(1)}°F (${weather.temperature}°C), ${weather.windSpeed} km/h, ${weather.windGust} km/h`,
     );
   },
   workpoolOptions: {

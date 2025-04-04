@@ -19,7 +19,6 @@ import {
   RunResult,
   SchedulerOptions,
 } from "@convex-dev/workpool";
-import { startStep } from "../component/journal.js";
 
 export type OriginalEnv = {
   Date: {
@@ -132,7 +131,6 @@ export class StepExecutor {
       startedAt: this.originalEnv.Date.now(),
       completedAt: undefined,
     };
-
     const entry = (await this.ctx.runMutation(
       this.component.journal.startStep,
       {

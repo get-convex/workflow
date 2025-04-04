@@ -52,7 +52,7 @@ export async function getWorkpool(
 ) {
   // nit: can fetch config only if necessary
   const config = await ctx.db.query("config").first();
-  const logLevel = opts?.logLevel ?? config?.logLevel ?? DEFAULT_LOG_LEVEL;
+  const logLevel = opts?.logLevel ?? config?.logLevel;
   const maxParallelism =
     opts?.maxParallelism ?? config?.maxParallelism ?? DEFAULT_MAX_PARALLELISM;
   return new Workpool(components.workpool, {

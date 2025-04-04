@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { WorkflowId } from "@convex-dev/workflow";
+import { WorkflowId, vWorkflowId } from "@convex-dev/workflow";
 import { mutation, query } from "./_generated/server";
 import { workflow } from "./example";
 
@@ -12,6 +12,21 @@ export const getWorkflowStatus = query({
   },
 });
 
+export const getWorkflowResult = query({
+  args: {
+    workflowId: vWorkflowId,
+  },
+  handler: async (ctx, args) => {
+    const flow = await ctx.db
+      .query("flows")
+      .withIndex("workflowId", (q) => q.eq("workflowId", args.workflowId))
+      .first();
+    if (!flow) {
+      throw new Error(`Flow not found: ${args.workflowId}`);
+    }
+    return flow.out;
+  },
+});
 export const cancelWorkflow = mutation({
   args: {
     workflowId: v.string(),

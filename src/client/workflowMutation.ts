@@ -2,7 +2,12 @@ import { BaseChannel } from "async-channel";
 import { assert } from "convex-helpers";
 import { validate } from "convex-helpers/validators";
 import { internalMutationGeneric, RegisteredMutation } from "convex/server";
-import { ObjectType, PropertyValidators, v } from "convex/values";
+import {
+  asObjectValidator,
+  ObjectType,
+  PropertyValidators,
+  v,
+} from "convex/values";
 import { api } from "../component/_generated/api.js";
 import { createLogger } from "../component/logging.js";
 import { JournalEntry } from "../component/schema.js";
@@ -12,7 +17,7 @@ import { WorkflowDefinition } from "./index.js";
 import { StepExecutor, StepRequest, WorkerResult } from "./step.js";
 import { StepContext } from "./stepContext.js";
 import { checkArgs } from "./validator.js";
-import { OnComplete, RunResult } from "@convex-dev/workpool";
+import { RunResult } from "@convex-dev/workpool";
 
 const workflowArgs = v.object({
   workflowId: v.id("workflows"),
@@ -24,12 +29,9 @@ const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke
 // function handle to the workflow component for execution. This function runs
 // one "poll" of the workflow, replaying its execution from the journal until
 // it blocks next.
-export function workflowMutation<
-  ArgsValidator extends PropertyValidators,
-  ReturnValue = any,
->(
+export function workflowMutation<ArgsValidator extends PropertyValidators>(
   component: UseApi<typeof api>,
-  registered: WorkflowDefinition<ArgsValidator, ReturnValue>,
+  registered: WorkflowDefinition<ArgsValidator, any, any>,
 ): RegisteredMutation<"internal", ObjectType<ArgsValidator>, void> {
   return internalMutationGeneric({
     handler: async (ctx, args) => {
@@ -91,14 +93,22 @@ export function workflowMutation<
         let runResult: RunResult;
         try {
           checkArgs(workflow.args, registered.args);
-          const returnValue = await registered.handler(step, workflow.args);
-          if (registered.returns && validate(registered.returns, returnValue)) {
-            runResult = { kind: "success", returnValue };
-          } else {
-            runResult = {
-              kind: "failed",
-              error: "Invalid return value: " + JSON.stringify(returnValue),
-            };
+          const returnValue =
+            (await registered.handler(step, workflow.args)) ?? null;
+          runResult = { kind: "success", returnValue };
+          if (registered.returns) {
+            try {
+              validate(asObjectValidator(registered.returns), returnValue, {
+                throw: true,
+              });
+            } catch (error) {
+              const message =
+                error instanceof Error ? error.message : `${error}`;
+              runResult = {
+                kind: "failed",
+                error: "Invalid return value: " + message,
+              };
+            }
           }
         } catch (error) {
           runResult = { kind: "failed", error: (error as Error).message };

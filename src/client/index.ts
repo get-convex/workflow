@@ -9,6 +9,7 @@ import {
   GenericQueryCtx,
   getFunctionName,
   RegisteredMutation,
+  ReturnValueForOptionalValidator,
 } from "convex/server";
 import { ObjectType, PropertyValidators, Validator } from "convex/values";
 import { api } from "../component/_generated/api.js";
@@ -100,14 +101,15 @@ export type WorkflowStep = {
 
 export type WorkflowDefinition<
   ArgsValidator extends PropertyValidators,
-  ReturnValue,
+  ReturnsValidator extends Validator<any, "required", any> | void,
+  ReturnValue extends ReturnValueForOptionalValidator<ReturnsValidator> = any,
 > = {
   args?: ArgsValidator;
   handler: (
     step: WorkflowStep,
     args: ObjectType<ArgsValidator>,
   ) => Promise<ReturnValue>;
-  returns?: Validator<ReturnValue>;
+  returns?: ReturnsValidator;
   workpoolOptions?: WorkpoolRetryOptions;
 };
 
@@ -131,8 +133,12 @@ export class WorkflowManager {
    * @param workflow - The workflow definition.
    * @returns The workflow mutation.
    */
-  define<ArgsValidator extends PropertyValidators, ReturnValue>(
-    workflow: WorkflowDefinition<ArgsValidator, ReturnValue>,
+  define<
+    ArgsValidator extends PropertyValidators,
+    ReturnsValidator extends Validator<any, "required", any> | void,
+    ReturnValue extends ReturnValueForOptionalValidator<ReturnsValidator> = any,
+  >(
+    workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator, ReturnValue>,
   ): RegisteredMutation<"internal", ObjectType<ArgsValidator>, void> {
     return workflowMutation(this.component, workflow);
   }

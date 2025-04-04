@@ -12,6 +12,48 @@ export const workflow = new WorkflowManager(components.workflow, {
   },
 });
 
+export const exampleWorkflow = workflow.define({
+  args: {
+    location: v.string(),
+  },
+  handler: async (
+    step,
+    args,
+    // When returning things from other functions, you need to break the type
+    // inference cycle by specifying the return type explicitly.
+  ): Promise<{
+    name: string;
+    temperature: number;
+    windSpeed: number;
+    windGust: number;
+  }> => {
+    const { latitude, longitude, name } = await step.runAction(
+      internal.example.getGeocoding,
+      args,
+    );
+    const weather = await step.runAction(internal.example.getWeather, {
+      latitude,
+      longitude,
+    });
+    const farenheit = (weather.temperature * 9) / 5 + 32;
+    const { temperature, windSpeed, windGust } = weather;
+    console.log(
+      `Weather in ${name}: ${farenheit.toFixed(1)}°F (${temperature}°C), ${windSpeed} km/h, ${windGust} km/h`,
+    );
+    return { name, temperature, windSpeed, windGust };
+  },
+  workpoolOptions: {
+    retryActionsByDefault: true,
+  },
+  // If you also want to run runtime validation on the return value.
+  returns: v.object({
+    name: v.string(),
+    temperature: v.number(),
+    windSpeed: v.number(),
+    windGust: v.number(),
+  }),
+});
+
 export const startWorkflow = internalMutation({
   args: {
     location: v.optional(v.string()),
@@ -30,29 +72,6 @@ export const startWorkflow = internalMutation({
     );
     await ctx.db.insert("flows", { workflowId: id, in: location, out: null });
     return id;
-  },
-});
-
-export const exampleWorkflow = workflow.define({
-  args: {
-    location: v.string(),
-  },
-  handler: async (step, args) => {
-    const { latitude, longitude, name } = await step.runAction(
-      internal.example.getGeocoding,
-      args,
-    );
-    const weather = await step.runAction(internal.example.getWeather, {
-      latitude,
-      longitude,
-    });
-    const farenheit = (weather.temperature * 9) / 5 + 32;
-    console.log(
-      `Weather in ${name}: ${farenheit.toFixed(1)}°F (${weather.temperature}°C), ${weather.windSpeed} km/h, ${weather.windGust} km/h`,
-    );
-  },
-  workpoolOptions: {
-    retryActionsByDefault: true,
   },
 });
 

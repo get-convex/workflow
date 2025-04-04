@@ -3,6 +3,8 @@ import {
   GenericMutationCtx,
   GenericDataModel,
   FunctionType,
+  FunctionReference,
+  createFunctionHandle,
 } from "convex/server";
 import { convexToJson } from "convex/values";
 import {
@@ -33,7 +35,7 @@ export type WorkerResult =
 export type StepRequest = {
   name: string;
   functionType: FunctionType;
-  handle: string;
+  function: FunctionReference<any>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   args: any;
   retry: RetryBehavior | boolean | undefined;
@@ -77,11 +79,15 @@ export class StepExecutor {
         message.reject(journalSizeError(this.journalEntrySize));
         continue;
       }
-      // TODO: fetch all journal entries and start them
-      /*
-      so, once we decide that we’re going to return executorBlocked, we look at the number of buffered entries in the channel (https://kyle1320.github.io/async-channel/classes/channel.html#buffersize), drain those with await this.receiver.get() (which we know won’t block)
-      */
-      await this.startStep(message);
+      const messages = [message];
+      const size = this.receiver.bufferSize;
+      for (let i = 0; i < size; i++) {
+        const message = await this.receiver.get();
+        messages.push(message);
+      }
+      for (const message of messages) {
+        await this.startStep(message);
+      }
       return {
         type: "executorBlocked",
       };
@@ -124,7 +130,7 @@ export class StepExecutor {
       inProgress: true,
       name: message.name,
       functionType: message.functionType,
-      handle: message.handle,
+      handle: await createFunctionHandle(message.function),
       args: message.args,
       argsSize: valueSize(message.args),
       outcome: undefined,

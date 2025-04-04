@@ -8,7 +8,7 @@ import { vResultValidator } from "@convex-dev/workpool";
 
 export const workflow = new WorkflowManager(components.workflow, {
   workpoolOptions: {
-    maxParallelism: 1,
+    maxParallelism: 2,
   },
 });
 
@@ -27,10 +27,17 @@ export const exampleWorkflow = workflow.define({
     windSpeed: number;
     windGust: number;
   }> => {
-    const { latitude, longitude, name } = await step.runAction(
-      internal.example.getGeocoding,
-      args,
-    );
+    const [{ latitude, longitude, name }, _weather2] = await Promise.all([
+      step.runAction(internal.example.getGeocoding, args, {
+        name: "FOOOO",
+        runAfter: 10000,
+      }),
+      step.runAction(internal.example.getGeocoding, args, {
+        name: "BAROOOO",
+      }),
+    ]);
+    console.log("Geocoding", { latitude, _weather2 });
+
     const weather = await step.runAction(internal.example.getWeather, {
       latitude,
       longitude,

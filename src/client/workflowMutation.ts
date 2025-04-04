@@ -80,7 +80,9 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
           `Assertion failed: not blocked but have in-progress journal entry`,
         );
       }
-      const channel = new BaseChannel<StepRequest>(0);
+      const channel = new BaseChannel<StepRequest>(
+        workpoolOptions.maxParallelism ?? 10,
+      );
       const step = new StepContext(channel);
       const originalEnv = setupEnvironment(step);
       const executor = new StepExecutor(

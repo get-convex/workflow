@@ -23,7 +23,7 @@ export class StepContext implements WorkflowStep {
     args: FunctionArgs<Query>,
     opts?: NameOption & SchedulerOptions,
   ): Promise<FunctionReturnType<Query>> {
-    return await this.runFunction("query", query, args, opts);
+    return this.runFunction("query", query, args, opts);
   }
 
   async runMutation<Mutation extends FunctionReference<"mutation", any>>(
@@ -31,7 +31,7 @@ export class StepContext implements WorkflowStep {
     args: FunctionArgs<Mutation>,
     opts?: NameOption & SchedulerOptions,
   ): Promise<FunctionReturnType<Mutation>> {
-    return await this.runFunction("mutation", mutation, args, opts);
+    return this.runFunction("mutation", mutation, args, opts);
   }
 
   async runAction<Action extends FunctionReference<"action", any>>(
@@ -39,7 +39,7 @@ export class StepContext implements WorkflowStep {
     args: FunctionArgs<Action>,
     opts?: NameOption & SchedulerOptions & RetryOption,
   ): Promise<FunctionReturnType<Action>> {
-    return await this.runFunction("action", action, args, opts);
+    return this.runFunction("action", action, args, opts);
   }
 
   private async runFunction<F extends FunctionReference<any>>(
@@ -48,7 +48,6 @@ export class StepContext implements WorkflowStep {
     args: any,
     opts?: NameOption & SchedulerOptions & RetryOption,
   ): Promise<any> {
-    const handle = await createFunctionHandle(f);
     let send: any;
     const { name, ...rest } = opts ?? {};
     const { retry, ...schedulerOptions } = rest;
@@ -56,7 +55,7 @@ export class StepContext implements WorkflowStep {
       send = this.sender.push({
         name: name ?? getFunctionName(f),
         functionType,
-        handle,
+        function: f,
         args,
         retry,
         schedulerOptions,

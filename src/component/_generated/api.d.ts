@@ -95,6 +95,7 @@ export type Mounts = {
           generationNumber: number;
           logLevel?: any;
           name?: string;
+          onComplete?: { context?: any; fnHandle: string };
           runResult?:
             | { kind: "success"; returnValue: any }
             | { error: string; kind: "failed" }
@@ -196,6 +197,7 @@ export type Mounts = {
       "public",
       {
         maxParallelism?: number;
+        onComplete?: { context?: any; fnHandle: string };
         workflowArgs: any;
         workflowHandle: string;
         workflowName: string;
@@ -236,6 +238,7 @@ export type Mounts = {
           generationNumber: number;
           logLevel?: any;
           name?: string;
+          onComplete?: { context?: any; fnHandle: string };
           runResult?:
             | { kind: "success"; returnValue: any }
             | { error: string; kind: "failed" }

@@ -101,6 +101,7 @@ export declare const components: {
             generationNumber: number;
             logLevel?: any;
             name?: string;
+            onComplete?: { context?: any; fnHandle: string };
             runResult?:
               | { kind: "success"; returnValue: any }
               | { error: string; kind: "failed" }
@@ -202,6 +203,7 @@ export declare const components: {
         "internal",
         {
           maxParallelism?: number;
+          onComplete?: { context?: any; fnHandle: string };
           workflowArgs: any;
           workflowHandle: string;
           workflowName: string;
@@ -242,6 +244,7 @@ export declare const components: {
             generationNumber: number;
             logLevel?: any;
             name?: string;
+            onComplete?: { context?: any; fnHandle: string };
             runResult?:
               | { kind: "success"; returnValue: any }
               | { error: string; kind: "failed" }

@@ -4,6 +4,7 @@ import { internal } from "./_generated/api.js";
 import { internalAction, internalMutation } from "./_generated/server.js";
 import { components } from "./_generated/api.js";
 import { vWorkflowId } from "@convex-dev/workflow";
+import { vResultValidator } from "@convex-dev/workpool";
 
 export const workflow = new WorkflowManager(components.workflow, {
   workpoolOptions: {
@@ -22,12 +23,12 @@ export const startWorkflow = internalMutation({
       ctx,
       internal.example.exampleWorkflow,
       { location },
+      {
+        onComplete: internal.example.flowCompleted,
+        context: { location },
+      },
     );
-    await ctx.db.insert("flows", {
-      workflowId: id,
-      in: location,
-      out: null,
-    });
+    await ctx.db.insert("flows", { workflowId: id, in: location, out: null });
     return id;
   },
 });
@@ -52,6 +53,26 @@ export const exampleWorkflow = workflow.define({
   },
   workpoolOptions: {
     retryActionsByDefault: true,
+  },
+});
+
+export const flowCompleted = internalMutation({
+  args: {
+    workflowId: vWorkflowId,
+    result: vResultValidator,
+    context: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const flow = await ctx.db
+      .query("flows")
+      .withIndex("workflowId", (q) => q.eq("workflowId", args.workflowId))
+      .first();
+    if (!flow) {
+      throw new Error(`Flow not found: ${args.workflowId}`);
+    }
+    await ctx.db.patch(flow._id, {
+      out: args.result,
+    });
   },
 });
 

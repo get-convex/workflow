@@ -12,7 +12,7 @@ import { WorkflowDefinition } from "./index.js";
 import { StepExecutor, StepRequest, WorkerResult } from "./step.js";
 import { StepContext } from "./stepContext.js";
 import { checkArgs } from "./validator.js";
-import { RunResult } from "@convex-dev/workpool";
+import { OnComplete, RunResult } from "@convex-dev/workpool";
 
 const workflowArgs = v.object({
   workflowId: v.id("workflows"),
@@ -24,12 +24,14 @@ const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke
 // function handle to the workflow component for execution. This function runs
 // one "poll" of the workflow, replaying its execution from the journal until
 // it blocks next.
-export function workflowMutation<ArgsValidator extends PropertyValidators>(
+export function workflowMutation<
+  ArgsValidator extends PropertyValidators,
+  ReturnValue = any,
+>(
   component: UseApi<typeof api>,
-  registered: WorkflowDefinition<ArgsValidator>,
-): RegisteredMutation<"internal", ObjectType<ArgsValidator>, null> {
+  registered: WorkflowDefinition<ArgsValidator, ReturnValue>,
+): RegisteredMutation<"internal", ObjectType<ArgsValidator>, void> {
   return internalMutationGeneric({
-    returns: v.null(),
     handler: async (ctx, args) => {
       if (!validate(workflowArgs, args)) {
         throw new Error(INVALID_WORKFLOW_MESSAGE);
@@ -89,8 +91,15 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         let runResult: RunResult;
         try {
           checkArgs(workflow.args, registered.args);
-          await registered.handler(step, workflow.args);
-          runResult = { kind: "success", returnValue: null };
+          const returnValue = await registered.handler(step, workflow.args);
+          if (registered.returns && validate(registered.returns, returnValue)) {
+            runResult = { kind: "success", returnValue };
+          } else {
+            runResult = {
+              kind: "failed",
+              error: "Invalid return value: " + JSON.stringify(returnValue),
+            };
+          }
         } catch (error) {
           runResult = { kind: "failed", error: (error as Error).message };
         }

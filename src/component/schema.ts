@@ -5,6 +5,7 @@ import {
   vRetryBehavior,
   vWorkIdValidator,
   workIdValidator,
+  vOnComplete,
 } from "@convex-dev/workpool";
 import { defineSchema, defineTable } from "convex/server";
 import { convexToJson, Infer, v, Value } from "convex/values";
@@ -39,7 +40,7 @@ const workflowObject = {
   name: v.optional(v.string()),
   workflowHandle: v.string(),
   args: v.any(),
-
+  onComplete: v.optional(vOnComplete),
   logLevel: deprecated,
   startedAt: deprecated,
   state: deprecated,

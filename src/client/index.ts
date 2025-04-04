@@ -3,15 +3,16 @@ import {
   FunctionArgs,
   FunctionReference,
   FunctionReturnType,
+  FunctionVisibility,
   GenericDataModel,
   GenericMutationCtx,
   GenericQueryCtx,
   getFunctionName,
   RegisteredMutation,
 } from "convex/server";
-import { ObjectType, PropertyValidators } from "convex/values";
+import { ObjectType, PropertyValidators, Validator } from "convex/values";
 import { api } from "../component/_generated/api.js";
-import { OpaqueIds, UseApi, WorkflowId } from "../types.js";
+import { OnCompleteArgs, OpaqueIds, UseApi, WorkflowId } from "../types.js";
 import { workflowMutation } from "./workflowMutation.js";
 import {
   NameOption,
@@ -24,6 +25,37 @@ export { vWorkflowId } from "../types.js";
 import { Step } from "../component/schema.js";
 
 export type { WorkflowId };
+
+export type CallbackOptions = {
+  /**
+   * A mutation to run after the function succeeds, fails, or is canceled.
+   * The context type is for your use, feel free to provide a validator for it.
+   * e.g.
+   * ```ts
+   * export const completion = internalMutation({
+   *  args: {
+   *    workId: workIdValidator,
+   *    context: v.any(),
+   *    result: resultValidator,
+   *  },
+   *  handler: async (ctx, args) => {
+   *    console.log(args.result, "Got Context back -> ", args.context, Date.now() - args.context);
+   *  },
+   * });
+   * ```
+   */
+  onComplete?: FunctionReference<
+    "mutation",
+    FunctionVisibility,
+    OnCompleteArgs
+  > | null;
+
+  /**
+   * A context object to pass to the `onComplete` mutation.
+   * Useful for passing data from the enqueue site to the onComplete site.
+   */
+  context?: unknown;
+};
 
 export type WorkflowStep = {
   /**
@@ -66,12 +98,16 @@ export type WorkflowStep = {
   ): Promise<FunctionReturnType<Action>>;
 };
 
-export type WorkflowDefinition<ArgsValidator extends PropertyValidators> = {
+export type WorkflowDefinition<
+  ArgsValidator extends PropertyValidators,
+  ReturnValue,
+> = {
   args?: ArgsValidator;
   handler: (
     step: WorkflowStep,
     args: ObjectType<ArgsValidator>,
-  ) => Promise<void>;
+  ) => Promise<ReturnValue>;
+  returns?: Validator<ReturnValue>;
   workpoolOptions?: WorkpoolRetryOptions;
 };
 
@@ -95,10 +131,9 @@ export class WorkflowManager {
    * @param workflow - The workflow definition.
    * @returns The workflow mutation.
    */
-  define<ArgsValidator extends PropertyValidators>(
-    workflow: WorkflowDefinition<ArgsValidator>,
-  ): RegisteredMutation<"internal", ObjectType<ArgsValidator>, null> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  define<ArgsValidator extends PropertyValidators, ReturnValue>(
+    workflow: WorkflowDefinition<ArgsValidator, ReturnValue>,
+  ): RegisteredMutation<"internal", ObjectType<ArgsValidator>, void> {
     return workflowMutation(this.component, workflow);
   }
 
@@ -114,13 +149,21 @@ export class WorkflowManager {
     ctx: RunMutationCtx,
     workflow: F,
     args: FunctionArgs<F>,
+    options?: CallbackOptions,
   ): Promise<WorkflowId> {
     const handle = await createFunctionHandle(workflow);
+    const onComplete = options?.onComplete
+      ? {
+          fnHandle: await createFunctionHandle(options.onComplete),
+          context: options.context,
+        }
+      : undefined;
     const workflowId = await ctx.runMutation(this.component.workflow.create, {
       workflowName: getFunctionName(workflow),
       workflowHandle: handle,
       workflowArgs: args,
       maxParallelism: this.options?.workpoolOptions?.maxParallelism,
+      onComplete,
     });
     return workflowId as unknown as WorkflowId;
   }

@@ -1,4 +1,4 @@
-import { WorkId } from "@convex-dev/workpool";
+import { RunResult, WorkId } from "@convex-dev/workpool";
 import { Expand, FunctionReference } from "convex/server";
 import { GenericId, v, VString } from "convex/values";
 
@@ -33,3 +33,18 @@ export type OpaqueIds<T> =
         : T extends object
           ? { [K in keyof T]: OpaqueIds<T[K]> }
           : T;
+export type OnCompleteArgs = {
+  /**
+   * The ID of the work that completed.
+   */
+  workflowId: WorkflowId;
+  /**
+   * The context object passed when enqueuing the work.
+   * Useful for passing data from the enqueue site to the onComplete site.
+   */
+  context: unknown;
+  /**
+   * The result of the run that completed.
+   */
+  result: RunResult;
+};

@@ -1,4 +1,4 @@
-import { vResultValidator } from "@convex-dev/workpool";
+import { vOnComplete, vResultValidator } from "@convex-dev/workpool";
 import { assert } from "convex-helpers";
 import { FunctionHandle } from "convex/server";
 import { v } from "convex/values";
@@ -9,6 +9,7 @@ import { getWorkflow } from "./model.js";
 import { getWorkpool } from "./pool.js";
 import { journalDocument, JournalEntry, workflowDocument } from "./schema.js";
 import { getDefaultLogger } from "./utils.js";
+import { WorkflowId, OnCompleteArgs } from "../types.js";
 
 export const create = mutation({
   args: {
@@ -16,9 +17,8 @@ export const create = mutation({
     workflowHandle: v.string(),
     workflowArgs: v.any(),
     maxParallelism: v.optional(v.number()),
+    onComplete: v.optional(vOnComplete),
     // TODO: ttl
-    // TODO: onComplete hook
-    // TODO: onComplete context
   },
   returns: v.string(),
   handler: async (ctx, args) => {
@@ -30,6 +30,7 @@ export const create = mutation({
       workflowHandle: args.workflowHandle,
       args: args.workflowArgs,
       generationNumber: 0,
+      onComplete: args.onComplete,
     });
     console.debug(
       `Created workflow ${workflowId}:`,
@@ -130,7 +131,19 @@ export const complete = mutation({
       status: workflow.runResult.kind,
       overallDurationMs: Date.now() - workflow._creationTime,
     });
-    // TODO: Call onComplete hook
+    if (workflow.onComplete) {
+      await ctx.runMutation(
+        workflow.onComplete.fnHandle as FunctionHandle<
+          "mutation",
+          OnCompleteArgs
+        >,
+        {
+          workflowId: workflow._id as unknown as WorkflowId,
+          result: workflow.runResult,
+          context: workflow.onComplete.context,
+        },
+      );
+    }
     // TODO: delete everything unless ttl is set
     console.debug(`Completed workflow ${workflow._id}:`, workflow);
     await ctx.db.replace(workflow._id, workflow);

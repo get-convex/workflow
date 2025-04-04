@@ -1,8 +1,6 @@
 /// <reference types="vite/client" />
 
-import { convexTest } from "convex-test";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import schema from "./schema";
+import { afterEach, beforeEach, describe, test, vi } from "vitest";
 import { initConvexTest } from "./setup.test";
 
 describe("workpool", () => {

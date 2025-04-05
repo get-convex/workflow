@@ -1,23 +1,7 @@
 import { v } from "convex/values";
-import { WorkflowId } from "@convex-dev/workflow";
+import { WorkflowId, vWorkflowId } from "@convex-dev/workflow";
 import { mutation, query } from "./_generated/server";
 import { workflow } from "./example";
-import { internal } from "./_generated/api";
-
-export const kickoffWorkflow = mutation({
-  args: {
-    storageId: v.id("_storage"),
-  },
-  returns: v.string(),
-  handler: async (ctx, args) => {
-    const workflowId: string = await workflow.start(
-      ctx,
-      internal.example.exampleWorkflow,
-      { storageId: args.storageId },
-    );
-    return workflowId;
-  },
-});
 
 export const getWorkflowStatus = query({
   args: {
@@ -28,6 +12,24 @@ export const getWorkflowStatus = query({
   },
 });
 
+export const getWorkflowResult = query({
+  args: {
+    workflowId: v.optional(vWorkflowId),
+  },
+  handler: async (ctx, args) => {
+    const workflowId = args.workflowId;
+    const flow = await (workflowId
+      ? ctx.db
+          .query("flows")
+          .withIndex("workflowId", (q) => q.eq("workflowId", workflowId))
+          .first()
+      : ctx.db.query("flows").order("desc").first());
+    if (!flow) {
+      throw new Error(`Flow not found: ${workflowId}`);
+    }
+    return flow.out;
+  },
+});
 export const cancelWorkflow = mutation({
   args: {
     workflowId: v.string(),

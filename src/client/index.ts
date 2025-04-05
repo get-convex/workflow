@@ -2,71 +2,130 @@ import {
   createFunctionHandle,
   FunctionArgs,
   FunctionReference,
-  GenericActionCtx,
+  FunctionReturnType,
+  FunctionVisibility,
   GenericDataModel,
   GenericMutationCtx,
   GenericQueryCtx,
+  getFunctionName,
   RegisteredMutation,
+  ReturnValueForOptionalValidator,
 } from "convex/server";
-import { ObjectType, PropertyValidators } from "convex/values";
+import { ObjectType, PropertyValidators, Validator } from "convex/values";
 import { api } from "../component/_generated/api.js";
-import { UseApi, WorkflowId } from "../types.js";
+import { OnCompleteArgs, OpaqueIds, UseApi, WorkflowId } from "../types.js";
 import { workflowMutation } from "./workflowMutation.js";
-import { LogLevel } from "../component/schema.js";
+import {
+  NameOption,
+  RetryOption,
+  SchedulerOptions,
+  WorkpoolOptions,
+  WorkpoolRetryOptions,
+} from "@convex-dev/workpool";
+export { vWorkflowId } from "../types.js";
+import { Step } from "../component/schema.js";
 
 export type { WorkflowId };
 
-type ActionCtxRunners = Pick<
-  GenericActionCtx<GenericDataModel>,
-  "runQuery" | "runMutation" | "runAction"
->;
-
-export type WorkflowStep = ActionCtxRunners & {
+export type CallbackOptions = {
   /**
-   * Sleep for a given number of milliseconds. It's totally fine for this to be
-   * very long (e.g. on the order of months).
-   *
-   * @param ms - The number of milliseconds to sleep.
+   * A mutation to run after the function succeeds, fails, or is canceled.
+   * The context type is for your use, feel free to provide a validator for it.
+   * e.g.
+   * ```ts
+   * export const completion = internalMutation({
+   *  args: {
+   *    workId: workIdValidator,
+   *    context: v.any(),
+   *    result: resultValidator,
+   *  },
+   *  handler: async (ctx, args) => {
+   *    console.log(args.result, "Got Context back -> ", args.context, Date.now() - args.context);
+   *  },
+   * });
+   * ```
    */
-  sleep(ms: number): Promise<void>;
+  onComplete?: FunctionReference<
+    "mutation",
+    FunctionVisibility,
+    OnCompleteArgs
+  > | null;
+
+  /**
+   * A context object to pass to the `onComplete` mutation.
+   * Useful for passing data from the enqueue site to the onComplete site.
+   */
+  context?: unknown;
 };
 
-export type WorkflowDefinition<ArgsValidator extends PropertyValidators> = {
+export type WorkflowStep = {
+  /**
+   * Run a query with the given name and arguments.
+   *
+   * @param query - The query to run, like `internal.index.exampleQuery`.
+   * @param args - The arguments to the query function.
+   * @param opts - Options for scheduling and naming the query.
+   */
+  runQuery<Query extends FunctionReference<"query", any>>(
+    query: Query,
+    args: FunctionArgs<Query>,
+    opts?: NameOption & SchedulerOptions,
+  ): Promise<FunctionReturnType<Query>>;
+
+  /**
+   * Run a mutation with the given name and arguments.
+   *
+   * @param mutation - The mutation to run, like `internal.index.exampleMutation`.
+   * @param args - The arguments to the mutation function.
+   * @param opts - Options for scheduling and naming the mutation.
+   */
+  runMutation<Mutation extends FunctionReference<"mutation", any>>(
+    mutation: Mutation,
+    args: FunctionArgs<Mutation>,
+    opts?: NameOption & SchedulerOptions,
+  ): Promise<FunctionReturnType<Mutation>>;
+
+  /**
+   * Run an action with the given name and arguments.
+   *
+   * @param action - The action to run, like `internal.index.exampleAction`.
+   * @param args - The arguments to the action function.
+   * @param opts - Options for retrying, scheduling and naming the action.
+   */
+  runAction<Action extends FunctionReference<"action", any>>(
+    action: Action,
+    args: FunctionArgs<Action>,
+    opts?: NameOption & SchedulerOptions & RetryOption,
+  ): Promise<FunctionReturnType<Action>>;
+};
+
+export type WorkflowDefinition<
+  ArgsValidator extends PropertyValidators,
+  ReturnsValidator extends Validator<any, "required", any> | void,
+  ReturnValue extends ReturnValueForOptionalValidator<ReturnsValidator> = any,
+> = {
   args?: ArgsValidator;
   handler: (
     step: WorkflowStep,
     args: ObjectType<ArgsValidator>,
-  ) => Promise<void>;
+  ) => Promise<ReturnValue>;
+  returns?: ReturnsValidator;
+  workpoolOptions?: WorkpoolRetryOptions;
 };
 
 export type WorkflowStatus =
-  | { type: "inProgress" }
+  | { type: "inProgress"; running: OpaqueIds<Step>[] }
   | { type: "completed" }
   | { type: "canceled" }
   | { type: "failed"; error: string };
 
 export class WorkflowManager {
-  logLevel: LogLevel;
-
   constructor(
     private component: UseApi<typeof api>,
-    options?: { logLevel?: LogLevel },
-  ) {
-    let DEFAULT_LOG_LEVEL: LogLevel = "INFO";
-    if (process.env.WORKFLOW_LOG_LEVEL) {
-      if (
-        !["DEBUG", "INFO", "WARN", "ERROR"].includes(
-          process.env.WORKFLOW_LOG_LEVEL,
-        )
-      ) {
-        console.warn(
-          `Invalid log level (${process.env.WORKFLOW_LOG_LEVEL}), defaulting to "INFO"`,
-        );
-      }
-      DEFAULT_LOG_LEVEL = process.env.WORKFLOW_LOG_LEVEL as LogLevel;
-    }
-    this.logLevel = options?.logLevel ?? DEFAULT_LOG_LEVEL;
-  }
+    public options?: {
+      workpoolOptions: WorkpoolOptions;
+    },
+  ) {}
 
   /**
    * Define a new workflow.
@@ -74,11 +133,18 @@ export class WorkflowManager {
    * @param workflow - The workflow definition.
    * @returns The workflow mutation.
    */
-  define<ArgsValidator extends PropertyValidators>(
-    workflow: WorkflowDefinition<ArgsValidator>,
-  ): RegisteredMutation<"internal", ObjectType<ArgsValidator>, null> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return workflowMutation(this.component, workflow) as any;
+  define<
+    ArgsValidator extends PropertyValidators,
+    ReturnsValidator extends Validator<any, "required", any> | void,
+    ReturnValue extends ReturnValueForOptionalValidator<ReturnsValidator> = any,
+  >(
+    workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator, ReturnValue>,
+  ): RegisteredMutation<"internal", ObjectType<ArgsValidator>, void> {
+    return workflowMutation(
+      this.component,
+      workflow,
+      this.options?.workpoolOptions,
+    );
   }
 
   /**
@@ -93,12 +159,21 @@ export class WorkflowManager {
     ctx: RunMutationCtx,
     workflow: F,
     args: FunctionArgs<F>,
+    options?: CallbackOptions,
   ): Promise<WorkflowId> {
     const handle = await createFunctionHandle(workflow);
+    const onComplete = options?.onComplete
+      ? {
+          fnHandle: await createFunctionHandle(options.onComplete),
+          context: options.context,
+        }
+      : undefined;
     const workflowId = await ctx.runMutation(this.component.workflow.create, {
+      workflowName: getFunctionName(workflow),
       workflowHandle: handle,
       workflowArgs: args,
-      logLevel: this.logLevel,
+      maxParallelism: this.options?.workpoolOptions?.maxParallelism,
+      onComplete,
     });
     return workflowId as unknown as WorkflowId;
   }
@@ -114,20 +189,20 @@ export class WorkflowManager {
     ctx: RunQueryCtx,
     workflowId: WorkflowId,
   ): Promise<WorkflowStatus> {
-    const workflow = await ctx.runQuery(this.component.workflow.load, {
-      workflowId,
-    });
-    switch (workflow.state.type) {
-      case "running":
-        return { type: "inProgress" };
+    const { workflow, inProgress } = await ctx.runQuery(
+      this.component.workflow.getStatus,
+      { workflowId },
+    );
+    const running = inProgress.map((entry) => entry.step);
+    switch (workflow.runResult?.kind) {
+      case undefined:
+        return { type: "inProgress", running };
       case "canceled":
         return { type: "canceled" };
-      case "completed":
-        if (workflow.state.outcome.type === "success") {
-          return { type: "completed" };
-        } else {
-          return { type: "failed", error: workflow.state.outcome.error };
-        }
+      case "failed":
+        return { type: "failed", error: workflow.runResult.error };
+      case "success":
+        return { type: "completed" };
     }
   }
 

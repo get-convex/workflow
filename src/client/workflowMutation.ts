@@ -1,15 +1,28 @@
-import { api } from "../component/_generated/api.js";
-import { PropertyValidators, v } from "convex/values";
-import { Result, UseApi } from "../types.js";
-import { WorkflowDefinition } from "./index.js";
-import { internalMutationGeneric, RegisteredMutation } from "convex/server";
 import { BaseChannel } from "async-channel";
+import { assert } from "convex-helpers";
+import { validate } from "convex-helpers/validators";
+import { internalMutationGeneric, RegisteredMutation } from "convex/server";
+import {
+  asObjectValidator,
+  ObjectType,
+  PropertyValidators,
+  v,
+} from "convex/values";
+import { api } from "../component/_generated/api.js";
+import { createLogger } from "../component/logging.js";
+import { JournalEntry } from "../component/schema.js";
+import { UseApi } from "../types.js";
+import { setupEnvironment } from "./environment.js";
+import { WorkflowDefinition } from "./index.js";
 import { StepExecutor, StepRequest, WorkerResult } from "./step.js";
 import { StepContext } from "./stepContext.js";
-import { setupEnvironment } from "./environment.js";
-import { JournalEntry } from "../component/schema.js";
 import { checkArgs } from "./validator.js";
+import { RunResult, WorkpoolOptions } from "@convex-dev/workpool";
 
+const workflowArgs = v.object({
+  workflowId: v.id("workflows"),
+  generationNumber: v.number(),
+});
 const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke the workflow with ctx.runMutation() instead of workflow.start()?`;
 
 // This function is defined in the calling component but then gets passed by
@@ -18,52 +31,58 @@ const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke
 // it blocks next.
 export function workflowMutation<ArgsValidator extends PropertyValidators>(
   component: UseApi<typeof api>,
-  registered: WorkflowDefinition<ArgsValidator>,
-): RegisteredMutation<"internal", never, never> {
+  registered: WorkflowDefinition<ArgsValidator, any, any>,
+  defaultWorkpoolOptions?: WorkpoolOptions,
+): RegisteredMutation<"internal", ObjectType<ArgsValidator>, void> {
+  const workpoolOptions = {
+    ...defaultWorkpoolOptions,
+    ...registered.workpoolOptions,
+  };
   return internalMutationGeneric({
-    returns: v.null(),
     handler: async (ctx, args) => {
-      if (Object.entries(args).length !== 2) {
+      if (!validate(workflowArgs, args)) {
         throw new Error(INVALID_WORKFLOW_MESSAGE);
       }
-      const workflowId = args.workflowId;
-      if (typeof workflowId !== "string") {
-        throw new Error(INVALID_WORKFLOW_MESSAGE);
-      }
-      const generationNumber = args.generationNumber;
-      if (typeof generationNumber !== "number") {
-        throw new Error(INVALID_WORKFLOW_MESSAGE);
-      }
-      const workflow = await ctx.runQuery(component.workflow.load, {
-        workflowId,
-      });
-      if (workflow.generationNumber !== args.generationNumber) {
-        console.error(`Invalid generation number: ${args.generationNumber}`);
+      const { workflowId, generationNumber } = args;
+      const { workflow, inProgress, logLevel, journalEntries, ok } =
+        await ctx.runQuery(component.journal.load, { workflowId });
+      const console = createLogger(logLevel);
+      if (!ok) {
+        console.error(`Failed to load journal for ${workflowId}`);
+        await ctx.runMutation(component.workflow.complete, {
+          workflowId,
+          generationNumber,
+          runResult: { kind: "failed", error: "Failed to load journal" },
+          now: Date.now(),
+        });
         return;
       }
-      if (workflow.state.type === "completed") {
-        console.log(`Workflow ${args.workflowId} completed, returning.`);
+      if (workflow.generationNumber !== generationNumber) {
+        console.error(`Invalid generation number: ${generationNumber}`);
         return;
       }
-      const blockedBy = await ctx.runQuery(component.workflow.blockedBy, {
-        workflowId,
-      });
-      if (blockedBy !== null) {
-        console.log(`Workflow ${args.workflowId} blocked by...`);
-        console.log(`  ${blockedBy._id}: ${blockedBy.step.type}`);
+      if (workflow.runResult?.kind === "success") {
+        console.log(`Workflow ${workflowId} completed, returning.`);
         return;
       }
-      const journalEntries = (await ctx.runQuery(component.journal.load, {
-        workflowId,
-      })) as JournalEntry[];
+      if (inProgress.length > 0) {
+        console.log(
+          `Workflow ${workflowId} blocked by ` +
+            inProgress
+              .map((entry) => `${entry.step.name} (${entry._id})`)
+              .join(", "),
+        );
+        return;
+      }
       for (const journalEntry of journalEntries) {
-        if (journalEntry.step.inProgress) {
-          throw new Error(
-            `Assertion failed: not blocked but have in-progress journal entry`,
-          );
-        }
+        assert(
+          !journalEntry.step.inProgress,
+          `Assertion failed: not blocked but have in-progress journal entry`,
+        );
       }
-      const channel = new BaseChannel<StepRequest>(0);
+      const channel = new BaseChannel<StepRequest>(
+        workpoolOptions.maxParallelism ?? 10,
+      );
       const step = new StepContext(channel);
       const originalEnv = setupEnvironment(step);
       const executor = new StepExecutor(
@@ -71,21 +90,37 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         generationNumber,
         ctx,
         component,
-        journalEntries,
+        journalEntries as JournalEntry[],
         channel,
         originalEnv,
+        workpoolOptions,
       );
 
       const handlerWorker = async (): Promise<WorkerResult> => {
-        let outcome: Result<null>;
+        let runResult: RunResult;
         try {
           checkArgs(workflow.args, registered.args);
-          await registered.handler(step, workflow.args);
-          outcome = { type: "success", result: null, resultSize: 0 };
+          const returnValue =
+            (await registered.handler(step, workflow.args)) ?? null;
+          runResult = { kind: "success", returnValue };
+          if (registered.returns) {
+            try {
+              validate(asObjectValidator(registered.returns), returnValue, {
+                throw: true,
+              });
+            } catch (error) {
+              const message =
+                error instanceof Error ? error.message : `${error}`;
+              runResult = {
+                kind: "failed",
+                error: "Invalid return value: " + message,
+              };
+            }
+          }
         } catch (error) {
-          outcome = { type: "error", error: (error as Error).message };
+          runResult = { kind: "failed", error: (error as Error).message };
         }
-        return { type: "handlerDone", outcome };
+        return { type: "handlerDone", runResult };
       };
       const executorWorker = async (): Promise<WorkerResult> => {
         return await executor.run();
@@ -96,38 +131,20 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
           await ctx.runMutation(component.workflow.complete, {
             workflowId,
             generationNumber,
-            outcome: result.outcome,
+            runResult: result.runResult,
             now: originalEnv.Date.now(),
           });
           break;
         }
         case "executorBlocked": {
-          const { _id, step } = result.entry;
-          switch (step.type) {
-            case "function": {
-              await ctx.runMutation(component.functions.start, {
-                workflowId,
-                generationNumber,
-                journalId: _id,
-                functionType: step.functionType,
-                handle: step.handle,
-                args: step.args,
-              });
-              break;
-            }
-            case "sleep": {
-              await ctx.runMutation(component.sleep.start, {
-                workflowId,
-                generationNumber,
-                journalId: _id,
-                durationMs: step.durationMs,
-              });
-              break;
-            }
-          }
+          // Nothing to do, we already started steps in the StepExecutor.
+          break;
         }
       }
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   }) as any;
 }
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const console = "THIS IS A REMINDER TO USE getDefaultLogger";

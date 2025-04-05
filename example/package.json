@@ -12,6 +12,8 @@
     "convex": "^1.16.5"
   },
   "devDependencies": {
+    "@types/node": "^22.14.0",
+    "convex-test": "^0.0.36",
     "eslint": "^8.55.0",
     "typescript": "^5.2.2"
   }

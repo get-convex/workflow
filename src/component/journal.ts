@@ -1,45 +1,70 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server.js";
-import { journalDocument, JournalEntry, outcome, step } from "./schema.js";
+import {
+  journalDocument,
+  JournalEntry,
+  journalEntrySize,
+  step,
+  workflowDocument,
+} from "./schema.js";
 import { getWorkflow } from "./model.js";
-import { createLogger } from "./utils.js";
+import { createLogger, logLevel } from "./logging.js";
+import { vRetryBehavior, vWorkIdValidator, WorkId } from "@convex-dev/workpool";
+import { assert } from "convex-helpers";
+import { getStatusHandler } from "./workflow.js";
+import { getWorkpool, OnCompleteContext, workpoolOptions } from "./pool.js";
+import { internal } from "./_generated/api.js";
+import { FunctionHandle } from "convex/server";
+import { getDefaultLogger } from "./utils.js";
 
 export const load = query({
   args: {
-    workflowId: v.string(),
+    workflowId: v.id("workflows"),
   },
-  returns: v.array(journalDocument),
-  handler: async (ctx, args) => {
-    const workflowId = ctx.db.normalizeId("workflows", args.workflowId);
-    if (!workflowId) {
-      throw new Error(`Invalid workflow ID: ${args.workflowId}`);
+  returns: v.object({
+    workflow: workflowDocument,
+    inProgress: v.array(journalDocument),
+    journalEntries: v.array(journalDocument),
+    ok: v.boolean(),
+    logLevel,
+  }),
+  handler: async (ctx, { workflowId }) => {
+    const { workflow, inProgress, logLevel } = await getStatusHandler(ctx, {
+      workflowId,
+    });
+    const journalEntries: JournalEntry[] = [];
+    let sizeSoFar = 0;
+    for await (const entry of ctx.db
+      .query("steps")
+      .withIndex("workflow", (q) => q.eq("workflowId", workflowId))) {
+      journalEntries.push(entry);
+      sizeSoFar += journalEntrySize(entry);
+      if (sizeSoFar > 4 * 1024 * 1024) {
+        return { journalEntries, ok: false, workflow, inProgress, logLevel };
+      }
     }
-    const workflow = await ctx.db.get(workflowId);
-    if (!workflow) {
-      throw new Error(`Workflow not found: ${workflowId}`);
-    }
-    const logger = createLogger(workflow.logLevel);
-    if (workflow.state.type != "running") {
-      throw new Error(`Workflow not running: ${workflowId}`);
-    }
-    const entries = await ctx.db
-      .query("workflowJournal")
-      .withIndex("workflow", (q) => q.eq("workflowId", workflowId))
-      .collect();
-    logger.debug(`Loaded ${entries.length} entries for ${workflowId}`);
-    return entries as JournalEntry[];
+    return { journalEntries, ok: true, workflow, inProgress, logLevel };
   },
 });
 
-export const pushEntry = mutation({
+// TODO: have it also start the step
+export const startStep = mutation({
   args: {
     workflowId: v.string(),
     generationNumber: v.number(),
-    stepNumber: v.number(),
+    name: v.string(),
     step,
+    workpoolOptions: v.optional(workpoolOptions),
+    retry: v.optional(v.union(v.boolean(), vRetryBehavior)),
+    schedulerOptions: v.optional(
+      v.union(
+        v.object({ runAt: v.optional(v.number()) }),
+        v.object({ runAfter: v.optional(v.number()) }),
+      ),
+    ),
   },
   returns: journalDocument,
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<JournalEntry> => {
     if (!args.step.inProgress) {
       throw new Error(`Assertion failed: not in progress`);
     }
@@ -48,35 +73,67 @@ export const pushEntry = mutation({
       args.workflowId,
       args.generationNumber,
     );
-    const logger = createLogger(workflow.logLevel);
+    const console = await getDefaultLogger(ctx);
 
-    if (workflow.state.type != "running") {
+    if (workflow.runResult !== undefined) {
       throw new Error(`Workflow not running: ${args.workflowId}`);
     }
-    const existing = await ctx.db
-      .query("workflowJournal")
-      .withIndex("workflow", (q) =>
-        q.eq("workflowId", workflow._id).eq("stepNumber", args.stepNumber),
-      )
-      .first();
-    if (existing) {
-      throw new Error(`Journal entry already exists: ${args.workflowId}`);
-    }
     const maxEntry = await ctx.db
-      .query("workflowJournal")
+      .query("steps")
       .withIndex("workflow", (q) => q.eq("workflowId", workflow._id))
       .order("desc")
       .first();
-    if (maxEntry && maxEntry.stepNumber + 1 !== args.stepNumber) {
-      throw new Error(`Invalid step number: ${args.stepNumber}`);
-    }
-    const journalId = await ctx.db.insert("workflowJournal", {
+    const stepNumber = maxEntry ? maxEntry.stepNumber + 1 : 0;
+    const { name, step, generationNumber, retry } = args;
+    const stepId = await ctx.db.insert("steps", {
       workflowId: workflow._id,
-      stepNumber: args.stepNumber,
-      step: args.step,
+      stepNumber,
+      step,
     });
-    const entry = await ctx.db.get(journalId);
-    logger.debug(`Pushed new journal entry`, entry);
+    const entry = await ctx.db.get(stepId);
+    const workpool = await getWorkpool(ctx, args.workpoolOptions);
+    const onComplete = internal.pool.onComplete;
+    const context: OnCompleteContext = {
+      generationNumber,
+      stepId,
+    };
+    let workId: WorkId;
+    switch (step.functionType) {
+      case "query": {
+        workId = await workpool.enqueueQuery(
+          ctx,
+          step.handle as FunctionHandle<"query">,
+          step.args,
+          { context, onComplete, name, ...args.schedulerOptions },
+        );
+        break;
+      }
+      case "mutation": {
+        workId = await workpool.enqueueMutation(
+          ctx,
+          step.handle as FunctionHandle<"mutation">,
+          step.args,
+          { context, onComplete, name, ...args.schedulerOptions },
+        );
+        break;
+      }
+      case "action": {
+        workId = await workpool.enqueueAction(
+          ctx,
+          step.handle as FunctionHandle<"action">,
+          step.args,
+          { context, onComplete, name, retry, ...args.schedulerOptions },
+        );
+        break;
+      }
+    }
+
+    console.event("started", {
+      workflowId: workflow._id,
+      workflowName: workflow.name,
+      stepName: step.name,
+      stepNumber,
+    });
     return entry! as JournalEntry;
   },
 });

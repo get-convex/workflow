@@ -1,69 +1,51 @@
+import {
+  resultValidator,
+  vResultValidator,
+  RunResult,
+  vRetryBehavior,
+  vWorkIdValidator,
+  workIdValidator,
+  vOnComplete,
+} from "@convex-dev/workpool";
 import { defineSchema, defineTable } from "convex/server";
 import { convexToJson, Infer, v, Value } from "convex/values";
+import { logLevel } from "./logging.js";
+import { deprecated, literals } from "convex-helpers/validators";
+import { workpoolOptions } from "./pool.js";
 
 export function valueSize(value: Value): number {
   return JSON.stringify(convexToJson(value)).length;
 }
 
-export const outcome = v.union(
-  v.object({
-    type: v.literal("success"),
-    resultSize: v.number(),
-    result: v.any(),
-  }),
-  v.object({
-    type: v.literal("error"),
-    error: v.string(),
-  }),
-);
-export type Outcome = Infer<typeof outcome>;
-
-function outcomeSize(outcome: Outcome): number {
+export function resultSize(result: RunResult): number {
   let size = 0;
-  size += outcome.type.length;
-  switch (outcome.type) {
+  size += result.kind.length;
+  switch (result.kind) {
     case "success": {
-      size += 8 + outcome.resultSize;
+      size += 8 + valueSize(result.returnValue);
       break;
     }
-    case "error": {
-      size += outcome.error.length;
+    case "failed": {
+      size += result.error.length;
+      break;
+    }
+    case "canceled": {
       break;
     }
   }
   return size;
 }
 
-export const logLevel = v.union(
-  v.literal("DEBUG"),
-  v.literal("INFO"),
-  v.literal("WARN"),
-  v.literal("ERROR"),
-);
-export type LogLevel = Infer<typeof logLevel>;
-
 const workflowObject = {
-  startedAt: v.number(),
-  logLevel,
-
+  name: v.optional(v.string()),
   workflowHandle: v.string(),
   args: v.any(),
-
-  // User visible workflow status.
-  state: v.union(
-    v.object({
-      type: v.literal("running"),
-    }),
-    v.object({
-      type: v.literal("completed"),
-      completedAt: v.number(),
-      outcome,
-    }),
-    v.object({
-      type: v.literal("canceled"),
-      canceledAt: v.number(),
-    }),
-  ),
+  onComplete: v.optional(vOnComplete),
+  logLevel: deprecated,
+  startedAt: deprecated,
+  state: deprecated,
+  // undefined
+  runResult: v.optional(vResultValidator),
 
   // Internal execution status, used to totally order mutations.
   generationNumber: v.number(),
@@ -76,71 +58,42 @@ export const workflowDocument = v.object({
 });
 export type Workflow = Infer<typeof workflowDocument>;
 
-export const STEP_TYPES = ["function", "sleep"] as const;
+export const step = v.object({
+  name: v.string(),
+  inProgress: v.boolean(),
+  workId: v.optional(vWorkIdValidator),
+  functionType: literals("query", "mutation", "action"),
+  handle: v.string(),
+  argsSize: v.number(),
+  args: v.any(),
+  runResult: v.optional(vResultValidator),
 
-export const step = v.union(
-  v.object({
-    type: v.literal("function"),
-    inProgress: v.boolean(),
-
-    functionType: v.union(
-      v.object({ type: v.literal("query") }),
-      v.object({ type: v.literal("mutation") }),
-      v.object({
-        type: v.literal("action"),
-        // Actions are fallible, so we need to schedule a recovery mutation.
-        // This gets set when we start executing the action.
-        recoveryId: v.optional(v.string()),
-      }),
-    ),
-    handle: v.string(),
-    argsSize: v.number(),
-    args: v.any(),
-    outcome: v.optional(outcome),
-
-    startedAt: v.number(),
-    completedAt: v.optional(v.number()),
-  }),
-  v.object({
-    type: v.literal("sleep"),
-    inProgress: v.boolean(),
-
-    durationMs: v.number(),
-    deadline: v.number(),
-  }),
-);
+  startedAt: v.number(),
+  completedAt: v.optional(v.number()),
+});
 export type Step = Infer<typeof step>;
 
 function stepSize(step: Step): number {
   let size = 0;
-  size += step.type.length;
+  size += step.name.length;
   size += 1; // inProgress
-  switch (step.type) {
-    case "function": {
-      size += step.functionType.type.length;
-      if (step.functionType.type === "action") {
-        if (step.functionType.recoveryId) {
-          size += step.functionType.recoveryId.length;
-        }
-      }
-      size += step.handle.length;
-      size += 8 + step.argsSize;
-      if (step.outcome) {
-        size += outcomeSize(step.outcome);
-      }
-      size += 8; // startedAt
-      size += 8; // completedAt
-    }
-    case "sleep": {
-      size += 8; // durationMs
-      size += 8; // deadline
-    }
+  if (step.workId) {
+    size += step.workId.length;
   }
+  size += step.functionType.length;
+  size += step.handle.length;
+  // TODO: start time, for scheduled steps
+  size += 8 + step.argsSize;
+  if (step.runResult) {
+    size += resultSize(step.runResult);
+  }
+  size += 8; // startedAt
+  size += 8; // completedAt
   return size;
 }
 
 const journalObject = {
-  workflowId: v.string(),
+  workflowId: v.id("workflows"),
   stepNumber: v.number(),
   step,
 };
@@ -163,8 +116,17 @@ export function journalEntrySize(entry: JournalEntry): number {
 }
 
 export default defineSchema({
+  config: defineTable({
+    logLevel: v.optional(logLevel),
+    maxParallelism: v.optional(v.number()),
+  }),
   workflows: defineTable(workflowObject),
-  workflowJournal: defineTable(journalObject)
+  steps: defineTable(journalObject)
     .index("workflow", ["workflowId", "stepNumber"])
-    .index("inProgress", ["step.type", "step.inProgress", "workflowId"]),
+    .index("inProgress", ["step.inProgress", "workflowId"]),
+  onCompleteFailures: defineTable({
+    workId: workIdValidator,
+    result: resultValidator,
+    context: v.any(),
+  }),
 });

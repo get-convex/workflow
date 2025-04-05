@@ -20,7 +20,7 @@ export async function getWorkflow(
 }
 
 export async function getJournalEntry(ctx: QueryCtx, journalIdStr: string) {
-  const journalId = ctx.db.normalizeId("workflowJournal", journalIdStr);
+  const journalId = ctx.db.normalizeId("steps", journalIdStr);
   if (!journalId) {
     throw new Error(`Invalid journal ID: ${journalIdStr}`);
   }

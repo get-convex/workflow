@@ -1,9 +1,12 @@
 import globals from "globals";
 import pluginJs from "@eslint/js";
-import tseslint from "typescript-eslint";
+import typescriptEslint from "@typescript-eslint/eslint-plugin";
+import typescriptParser from "@typescript-eslint/parser";
 
 export default [
-  { files: ["src/**/*.{js,mjs,cjs,ts,tsx}"] },
+  {
+    files: ["src/**/*.{js,mjs,cjs,ts,tsx}", "example/**/*.{js,mjs,cjs,ts,tsx}"],
+  },
   {
     ignores: [
       "dist/**",
@@ -14,27 +17,28 @@ export default [
   },
   {
     languageOptions: {
-      globals: globals.worker,
-      parser: tseslint.parser,
-
+      globals: {
+        ...globals.worker,
+        ...globals.node,
+      },
+      parser: typescriptParser,
       parserOptions: {
         project: true,
         tsconfigRootDir: ".",
       },
     },
-  },
-  pluginJs.configs.recommended,
-  ...tseslint.configs.recommended,
-  {
+    plugins: {
+      "@typescript-eslint": typescriptEslint,
+    },
     rules: {
+      ...typescriptEslint.configs["recommended"].rules,
+      ...pluginJs.configs.recommended.rules,
       "@typescript-eslint/no-floating-promises": "error",
-      "eslint-comments/no-unused-disable": "off",
       "@typescript-eslint/no-explicit-any": "warn",
-
       // allow (_arg: number) => {} and const _foo = 1;
       "no-unused-vars": "off",
       "@typescript-eslint/no-unused-vars": [
-        "error",
+        "warn",
         {
           argsIgnorePattern: "^_",
           varsIgnorePattern: "^_",

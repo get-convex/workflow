@@ -39,7 +39,7 @@ export const workpoolOptions = v.object({
 // type check
 const _: WorkpoolOptions = {} as Infer<typeof workpoolOptions>;
 
-export const DEFAULT_MAX_PARALLELISM = 50;
+export const DEFAULT_MAX_PARALLELISM = 25;
 export const DEFAULT_RETRY_BEHAVIOR = {
   maxAttempts: 5,
   initialBackoffMs: 500,

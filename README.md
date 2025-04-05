@@ -283,7 +283,7 @@ export const exampleWorkflow = workflow.define({
 ### Specifying how many workflows can run in parallel
 
 You can specify how many workflows can run in parallel by setting the `maxParallelism`
-workpool option. This defaults to 50.
+workpool option. It has a reasonable default.
 
 ```ts
 const workflow = new WorkflowManager(components.workflow, {

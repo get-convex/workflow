@@ -1,10 +1,9 @@
 import {
-  RetryBehavior,
-  Workpool,
-  WorkpoolOptions,
   resultValidator,
   vRetryBehavior,
   workIdValidator,
+  Workpool,
+  WorkpoolOptions,
 } from "@convex-dev/workpool";
 import { assert } from "convex-helpers";
 import { validate } from "convex-helpers/validators";
@@ -15,19 +14,9 @@ import {
 } from "convex/server";
 import { Infer, v } from "convex/values";
 import { api, components, internal } from "./_generated/api.js";
-import {
-  internalMutation,
-  mutation,
-  MutationCtx,
-} from "./_generated/server.js";
-import {
-  DEFAULT_LOG_LEVEL,
-  LogLevel,
-  createLogger,
-  logLevel,
-} from "./logging.js";
+import { internalMutation, MutationCtx } from "./_generated/server.js";
+import { logLevel } from "./logging.js";
 import { getWorkflow } from "./model.js";
-import { valueSize } from "./schema.js";
 import { getDefaultLogger } from "./utils.js";
 
 export const workpoolOptions = v.object({

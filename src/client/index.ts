@@ -60,6 +60,10 @@ export type CallbackOptions = {
 
 export type WorkflowStep = {
   /**
+   * The ID of the workflow currently running.
+   */
+  workflowId: string;
+  /**
    * Run a query with the given name and arguments.
    *
    * @param query - The query to run, like `internal.index.exampleQuery`.

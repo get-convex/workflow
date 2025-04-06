@@ -66,6 +66,7 @@ export class StepExecutor {
     );
   }
   async run(): Promise<WorkerResult> {
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       const message = await this.receiver.get();
       const entry = this.journalEntries.shift();

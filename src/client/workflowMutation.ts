@@ -83,7 +83,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
       const channel = new BaseChannel<StepRequest>(
         workpoolOptions.maxParallelism ?? 10,
       );
-      const step = new StepContext(channel);
+      const step = new StepContext(workflowId, channel);
       const originalEnv = setupEnvironment(step);
       const executor = new StepExecutor(
         workflowId,

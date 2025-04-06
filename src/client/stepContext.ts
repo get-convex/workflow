@@ -16,7 +16,10 @@ import {
 } from "@convex-dev/workpool";
 
 export class StepContext implements WorkflowStep {
-  constructor(private sender: BaseChannel<StepRequest>) {}
+  constructor(
+    public workflowId: string,
+    private sender: BaseChannel<StepRequest>,
+  ) {}
 
   async runQuery<Query extends FunctionReference<"query", any>>(
     query: Query,

@@ -238,7 +238,7 @@ for actions that may want at-most-once semantics.
 Workpool options:
 
 If you specify any of these, it will override the
-[DEFAULT_RETRY_BEHAVIOR](./src/component/pool.ts).
+[`DEFAULT_RETRY_BEHAVIOR`](./src/component/pool.ts).
 
 - `defaultRetryBehavior`: The default retry behavior for all workflows.
   - `maxAttempts`: The maximum number of attempts to retry an action.

@@ -36,7 +36,7 @@ export const exampleWorkflow = workflow.define({
   args: {
     storageId: v.id("_storage"),
   },
-  handler: async (step, args) => {
+  handler: async (step, args): Promise<number[]> => {
     const transcription = await step.runAction(
       internal.index.computeTranscription,
       { storageId: args.storageId },
@@ -48,7 +48,7 @@ export const exampleWorkflow = workflow.define({
       // Run this a month after the transcription is computed.
       { runAfter: 30 * 24 * 60 * 60 * 1000 },
     );
-    console.log(embedding);
+    return embedding;
   },
 });
 ```
@@ -100,6 +100,9 @@ is designed to feel like a Convex action but with a few restrictions:
    by calling out to other Convex functions. We will be lifting some of these
    restrictions over time by implementing `Math.random()`, `Date.now()`, and
    `fetch` within our workflow environment.
+
+Note: To help avoid type cycles, always annotate the return type of the `handler`
+with the return type of the workflow.
 
 ```ts
 export const exampleWorkflow = workflow.define({
@@ -211,7 +214,7 @@ a `Promise.all()` call.
 ```ts
 export const exampleWorkflow = workflow.define({
   args: { name: v.string() },
-  handler: async (step, args) => {
+  handler: async (step, args): Promise<void> => {
     const [result1, result2] = await Promise.all([
       step.runAction(internal.example.myAction, args),
       step.runAction(internal.example.myAction, args),
@@ -263,7 +266,7 @@ const workflow = new WorkflowManager(components.workflow, {
 
 export const exampleWorkflow = workflow.define({
   args: { name: v.string() },
-  handler: async (step, args) => {
+  handler: async (step, args): Promise<void> => {
     // Uses default retry behavior & retryActionsByDefault
     await step.runAction(internal.example.myAction, args);
     // Retries will be attempted with the default behavior
@@ -372,17 +375,59 @@ export const kickoffWorkflow = action({
 
 You can specify a custom name for a step by passing a `name` option to the step.
 
+This allows the events emitted to your logs to be more descriptive.
+By default it uses the `file/folder:function` name.
+
 ```ts
 export const exampleWorkflow = workflow.define({
   args: { name: v.string() },
-  handler: async (step, args) => {
+  handler: async (step, args): Promise<void> => {
     await step.runAction(internal.example.myAction, args, { name: "FOO" });
   },
 });
 ```
 
-This allows the events emitted to your logs to be more descriptive.
-By default it uses the `file/folder:function` name.
+## Tips and troubleshooting
+
+### Circular dependencies
+
+Having the return value of workflows depend on other Convex functions can lead to circular dependencies due to the
+`internal.foo.bar` way of specifying functions. The way to fix this is to explicitly type the return value of the
+workflow. When in doubt, add return types to more `handler` functions, like this:
+
+```ts
+ export const supportAgentWorkflow = workflow.define({
+   args: { prompt: v.string(), userId: v.string(), threadId: v.string() },
++  handler: async (step, { prompt, userId, threadId }): Promise<string> => {
+     // ...
+   },
+ });
+
+ // And regular functions too:
+ export const myFunction = action({
+   args: { prompt: v.string() },
++  handler: async (ctx, { prompt }): Promise<string> => {
+     // ...
+   },
+ });
+```
+
+### More concise workflows
+
+To avoid the noise of `internal.foo.*` syntax, you can use a variable.
+For instance, if you define all your steps in `convex/steps.ts`, you can do this:
+
+```ts
+ const s = internal.steps;
+
+ export const myWorkflow = workflow.define({
+   args: { prompt: v.string() },
+   handler: async (step, args): Promise<string> => {
++    const result = await step.runAction(s.myAction, args);
+     return result;
+   },
+ });
+```
 
 ## Limitations
 

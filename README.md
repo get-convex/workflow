@@ -395,7 +395,7 @@ Having the return value of workflows depend on other Convex functions can lead t
 `internal.foo.bar` way of specifying functions. The way to fix this is to explicitly type the return value of the
 workflow. When in doubt, add return types to more `handler` functions, like this:
 
-```ts
+```diff
  export const supportAgentWorkflow = workflow.define({
    args: { prompt: v.string(), userId: v.string(), threadId: v.string() },
 +  handler: async (step, { prompt, userId, threadId }): Promise<string> => {
@@ -417,7 +417,7 @@ workflow. When in doubt, add return types to more `handler` functions, like this
 To avoid the noise of `internal.foo.*` syntax, you can use a variable.
 For instance, if you define all your steps in `convex/steps.ts`, you can do this:
 
-```ts
+```diff
  const s = internal.steps;
 
  export const myWorkflow = workflow.define({

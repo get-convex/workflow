@@ -165,15 +165,15 @@ export class WorkflowManager {
     args: FunctionArgs<F>,
     options?: CallbackOptions & {
       /**
-       * By default, during creation the workflow will be run immediately.
+       * By default, during creation the workflow will be initiated immediately.
        * The benefit is that you catch errors earlier (e.g. passing a bad
-       * workflow reference or args that fail validation).
+       * workflow reference or catch arg validation).
        *
        * If you set this to true, the workflow will be created but the run
        * will be scheduled to run asynchronously.
        * You can use this to make `start` faster (you still get a workflowId).
        */
-      initAsync?: boolean;
+      validateAsync?: boolean;
     },
   ): Promise<WorkflowId> {
     const handle = await createFunctionHandle(workflow);
@@ -189,7 +189,7 @@ export class WorkflowManager {
       workflowArgs: args,
       maxParallelism: this.options?.workpoolOptions?.maxParallelism,
       onComplete,
-      initAsync: options?.initAsync,
+      validateAsync: options?.validateAsync,
     });
     return workflowId as unknown as WorkflowId;
   }

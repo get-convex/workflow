@@ -18,6 +18,7 @@ export const create = mutation({
     workflowArgs: v.any(),
     maxParallelism: v.optional(v.number()),
     onComplete: v.optional(vOnComplete),
+    initAsync: v.optional(v.boolean()),
     // TODO: ttl
   },
   returns: v.string(),
@@ -38,10 +39,18 @@ export const create = mutation({
       args.workflowHandle,
     );
     // If we can't start it, may as well not create it, eh? Fail fast...
-    await ctx.runMutation(args.workflowHandle as FunctionHandle<"mutation">, {
-      workflowId,
-      generationNumber: 0,
-    });
+    if (args.initAsync) {
+      await ctx.scheduler.runAfter(
+        0,
+        args.workflowHandle as FunctionHandle<"mutation">,
+        { workflowId, generationNumber: 0 },
+      );
+    } else {
+      await ctx.runMutation(args.workflowHandle as FunctionHandle<"mutation">, {
+        workflowId,
+        generationNumber: 0,
+      });
+    }
     return workflowId as string;
   },
 });

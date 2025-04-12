@@ -163,7 +163,18 @@ export class WorkflowManager {
     ctx: RunMutationCtx,
     workflow: F,
     args: FunctionArgs<F>,
-    options?: CallbackOptions,
+    options?: CallbackOptions & {
+      /**
+       * By default, during creation the workflow will be run immediately.
+       * The benefit is that you catch errors earlier (e.g. passing a bad
+       * workflow reference or args that fail validation).
+       *
+       * If you set this to true, the workflow will be created but the run
+       * will be scheduled to run asynchronously.
+       * You can use this to make `start` faster (you still get a workflowId).
+       */
+      initAsync?: boolean;
+    },
   ): Promise<WorkflowId> {
     const handle = await createFunctionHandle(workflow);
     const onComplete = options?.onComplete
@@ -178,6 +189,7 @@ export class WorkflowManager {
       workflowArgs: args,
       maxParallelism: this.options?.workpoolOptions?.maxParallelism,
       onComplete,
+      initAsync: options?.initAsync,
     });
     return workflowId as unknown as WorkflowId;
   }

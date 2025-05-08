@@ -199,6 +199,7 @@ export type Mounts = {
       {
         maxParallelism?: number;
         onComplete?: { context?: any; fnHandle: string };
+        validateAsync?: boolean;
         workflowArgs: any;
         workflowHandle: string;
         workflowName: string;

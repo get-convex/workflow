@@ -10,6 +10,7 @@ import type { StepRequest } from "./step.js";
 import type { RetryOption } from "@convex-dev/workpool";
 import type { RunOptions, WorkflowStep } from "./types.js";
 import type { WorkflowId } from "../types.js";
+import type { Validator } from "convex/values";
 
 export class StepContext implements WorkflowStep {
   constructor(
@@ -41,17 +42,30 @@ export class StepContext implements WorkflowStep {
     return this.runFunction("action", action, args, opts);
   }
 
+  async pause<
+    Mutation extends FunctionReference<"mutation", any, any, void>,
+    Returns = void,
+  >(
+    pauseHandler: Mutation,
+    args: FunctionArgs<Mutation>,
+    opts?: RunOptions & { returns: Validator<Returns, "required", any> },
+  ): Promise<Returns> {
+    return this.runFunction("mutation", pauseHandler, args, {
+      ...opts,
+      pause: true,
+    }) as Promise<Returns>;
+  }
+
   private async runFunction<
     F extends FunctionReference<FunctionType, "internal">,
   >(
     functionType: FunctionType,
     f: F,
     args: unknown,
-    opts?: RunOptions & RetryOption,
+    opts?: RunOptions & RetryOption & { pause?: true },
   ): Promise<unknown> {
     let send: unknown;
-    const { name, ...rest } = opts ?? {};
-    const { retry, ...schedulerOptions } = rest;
+    const { name, retry, pause, ...schedulerOptions } = opts ?? {};
     const p = new Promise<unknown>((resolve, reject) => {
       send = this.sender.push({
         name: name ?? safeFunctionName(f),
@@ -59,6 +73,7 @@ export class StepContext implements WorkflowStep {
         function: f,
         args,
         retry,
+        pause,
         schedulerOptions,
         resolve,
         reject,

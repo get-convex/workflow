@@ -63,7 +63,7 @@ export const step = v.object({
   name: v.string(),
   inProgress: v.boolean(),
   workId: v.optional(vWorkIdValidator),
-  functionType: literals("query", "mutation", "action"),
+  functionType: literals("query", "mutation", "action", "pause"),
   handle: v.string(),
   argsSize: v.number(),
   args: v.any(),

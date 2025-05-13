@@ -30,6 +30,7 @@ export type StepRequest = {
   args: unknown;
   retry: RetryBehavior | boolean | undefined;
   schedulerOptions: SchedulerOptions;
+  pause: boolean | undefined;
 
   resolve: (result: unknown) => void;
   reject: (error: unknown) => void;
@@ -138,6 +139,7 @@ export class StepExecutor {
           handle: await createFunctionHandle(message.function),
           args: message.args,
           argsSize: valueSize(message.args as Value),
+          pause: message.pause,
           outcome: undefined,
           startedAt: this.now,
           completedAt: undefined,

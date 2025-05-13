@@ -115,6 +115,8 @@ export const startSteps = mutation({
             );
             break;
           }
+          // Pause is a special mutation
+          case "pause":
           case "mutation": {
             workId = await workpool.enqueueMutation(
               ctx,

@@ -69,6 +69,8 @@ export class StepExecutor {
     // eslint-disable-next-line no-constant-condition
     while (true) {
       const message = await this.receiver.get();
+      // In the future we can correlate the calls to entries by handle, args,
+      // etc. instead of just ordering. As is, the fn order can't change.
       const entry = this.journalEntries.shift();
       // why not to run queries inline: they fetch too much data internally
       if (entry) {

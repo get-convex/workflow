@@ -57,7 +57,7 @@ export declare const components: {
               args: any;
               argsSize: number;
               completedAt?: number;
-              functionType: "query" | "mutation" | "action";
+              functionType: "query" | "mutation" | "action" | "pause";
               handle: string;
               inProgress: boolean;
               name: string;
@@ -105,7 +105,7 @@ export declare const components: {
               args: any;
               argsSize: number;
               completedAt?: number;
-              functionType: "query" | "mutation" | "action";
+              functionType: "query" | "mutation" | "action" | "pause";
               handle: string;
               inProgress: boolean;
               name: string;
@@ -136,7 +136,7 @@ export declare const components: {
             args: any;
             argsSize: number;
             completedAt?: number;
-            functionType: "query" | "mutation" | "action";
+            functionType: "query" | "mutation" | "action" | "pause";
             handle: string;
             inProgress: boolean;
             name: string;
@@ -203,7 +203,7 @@ export declare const components: {
               args: any;
               argsSize: number;
               completedAt?: number;
-              functionType: "query" | "mutation" | "action";
+              functionType: "query" | "mutation" | "action" | "pause";
               handle: string;
               inProgress: boolean;
               name: string;

@@ -1,12 +1,13 @@
 import type { RetryOption, WorkId } from "@convex-dev/workpool";
 import type {
+  DefaultFunctionArgs,
   Expand,
   FunctionArgs,
   FunctionReference,
   FunctionReturnType,
 } from "convex/server";
 import type { api } from "../component/_generated/api.js";
-import type { GenericId } from "convex/values";
+import type { GenericId, Validator } from "convex/values";
 import type { WorkflowId } from "../types.js";
 
 export type WorkflowComponent = UseApi<typeof api>;
@@ -81,6 +82,33 @@ export type WorkflowStep = {
     args: FunctionArgs<Action>,
     opts?: RunOptions & RetryOption,
   ): Promise<FunctionReturnType<Action>>;
+
+  /**
+   * Pause the workflow, to be resumed asynchronously.
+   *
+   * It will be marked as paused in the same transaction as the pause handler
+   * is called. The pause handler must receive the arguments and return nothing.
+   *
+   * The return value is the value provided by the resume call, which must match
+   * the return validator provided.
+   *
+   * @param pauseHandler - The pause handler to run, like `internal.index.examplePause`.
+   * @param args - The arguments to the pause handler.
+   * @param opts - Options for retrying, scheduling and naming the pause.
+   */
+  pause<
+    Mutation extends FunctionReference<
+      "mutation",
+      "internal",
+      DefaultFunctionArgs,
+      void
+    >,
+    Returns = void,
+  >(
+    pauseHandler: Mutation,
+    args: FunctionArgs<Mutation>,
+    opts?: RunOptions & { returns: Validator<Returns, "required", any> },
+  ): Promise<Returns>;
 };
 
 export type UseApi<API> = Expand<{

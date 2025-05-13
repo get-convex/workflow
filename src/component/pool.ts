@@ -114,6 +114,18 @@ export const onComplete = internalMutation({
       );
       return;
     }
+    if (
+      journalEntry.step.functionType === "pause" &&
+      args.result.kind === "success"
+    ) {
+      console.event("stepPaused", {
+        workflowId,
+        workflowName: workflow.name,
+        stepName: journalEntry.step.name,
+        stepNumber: journalEntry.stepNumber,
+      });
+      return;
+    }
     journalEntry.step.inProgress = false;
     journalEntry.step.completedAt = Date.now();
     switch (args.result.kind) {

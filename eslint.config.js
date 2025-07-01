@@ -12,7 +12,7 @@ export default [
       "dist/**",
       "eslint.config.js",
       "**/_generated/",
-      "node10stubs.mjs",
+      "vitest.config.ts",
     ],
   },
   {

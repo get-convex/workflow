@@ -101,7 +101,7 @@ function check(
         };
       }
       for (const [key, fieldValidator] of Object.entries(validator.fields)) {
-        const fieldValue = (value as any)[key];
+        const fieldValue = (value as Record<string, Value>)[key];
         if (fieldValue === undefined) {
           if (fieldValidator.isOptional === "required") {
             return {
@@ -143,7 +143,9 @@ function check(
           message: `v.record() failed: Expected a simple object, received: ${value}`,
         };
       }
-      for (const [field, fieldValue] of Object.entries(value as any)) {
+      for (const [field, fieldValue] of Object.entries(
+        value as Record<string, Value>,
+      )) {
         const keyResult = check(field, validator.key);
         if (!keyResult.ok) {
           return {
@@ -151,7 +153,7 @@ function check(
             message: `v.record() failed: ${keyResult.message}`,
           };
         }
-        const valueResult = check(fieldValue as any, validator.value);
+        const valueResult = check(fieldValue, validator.value);
         if (!valueResult.ok) {
           return {
             ok: false,

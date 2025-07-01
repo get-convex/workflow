@@ -2,7 +2,6 @@ import {
   resultValidator,
   vResultValidator,
   RunResult,
-  vRetryBehavior,
   vWorkIdValidator,
   workIdValidator,
   vOnComplete,
@@ -11,7 +10,6 @@ import { defineSchema, defineTable } from "convex/server";
 import { convexToJson, Infer, v, Value } from "convex/values";
 import { logLevel } from "./logging.js";
 import { deprecated, literals } from "convex-helpers/validators";
-import { workpoolOptions } from "./pool.js";
 
 export function valueSize(value: Value): number {
   return JSON.stringify(convexToJson(value)).length;

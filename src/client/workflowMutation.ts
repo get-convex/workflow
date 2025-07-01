@@ -31,7 +31,7 @@ const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke
 // it blocks next.
 export function workflowMutation<ArgsValidator extends PropertyValidators>(
   component: UseApi<typeof api>,
-  registered: WorkflowDefinition<ArgsValidator, any, any>,
+  registered: WorkflowDefinition<ArgsValidator>,
   defaultWorkpoolOptions?: WorkpoolOptions,
 ): RegisteredMutation<"internal", ObjectType<ArgsValidator>, void> {
   const workpoolOptions = {

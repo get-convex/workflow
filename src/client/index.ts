@@ -22,8 +22,8 @@ import {
   WorkpoolOptions,
   WorkpoolRetryOptions,
 } from "@convex-dev/workpool";
-export { vWorkflowId } from "../types.js";
 import { Step } from "../component/schema.js";
+export { vWorkflowId } from "../types.js";
 
 export type { WorkflowId };
 
@@ -70,7 +70,7 @@ export type WorkflowStep = {
    * @param args - The arguments to the query function.
    * @param opts - Options for scheduling and naming the query.
    */
-  runQuery<Query extends FunctionReference<"query", any>>(
+  runQuery<Query extends FunctionReference<"query", "internal">>(
     query: Query,
     args: FunctionArgs<Query>,
     opts?: NameOption & SchedulerOptions,
@@ -83,7 +83,7 @@ export type WorkflowStep = {
    * @param args - The arguments to the mutation function.
    * @param opts - Options for scheduling and naming the mutation.
    */
-  runMutation<Mutation extends FunctionReference<"mutation", any>>(
+  runMutation<Mutation extends FunctionReference<"mutation", "internal">>(
     mutation: Mutation,
     args: FunctionArgs<Mutation>,
     opts?: NameOption & SchedulerOptions,
@@ -96,7 +96,7 @@ export type WorkflowStep = {
    * @param args - The arguments to the action function.
    * @param opts - Options for retrying, scheduling and naming the action.
    */
-  runAction<Action extends FunctionReference<"action", any>>(
+  runAction<Action extends FunctionReference<"action", "internal">>(
     action: Action,
     args: FunctionArgs<Action>,
     opts?: NameOption & SchedulerOptions & RetryOption,
@@ -105,7 +105,9 @@ export type WorkflowStep = {
 
 export type WorkflowDefinition<
   ArgsValidator extends PropertyValidators,
-  ReturnsValidator extends Validator<any, "required", any> | void,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ReturnsValidator extends Validator<any, "required", any> | void = any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ReturnValue extends ReturnValueForOptionalValidator<ReturnsValidator> = any,
 > = {
   args?: ArgsValidator;
@@ -139,7 +141,8 @@ export class WorkflowManager {
    */
   define<
     ArgsValidator extends PropertyValidators,
-    ReturnsValidator extends Validator<any, "required", any> | void,
+    ReturnsValidator extends Validator<unknown, "required", string> | void,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ReturnValue extends ReturnValueForOptionalValidator<ReturnsValidator> = any,
   >(
     workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator, ReturnValue>,

@@ -6,11 +6,10 @@ import {
   FunctionReference,
   createFunctionHandle,
 } from "convex/server";
-import { convexToJson } from "convex/values";
+import { convexToJson, Value } from "convex/values";
 import {
   JournalEntry,
   journalEntrySize,
-  Step,
   valueSize,
 } from "../component/schema.js";
 import { api } from "../component/_generated/api.js";
@@ -35,9 +34,8 @@ export type WorkerResult =
 export type StepRequest = {
   name: string;
   functionType: FunctionType;
-  function: FunctionReference<any>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  args: any;
+  function: FunctionReference<FunctionType, "internal">;
+  args: unknown;
   retry: RetryBehavior | boolean | undefined;
   schedulerOptions: SchedulerOptions;
 
@@ -104,7 +102,7 @@ export class StepExecutor {
       );
     }
     const stepArgsJson = JSON.stringify(convexToJson(entry.step.args));
-    const messageArgsJson = JSON.stringify(convexToJson(message.args));
+    const messageArgsJson = JSON.stringify(convexToJson(message.args as Value));
     if (stepArgsJson !== messageArgsJson) {
       throw new Error(
         `Journal entry mismatch: ${entry.step.args} !== ${message.args}`,
@@ -135,7 +133,7 @@ export class StepExecutor {
       functionType: message.functionType,
       handle: await createFunctionHandle(message.function),
       args: message.args,
-      argsSize: valueSize(message.args),
+      argsSize: valueSize(message.args as Value),
       outcome: undefined,
       startedAt: this.originalEnv.Date.now(),
       completedAt: undefined,

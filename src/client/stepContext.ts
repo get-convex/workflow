@@ -3,7 +3,6 @@ import {
   FunctionReference,
   FunctionArgs,
   FunctionReturnType,
-  createFunctionHandle,
   getFunctionName,
   FunctionType,
 } from "convex/server";
@@ -21,7 +20,7 @@ export class StepContext implements WorkflowStep {
     private sender: BaseChannel<StepRequest>,
   ) {}
 
-  async runQuery<Query extends FunctionReference<"query", any>>(
+  async runQuery<Query extends FunctionReference<"query", "internal">>(
     query: Query,
     args: FunctionArgs<Query>,
     opts?: NameOption & SchedulerOptions,
@@ -29,7 +28,7 @@ export class StepContext implements WorkflowStep {
     return this.runFunction("query", query, args, opts);
   }
 
-  async runMutation<Mutation extends FunctionReference<"mutation", any>>(
+  async runMutation<Mutation extends FunctionReference<"mutation", "internal">>(
     mutation: Mutation,
     args: FunctionArgs<Mutation>,
     opts?: NameOption & SchedulerOptions,
@@ -37,7 +36,7 @@ export class StepContext implements WorkflowStep {
     return this.runFunction("mutation", mutation, args, opts);
   }
 
-  async runAction<Action extends FunctionReference<"action", any>>(
+  async runAction<Action extends FunctionReference<"action", "internal">>(
     action: Action,
     args: FunctionArgs<Action>,
     opts?: NameOption & SchedulerOptions & RetryOption,
@@ -45,16 +44,18 @@ export class StepContext implements WorkflowStep {
     return this.runFunction("action", action, args, opts);
   }
 
-  private async runFunction<F extends FunctionReference<any>>(
+  private async runFunction<
+    F extends FunctionReference<FunctionType, "internal">,
+  >(
     functionType: FunctionType,
     f: F,
-    args: any,
+    args: unknown,
     opts?: NameOption & SchedulerOptions & RetryOption,
-  ): Promise<any> {
-    let send: any;
+  ): Promise<unknown> {
+    let send: unknown;
     const { name, ...rest } = opts ?? {};
     const { retry, ...schedulerOptions } = rest;
-    const p = new Promise<any>((resolve, reject) => {
+    const p = new Promise<unknown>((resolve, reject) => {
       send = this.sender.push({
         name: name ?? getFunctionName(f),
         functionType,

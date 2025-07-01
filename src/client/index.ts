@@ -169,10 +169,14 @@ export class WorkflowManager {
        * The benefit is that you catch errors earlier (e.g. passing a bad
        * workflow reference or catch arg validation).
        *
-       * If you set this to true, the workflow will be created but the run
-       * will be scheduled to run asynchronously.
-       * You can use this to make `start` faster (you still get a workflowId).
+       * With `startAsync` set to true, the workflow will be created but will
+       * start asynchronously via the internal workpool.
+       * You can use this to queue up a lot of work,
+       * or make `start` return faster (you still get a workflowId back).
+       * @default false
        */
+      startAsync?: boolean;
+      /** @deprecated Use `startAsync` instead. */
       validateAsync?: boolean;
     },
   ): Promise<WorkflowId> {
@@ -189,7 +193,7 @@ export class WorkflowManager {
       workflowArgs: args,
       maxParallelism: this.options?.workpoolOptions?.maxParallelism,
       onComplete,
-      validateAsync: options?.validateAsync,
+      startAsync: options?.startAsync ?? options?.validateAsync,
     });
     return workflowId as unknown as WorkflowId;
   }

@@ -18,12 +18,11 @@ export const create = mutation({
     workflowArgs: v.any(),
     maxParallelism: v.optional(v.number()),
     onComplete: v.optional(vOnComplete),
-    validateAsync: v.optional(v.boolean()),
+    startAsync: v.optional(v.boolean()),
     // TODO: ttl
   },
   returns: v.string(),
   handler: async (ctx, args) => {
-    const now = Date.now();
     const console = await getDefaultLogger(ctx);
     await updateMaxParallelism(ctx, console, args.maxParallelism);
     const workflowId = await ctx.db.insert("workflows", {
@@ -38,14 +37,15 @@ export const create = mutation({
       args.workflowArgs,
       args.workflowHandle,
     );
-    // If we can't start it, may as well not create it, eh? Fail fast...
-    if (args.validateAsync) {
-      await ctx.scheduler.runAfter(
-        0,
+    if (args.startAsync) {
+      const workpool = await getWorkpool(ctx, args);
+      await workpool.enqueueMutation(
+        ctx,
         args.workflowHandle as FunctionHandle<"mutation">,
         { workflowId, generationNumber: 0 },
       );
     } else {
+      // If we can't start it, may as well not create it, eh? Fail fast...
       await ctx.runMutation(args.workflowHandle as FunctionHandle<"mutation">, {
         workflowId,
         generationNumber: 0,

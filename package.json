@@ -13,14 +13,24 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "build": "npm run build:esm && npm run build:cjs",
-    "build:esm": "tsc --project ./esm.json && echo '{\\n  \"type\": \"module\"\\n}' > dist/esm/package.json",
-    "build:cjs": "tsc --project ./commonjs.json && echo '{\\n  \"type\": \"commonjs\"\\n}' > dist/commonjs/package.json",
+    "example": "cd example && npm run dev",
+    "dev": "run-p -r 'example' 'build:watch'",
+    "dashboard": "cd example && npx convex dashboard",
+    "all": "run-p -r 'example' 'build:watch' 'test:watch'",
+    "setup": "npm i && npm run build && cd example && npm i && npx convex dev --once && printf 'VITE_CONVEX_SITE_URL=' >> .env.local && npx convex env get CONVEX_SITE_URL >> .env.local",
+    "build:watch": "cd src && npx chokidar -d 1000 '../tsconfig.json' '**/*.ts' -c 'npm run build' --initial",
+    "build": "tsc --project ./tsconfig.build.json && npm run copy:dts && echo '{\\n  \"type\": \"module\"\\n}' > dist/package.json",
+    "copy:dts": "rsync -a --include='*/' --include='*.d.ts' --exclude='*' src/ dist/ || cpy 'src/**/*.d.ts' 'dist/' --parents",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "alpha": "rm -rf dist && npm run build && npm run test && npm version prerelease --preid alpha && npm publish --tag alpha && git push --tags",
-    "release": "rm -rf dist && npm run build && npm run test && npm version patch && npm publish && git push --tags",
-    "prepare": "npm run build"
+    "clean": "rm -rf dist tsconfig.build.tsbuildinfo",
+    "alpha": "npm run clean && npm run build && run-p test lint typecheck && npm version prerelease --preid alpha && npm publish --tag alpha && git push --tags",
+    "release": "npm run clean && npm run build && run-p test lint typecheck && npm version patch && npm publish && git push --tags && git push",
+    "test": "vitest run --typecheck --config ./src/vitest.config.ts",
+    "test:watch": "vitest --typecheck --config ./src/vitest.config.ts",
+    "test:debug": "vitest --inspect-brk --no-file-parallelism --config ./src/vitest.config.ts",
+    "test:coverage": "vitest run --coverage --coverage.reporter=text",
+    "lint": "eslint src",
+    "version": "pbcopy <<<$npm_package_version; vim CHANGELOG.md && git add CHANGELOG.md"
   },
   "files": [
     "dist",
@@ -29,23 +39,13 @@
   "exports": {
     "./package.json": "./package.json",
     ".": {
-      "import": {
-        "@convex-dev/component-source": "./src/client/index.ts",
-        "types": "./dist/esm/client/index.d.ts",
-        "default": "./dist/esm/client/index.js"
-      },
-      "require": {
-        "@convex-dev/component-source": "./src/client/index.ts",
-        "types": "./dist/commonjs/client/index.d.ts",
-        "default": "./dist/commonjs/client/index.js"
-      }
+      "types": "./dist/client/index.d.ts",
+      "default": "./dist/client/index.js"
     },
     "./convex.config": {
-      "import": {
-        "@convex-dev/component-source": "./src/component/convex.config.ts",
-        "types": "./dist/esm/component/convex.config.d.ts",
-        "default": "./dist/esm/component/convex.config.js"
-      }
+      "@convex-dev/component-source": "./src/component/convex.config.ts",
+      "types": "./dist/component/convex.config.d.ts",
+      "default": "./dist/component/convex.config.js"
     }
   },
   "peerDependencies": {
@@ -57,20 +57,24 @@
     "async-channel": "^0.2.0"
   },
   "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
     "@eslint/eslintrc": "^3.1.0",
     "@eslint/js": "^9.9.1",
     "@types/node": "^18.19.86",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
-    "eslint": "^8.57.0",
+    "chokidar-cli": "^3.0.0",
+    "cpy-cli": "^5.0.0",
+    "eslint": "^8.57.1",
     "globals": "^15.9.0",
+    "npm-run-all2": "^7.0.2",
     "openai": "^4.54.0",
     "prettier": "3.2.5",
     "typescript": "~5.5.0",
-    "typescript-eslint": "^7.0.0",
-    "vitest": "^3.1.1"
+    "typescript-eslint": "^7.18.0",
+    "vitest": "^3.2.4"
   },
-  "main": "./dist/commonjs/client/index.js",
-  "types": "./dist/commonjs/client/index.d.ts",
-  "module": "./dist/esm/client/index.js"
+  "main": "./dist/client/index.js",
+  "types": "./dist/client/index.d.ts",
+  "module": "./dist/client/index.js"
 }

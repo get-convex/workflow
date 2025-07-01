@@ -8,14 +8,14 @@ import {
   workflowDocument,
 } from "./schema.js";
 import { getWorkflow } from "./model.js";
-import { createLogger, logLevel } from "./logging.js";
-import { vRetryBehavior, vWorkIdValidator, WorkId } from "@convex-dev/workpool";
-import { assert } from "convex-helpers";
+import { logLevel } from "./logging.js";
+import { vRetryBehavior, WorkId } from "@convex-dev/workpool";
 import { getStatusHandler } from "./workflow.js";
 import { getWorkpool, OnCompleteContext, workpoolOptions } from "./pool.js";
 import { internal } from "./_generated/api.js";
 import { FunctionHandle } from "convex/server";
 import { getDefaultLogger } from "./utils.js";
+import { assert } from "convex-helpers";
 
 export const load = query({
   args: {
@@ -91,6 +91,7 @@ export const startStep = mutation({
       step,
     });
     const entry = await ctx.db.get(stepId);
+    assert(entry, "Step not found");
     const workpool = await getWorkpool(ctx, args.workpoolOptions);
     const onComplete = internal.pool.onComplete;
     const context: OnCompleteContext = {
@@ -127,6 +128,8 @@ export const startStep = mutation({
         break;
       }
     }
+    entry.step.workId = workId;
+    await ctx.db.replace(entry._id, entry);
 
     console.event("started", {
       workflowId: workflow._id,
@@ -134,6 +137,6 @@ export const startStep = mutation({
       stepName: step.name,
       stepNumber,
     });
-    return entry! as JournalEntry;
+    return entry;
   },
 });

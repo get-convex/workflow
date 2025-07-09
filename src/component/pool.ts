@@ -60,6 +60,7 @@ export const onCompleteContext = v.object({
 
 export type OnCompleteContext = Infer<typeof onCompleteContext>;
 
+// For a single step
 export const onComplete = internalMutation({
   args: {
     workId: workIdValidator,
@@ -97,17 +98,8 @@ export const onComplete = internalMutation({
       return;
     }
     const { generationNumber } = args.context;
-    const workflow = await getWorkflow(ctx, workflowId, generationNumber);
     journalEntry.step.inProgress = false;
     journalEntry.step.completedAt = Date.now();
-    console.event("stepCompleted", {
-      workflowId,
-      workflowName: workflow.name,
-      status: args.result.kind,
-      stepName: journalEntry.step.name,
-      stepNumber: journalEntry.stepNumber,
-      durationMs: journalEntry.step.completedAt - journalEntry.step.startedAt,
-    });
     switch (args.result.kind) {
       case "success":
         journalEntry.step.runResult = {
@@ -129,25 +121,40 @@ export const onComplete = internalMutation({
     }
     await ctx.db.replace(journalEntry._id, journalEntry);
     console.debug(`Completed execution of ${stepId}`, journalEntry);
-    if (workflow.runResult === undefined) {
-      // TODO: Technically this doesn't obey the workpool, but...
-      // it's better than calling it directly, and enqueuing can now happen
-      // in the root component.
-      const workpool = await getWorkpool(ctx, args.context.workpoolOptions);
-      await workpool.enqueueMutation(
-        ctx,
-        workflow.workflowHandle as FunctionHandle<"mutation">,
-        { workflowId: workflow._id, generationNumber },
-        {
-          onComplete: internal.pool.handlerOnComplete,
-          context: { workflowId, generationNumber },
-        },
-      );
-    } else {
-      console.error(
-        `Workflow not running: ${workflowId} when completing ${stepId}`,
-      );
+
+    const workflow = await getWorkflow(ctx, workflowId, null);
+    console.event("stepCompleted", {
+      workflowId,
+      workflowName: workflow.name,
+      status: args.result.kind,
+      stepName: journalEntry.step.name,
+      stepNumber: journalEntry.stepNumber,
+      durationMs: journalEntry.step.completedAt - journalEntry.step.startedAt,
+    });
+    if (workflow.runResult !== undefined) {
+      if (workflow.runResult.kind !== "canceled") {
+        console.error(
+          `Workflow: ${workflowId} already ${workflow.runResult.kind} when completing ${stepId} with status ${args.result.kind}`,
+        );
+      }
+      return;
     }
+    if (workflow.generationNumber !== generationNumber) {
+      console.error(
+        `Workflow: ${workflowId} already has generation number ${workflow.generationNumber} when completing ${stepId}`,
+      );
+      return;
+    }
+    const workpool = await getWorkpool(ctx, args.context.workpoolOptions);
+    await workpool.enqueueMutation(
+      ctx,
+      workflow.workflowHandle as FunctionHandle<"mutation">,
+      { workflowId: workflow._id, generationNumber },
+      {
+        onComplete: internal.pool.handlerOnComplete,
+        context: { workflowId, generationNumber },
+      },
+    );
   },
 });
 
@@ -165,6 +172,7 @@ const handlerOnCompleteContext = v.object({
   generationNumber: v.number(),
 });
 
+// For the workflow handler
 export const handlerOnComplete = internalMutation({
   args: {
     workId: workIdValidator,

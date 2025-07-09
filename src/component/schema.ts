@@ -42,7 +42,7 @@ const workflowObject = {
   logLevel: deprecated,
   startedAt: deprecated,
   state: deprecated,
-  // undefined
+  // undefined until it's completed
   runResult: v.optional(vResultValidator),
 
   // Internal execution status, used to totally order mutations.

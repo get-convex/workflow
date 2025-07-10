@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@convex-dev/workflow": "file:..",
-    "convex": "^1.16.5"
+    "convex": "file:../node_modules/convex"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

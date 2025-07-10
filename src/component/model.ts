@@ -17,7 +17,9 @@ export async function getWorkflow(
     expectedGenerationNumber !== null &&
     workflow.generationNumber !== expectedGenerationNumber
   ) {
-    throw new Error(`Invalid generation number: ${expectedGenerationNumber}`);
+    throw new Error(
+      `Invalid generation number: ${expectedGenerationNumber} for workflow ${workflow.name} (${workflowId})`,
+    );
   }
   return workflow;
 }

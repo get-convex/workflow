@@ -60,7 +60,9 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         return;
       }
       if (workflow.generationNumber !== generationNumber) {
-        console.error(`Invalid generation number: ${generationNumber}`);
+        console.error(
+          `Invalid generation number: ${generationNumber} running workflow ${workflow.name} (${workflowId})`,
+        );
         return;
       }
       if (workflow.runResult?.kind === "success") {

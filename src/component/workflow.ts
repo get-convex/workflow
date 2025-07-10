@@ -188,7 +188,8 @@ export const cleanup = mutation({
       return false;
     }
     const logger = await getDefaultLogger(ctx);
-    if (workflow.runResult?.kind !== "success") {
+    // TODO: allow cleaning up a workflow from inside it / in the onComplete hook
+    if (!workflow.runResult) {
       logger.debug(
         `Can't clean up workflow ${workflowId} since it hasn't completed.`,
       );

@@ -190,7 +190,6 @@ export declare const components: {
         "internal",
         {
           generationNumber: number;
-          now: number;
           runResult:
             | { kind: "success"; returnValue: any }
             | { error: string; kind: "failed" }

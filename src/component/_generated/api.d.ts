@@ -184,7 +184,6 @@ export type Mounts = {
       "public",
       {
         generationNumber: number;
-        now: number;
         runResult:
           | { kind: "success"; returnValue: any }
           | { error: string; kind: "failed" }

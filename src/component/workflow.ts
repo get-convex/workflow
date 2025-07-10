@@ -20,7 +20,7 @@ export const create = mutation({
     startAsync: v.optional(v.boolean()),
     // TODO: ttl
   },
-  returns: v.string(),
+  returns: v.id("workflows"),
   handler: async (ctx, args) => {
     const console = await getDefaultLogger(ctx);
     await updateMaxParallelism(ctx, console, args.maxParallelism);
@@ -50,7 +50,7 @@ export const create = mutation({
         generationNumber: 0,
       });
     }
-    return workflowId as string;
+    return workflowId;
   },
 });
 

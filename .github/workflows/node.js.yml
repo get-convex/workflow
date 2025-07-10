@@ -17,3 +17,4 @@ jobs:
       - run: npm run typecheck
       - run: cd example && npm run lint && cd ..
       - run: npm test
+      - run: npx pkg-pr-new publish

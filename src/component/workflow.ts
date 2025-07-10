@@ -141,17 +141,25 @@ export const complete = mutation({
       overallDurationMs: Date.now() - workflow._creationTime,
     });
     if (workflow.onComplete) {
-      await ctx.runMutation(
-        workflow.onComplete.fnHandle as FunctionHandle<
-          "mutation",
-          OnCompleteArgs
-        >,
-        {
-          workflowId: workflow._id as unknown as WorkflowId,
-          result: workflow.runResult,
-          context: workflow.onComplete.context,
-        },
-      );
+      try {
+        await ctx.runMutation(
+          workflow.onComplete.fnHandle as FunctionHandle<
+            "mutation",
+            OnCompleteArgs
+          >,
+          {
+            workflowId: workflow._id as unknown as WorkflowId,
+            result: workflow.runResult,
+            context: workflow.onComplete.context,
+          },
+        );
+      } catch (error) {
+        console.error("Error calling onComplete", error);
+        await ctx.db.insert("onCompleteFailures", {
+          ...args,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
     // TODO: delete everything unless ttl is set
     console.debug(`Completed workflow ${workflow._id}:`, workflow);

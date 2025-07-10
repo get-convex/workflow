@@ -69,6 +69,7 @@
     "globals": "^15.9.0",
     "npm-run-all2": "^7.0.2",
     "openai": "^4.54.0",
+    "pkg-pr-new": "^0.0.54",
     "prettier": "3.2.5",
     "typescript": "~5.5.0",
     "typescript-eslint": "^7.18.0",

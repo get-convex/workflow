@@ -121,9 +121,20 @@ export default defineSchema({
   steps: defineTable(journalObject)
     .index("workflow", ["workflowId", "stepNumber"])
     .index("inProgress", ["step.inProgress", "workflowId"]),
-  onCompleteFailures: defineTable({
-    workId: workIdValidator,
-    result: resultValidator,
-    context: v.any(),
-  }),
+  onCompleteFailures: defineTable(
+    v.union(
+      v.object({
+        workId: workIdValidator,
+        result: resultValidator,
+        context: v.any(),
+      }),
+      v.object({
+        workflowId: v.id("workflows"),
+        generationNumber: v.number(),
+        runResult: vResultValidator,
+        now: v.number(),
+        error: v.string(),
+      }),
+    ),
+  ),
 });

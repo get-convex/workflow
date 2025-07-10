@@ -39,6 +39,7 @@
   "exports": {
     "./package.json": "./package.json",
     ".": {
+      "@convex-dev/component-source": "./src/client/index.ts",
       "types": "./dist/client/index.d.ts",
       "default": "./dist/client/index.js"
     },

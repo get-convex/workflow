@@ -61,7 +61,7 @@
     "@edge-runtime/vm": "5.0.0",
     "@eslint/eslintrc": "3.3.1",
     "@eslint/js": "9.23.0",
-    "@types/node": "18.19.86",
+    "@types/node": "18.19.117",
     "@typescript-eslint/eslint-plugin": "7.18.0",
     "@typescript-eslint/parser": "7.18.0",
     "chokidar-cli": "3.0.0",

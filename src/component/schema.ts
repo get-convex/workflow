@@ -80,7 +80,6 @@ function stepSize(step: Step): number {
   }
   size += step.functionType.length;
   size += step.handle.length;
-  // TODO: start time, for scheduled steps
   size += 8 + step.argsSize;
   if (step.runResult) {
     size += resultSize(step.runResult);

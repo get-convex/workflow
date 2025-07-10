@@ -44,8 +44,11 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         throw new Error(INVALID_WORKFLOW_MESSAGE);
       }
       const { workflowId, generationNumber } = args;
-      const { workflow, inProgress, logLevel, journalEntries, ok } =
-        await ctx.runQuery(component.journal.load, { workflowId });
+      const { workflow, logLevel, journalEntries, ok } = await ctx.runQuery(
+        component.journal.load,
+        { workflowId },
+      );
+      const inProgress = journalEntries.filter(({ step }) => step.inProgress);
       const console = createLogger(logLevel);
       if (!ok) {
         console.error(`Failed to load journal for ${workflowId}`);

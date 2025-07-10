@@ -10,7 +10,6 @@ import {
 import { getWorkflow } from "./model.js";
 import { logLevel } from "./logging.js";
 import { vRetryBehavior, WorkId } from "@convex-dev/workpool";
-import { getStatusHandler } from "./workflow.js";
 import { getWorkpool, OnCompleteContext, workpoolOptions } from "./pool.js";
 import { internal } from "./_generated/api.js";
 import { FunctionHandle } from "convex/server";
@@ -23,15 +22,14 @@ export const load = query({
   },
   returns: v.object({
     workflow: workflowDocument,
-    inProgress: v.array(journalDocument),
     journalEntries: v.array(journalDocument),
     ok: v.boolean(),
     logLevel,
   }),
   handler: async (ctx, { workflowId }) => {
-    const { workflow, inProgress, logLevel } = await getStatusHandler(ctx, {
-      workflowId,
-    });
+    const workflow = await ctx.db.get(workflowId);
+    assert(workflow, `Workflow not found: ${workflowId}`);
+    const { logLevel } = await getDefaultLogger(ctx);
     const journalEntries: JournalEntry[] = [];
     let sizeSoFar = 0;
     for await (const entry of ctx.db
@@ -40,14 +38,13 @@ export const load = query({
       journalEntries.push(entry);
       sizeSoFar += journalEntrySize(entry);
       if (sizeSoFar > 4 * 1024 * 1024) {
-        return { journalEntries, ok: false, workflow, inProgress, logLevel };
+        return { journalEntries, ok: false, workflow, logLevel };
       }
     }
-    return { journalEntries, ok: true, workflow, inProgress, logLevel };
+    return { journalEntries, ok: true, workflow, logLevel };
   },
 });
 
-// TODO: have it also start the step
 export const startStep = mutation({
   args: {
     workflowId: v.string(),

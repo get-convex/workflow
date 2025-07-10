@@ -68,7 +68,7 @@
     "convex-test": "0.0.38",
     "cpy-cli": "5.0.0",
     "eslint": "8.57.1",
-    "globals": "15.9.0",
+    "globals": "15.15.0",
     "npm-run-all2": "7.0.2",
     "openai": "4.58.2",
     "pkg-pr-new": "0.0.54",

@@ -98,6 +98,7 @@ export const flowCompleted = internalMutation({
     await ctx.db.patch(flow._id, {
       out: args.result,
     });
+    await workflow.cleanup(ctx, args.workflowId);
   },
 });
 

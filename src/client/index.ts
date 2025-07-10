@@ -127,7 +127,7 @@ export type WorkflowStatus =
 
 export class WorkflowManager {
   constructor(
-    private component: UseApi<typeof api>,
+    public component: UseApi<typeof api>,
     public options?: {
       workpoolOptions: WorkpoolOptions;
     },

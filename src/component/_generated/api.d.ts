@@ -44,27 +44,6 @@ export type Mounts = {
       "public",
       { workflowId: string },
       {
-        inProgress: Array<{
-          _creationTime: number;
-          _id: string;
-          step: {
-            args: any;
-            argsSize: number;
-            completedAt?: number;
-            functionType: "query" | "mutation" | "action";
-            handle: string;
-            inProgress: boolean;
-            name: string;
-            runResult?:
-              | { kind: "success"; returnValue: any }
-              | { error: string; kind: "failed" }
-              | { kind: "canceled" };
-            startedAt: number;
-            workId?: string;
-          };
-          stepNumber: number;
-          workflowId: string;
-        }>;
         journalEntries: Array<{
           _creationTime: number;
           _id: string;

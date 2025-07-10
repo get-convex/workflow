@@ -1,13 +1,12 @@
 import { vOnComplete, vResultValidator } from "@convex-dev/workpool";
 import { assert } from "convex-helpers";
 import { FunctionHandle } from "convex/server";
-import { v } from "convex/values";
-import { Id } from "./_generated/dataModel.js";
-import { mutation, MutationCtx, query, QueryCtx } from "./_generated/server.js";
-import { createLogger, Logger, logLevel } from "./logging.js";
+import { Infer, v } from "convex/values";
+import { mutation, MutationCtx, query } from "./_generated/server.js";
+import { Logger, logLevel } from "./logging.js";
 import { getWorkflow } from "./model.js";
 import { getWorkpool } from "./pool.js";
-import { journalDocument, JournalEntry, workflowDocument } from "./schema.js";
+import { journalDocument, workflowDocument } from "./schema.js";
 import { getDefaultLogger } from "./utils.js";
 import { WorkflowId, OnCompleteArgs } from "../types.js";
 
@@ -64,28 +63,21 @@ export const getStatus = query({
     inProgress: v.array(journalDocument),
     logLevel: logLevel,
   }),
-  handler: getStatusHandler,
+  handler: async (ctx, args) => {
+    const workflow = await ctx.db.get(args.workflowId);
+    assert(workflow, `Workflow not found: ${args.workflowId}`);
+    const console = await getDefaultLogger(ctx);
+
+    const inProgress = await ctx.db
+      .query("steps")
+      .withIndex("inProgress", (q) =>
+        q.eq("step.inProgress", true).eq("workflowId", args.workflowId),
+      )
+      .collect();
+    console.debug(`${args.workflowId} blocked by`, inProgress);
+    return { workflow, inProgress, logLevel: console.logLevel };
+  },
 });
-
-export async function getStatusHandler(
-  ctx: QueryCtx,
-  args: { workflowId: Id<"workflows"> },
-) {
-  const workflow = await ctx.db.get(args.workflowId);
-  assert(workflow, `Workflow not found: ${args.workflowId}`);
-  const console = await getDefaultLogger(ctx);
-
-  const result: JournalEntry[] = [];
-  const inProgressEntries = await ctx.db
-    .query("steps")
-    .withIndex("inProgress", (q) =>
-      q.eq("step.inProgress", true).eq("workflowId", args.workflowId),
-    )
-    .collect();
-  result.push(...inProgressEntries);
-  console.debug(`${args.workflowId} blocked by`, result);
-  return { workflow, inProgress: result, logLevel: console.logLevel };
-}
 
 export const cancel = mutation({
   args: {
@@ -93,10 +85,57 @@ export const cancel = mutation({
   },
   returns: v.null(),
   handler: async (ctx, { workflowId }) => {
-    const { workflow, inProgress, logLevel } = await getStatusHandler(ctx, {
+    const workflow = await ctx.db.get(workflowId);
+    assert(workflow, `Workflow not found: ${workflowId}`);
+    await completeHandler(ctx, {
       workflowId,
+      generationNumber: workflow.generationNumber,
+      runResult: { kind: "canceled" },
     });
-    const console = createLogger(logLevel);
+  },
+});
+
+const completeArgs = v.object({
+  workflowId: v.id("workflows"),
+  generationNumber: v.number(),
+  runResult: vResultValidator,
+});
+
+export const complete = mutation({
+  args: completeArgs,
+  returns: v.null(),
+  handler: completeHandler,
+});
+
+export async function completeHandler(
+  ctx: MutationCtx,
+  args: Infer<typeof completeArgs>,
+) {
+  const workflow = await getWorkflow(
+    ctx,
+    args.workflowId,
+    args.generationNumber,
+  );
+  const console = await getDefaultLogger(ctx);
+  if (workflow.runResult) {
+    throw new Error(`Workflow not running: ${workflow}`);
+  }
+  workflow.runResult = args.runResult;
+  console.event("completed", {
+    workflowId: workflow._id,
+    name: workflow.name,
+    status: workflow.runResult.kind,
+    overallDurationMs: Date.now() - workflow._creationTime,
+  });
+  if (workflow.runResult.kind === "canceled") {
+    // We bump it so no in-flight steps succeed / we don't race to complete.
+    workflow.generationNumber += 1;
+    const inProgress = await ctx.db
+      .query("steps")
+      .withIndex("inProgress", (q) =>
+        q.eq("step.inProgress", true).eq("workflowId", args.workflowId),
+      )
+      .collect();
     if (inProgress.length > 0) {
       const workpool = await getWorkpool(ctx, {});
       for (const step of inProgress) {
@@ -105,67 +144,33 @@ export const cancel = mutation({
         }
       }
     }
-    assert(workflow.runResult === undefined, `Not running: ${workflowId}`);
-    workflow.runResult = { kind: "canceled" };
-    workflow.generationNumber += 1;
-    console.debug(`Canceled workflow ${workflowId}:`, workflow);
-    // TODO: Call onComplete hook
-    // TODO: delete everything unless ttl is set
-    await ctx.db.replace(workflow._id, workflow);
-  },
-});
-
-export const complete = mutation({
-  args: {
-    workflowId: v.id("workflows"),
-    generationNumber: v.number(),
-    runResult: vResultValidator,
-    now: v.number(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const workflow = await getWorkflow(
-      ctx,
-      args.workflowId,
-      args.generationNumber,
-    );
-    const console = await getDefaultLogger(ctx);
-    if (workflow.runResult) {
-      throw new Error(`Workflow not running: ${workflow}`);
+    console.debug(`Canceled workflow:`, workflow);
+  }
+  if (workflow.onComplete) {
+    try {
+      await ctx.runMutation(
+        workflow.onComplete.fnHandle as FunctionHandle<
+          "mutation",
+          OnCompleteArgs
+        >,
+        {
+          workflowId: workflow._id as unknown as WorkflowId,
+          result: workflow.runResult,
+          context: workflow.onComplete.context,
+        },
+      );
+    } catch (error) {
+      console.error("Error calling onComplete", error);
+      await ctx.db.insert("onCompleteFailures", {
+        ...args,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
-    workflow.runResult = args.runResult;
-    console.event("completed", {
-      workflowId: workflow._id,
-      name: workflow.name,
-      status: workflow.runResult.kind,
-      overallDurationMs: Date.now() - workflow._creationTime,
-    });
-    if (workflow.onComplete) {
-      try {
-        await ctx.runMutation(
-          workflow.onComplete.fnHandle as FunctionHandle<
-            "mutation",
-            OnCompleteArgs
-          >,
-          {
-            workflowId: workflow._id as unknown as WorkflowId,
-            result: workflow.runResult,
-            context: workflow.onComplete.context,
-          },
-        );
-      } catch (error) {
-        console.error("Error calling onComplete", error);
-        await ctx.db.insert("onCompleteFailures", {
-          ...args,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-    // TODO: delete everything unless ttl is set
-    console.debug(`Completed workflow ${workflow._id}:`, workflow);
-    await ctx.db.replace(workflow._id, workflow);
-  },
-});
+  }
+  // TODO: delete everything unless ttl is set
+  console.debug(`Completed workflow ${workflow._id}:`, workflow);
+  await ctx.db.replace(workflow._id, workflow);
+}
 
 export const cleanup = mutation({
   args: {

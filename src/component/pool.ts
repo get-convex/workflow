@@ -18,6 +18,7 @@ import { internalMutation, MutationCtx } from "./_generated/server.js";
 import { logLevel } from "./logging.js";
 import { getWorkflow } from "./model.js";
 import { getDefaultLogger } from "./utils.js";
+import { completeHandler } from "./workflow.js";
 
 export const workpoolOptions = v.object({
   logLevel: v.optional(logLevel),
@@ -181,32 +182,37 @@ export const handlerOnComplete = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    if (args.result.kind !== "success") {
-      const console = await getDefaultLogger(ctx);
-      if (!validate(handlerOnCompleteContext, args.context)) {
-        console.error("Invalid handlerOnComplete context", args.context);
-        if (
-          validate(v.id("workflows"), args.context.workflowId, { db: ctx.db })
-        ) {
-          await ctx.db.patch(args.context.workflowId, {
-            runResult: {
-              kind: "failed",
-              error:
-                "Invalid handlerOnComplete context: " +
-                JSON.stringify(args.context),
-            },
-          });
-        }
-        return;
-      }
-      const { workflowId, generationNumber } = args.context;
-      await ctx.runMutation(api.workflow.complete, {
-        workflowId,
-        generationNumber,
-        runResult: args.result,
-        now: Date.now(),
-      });
+    if (args.result.kind === "success") {
+      return;
     }
+    const console = await getDefaultLogger(ctx);
+    if (!validate(handlerOnCompleteContext, args.context)) {
+      console.error("Invalid handlerOnComplete context", args.context);
+      if (
+        validate(v.id("workflows"), args.context.workflowId, { db: ctx.db })
+      ) {
+        await ctx.db.insert("onCompleteFailures", args);
+        await completeHandler(ctx, {
+          workflowId: args.context.workflowId,
+          generationNumber: args.context.generationNumber,
+          runResult: {
+            kind: "failed",
+            error:
+              "Invalid handlerOnComplete context: " +
+              JSON.stringify(args.context),
+          },
+        }).catch((error) => {
+          console.error("Error calling completeHandler", error);
+        });
+      }
+      return;
+    }
+    const { workflowId, generationNumber } = args.context;
+    await completeHandler(ctx, {
+      workflowId,
+      generationNumber,
+      runResult: args.result,
+    });
   },
 });
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

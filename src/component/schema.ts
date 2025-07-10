@@ -132,7 +132,6 @@ export default defineSchema({
         workflowId: v.id("workflows"),
         generationNumber: v.number(),
         runResult: vResultValidator,
-        now: v.number(),
         error: v.string(),
       }),
     ),

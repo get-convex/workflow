@@ -56,7 +56,6 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
           workflowId,
           generationNumber,
           runResult: { kind: "failed", error: "Failed to load journal" },
-          now: Date.now(),
         });
         return;
       }
@@ -135,7 +134,6 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
             workflowId,
             generationNumber,
             runResult: result.runResult,
-            now: originalEnv.Date.now(),
           });
           break;
         }

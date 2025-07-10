@@ -146,6 +146,8 @@ export async function completeHandler(
     }
     console.debug(`Canceled workflow:`, workflow);
   }
+  // Write the workflow so the onComplete can observe the updated status.
+  await ctx.db.replace(workflow._id, workflow);
   if (workflow.onComplete) {
     try {
       await ctx.runMutation(
@@ -169,7 +171,6 @@ export async function completeHandler(
   }
   // TODO: delete everything unless ttl is set
   console.debug(`Completed workflow ${workflow._id}:`, workflow);
-  await ctx.db.replace(workflow._id, workflow);
 }
 
 export const cleanup = mutation({

@@ -12,7 +12,7 @@
     "convex": "file:../node_modules/convex"
   },
   "devDependencies": {
-    "@types/node": "22.14.0",
+    "@types/node": "22.16.3",
     "convex-test": "0.0.36",
     "eslint": "8.57.1",
     "typescript": "5.8.3"

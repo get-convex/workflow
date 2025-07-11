@@ -70,7 +70,7 @@
     "eslint": "8.57.1",
     "globals": "15.15.0",
     "npm-run-all2": "7.0.2",
-    "openai": "4.58.2",
+    "openai": "4.104.0",
     "pkg-pr-new": "0.0.54",
     "prettier": "3.2.5",
     "typescript": "5.5.4",

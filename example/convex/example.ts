@@ -82,6 +82,16 @@ export const startWorkflow = internalMutation({
   },
 });
 
+export const cancelWorkflow = internalMutation({
+  args: {
+    workflowId: vWorkflowId,
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await workflow.cancel(ctx, args.workflowId);
+  },
+});
+
 export const flowCompleted = internalMutation({
   args: {
     workflowId: vWorkflowId,

@@ -3,9 +3,9 @@ import {
   FunctionReference,
   FunctionArgs,
   FunctionReturnType,
-  getFunctionName,
   FunctionType,
 } from "convex/server";
+import { safeFunctionName } from "./safeFunctionName.js";
 import { WorkflowStep } from "./index.js";
 import { StepRequest } from "./step.js";
 import {
@@ -57,7 +57,7 @@ export class StepContext implements WorkflowStep {
     const { retry, ...schedulerOptions } = rest;
     const p = new Promise<unknown>((resolve, reject) => {
       send = this.sender.push({
-        name: name ?? getFunctionName(f),
+        name: name ?? safeFunctionName(f),
         functionType,
         function: f,
         args,

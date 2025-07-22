@@ -7,10 +7,10 @@ import {
   GenericDataModel,
   GenericMutationCtx,
   GenericQueryCtx,
-  getFunctionName,
   RegisteredMutation,
   ReturnValueForOptionalValidator,
 } from "convex/server";
+import { safeFunctionName } from "./safeFunctionName.js";
 import { ObjectType, PropertyValidators, Validator } from "convex/values";
 import { api } from "../component/_generated/api.js";
 import { OnCompleteArgs, OpaqueIds, UseApi, WorkflowId } from "../types.js";
@@ -191,7 +191,7 @@ export class WorkflowManager {
         }
       : undefined;
     const workflowId = await ctx.runMutation(this.component.workflow.create, {
-      workflowName: getFunctionName(workflow),
+      workflowName: safeFunctionName(workflow),
       workflowHandle: handle,
       workflowArgs: args,
       maxParallelism: this.options?.workpoolOptions?.maxParallelism,

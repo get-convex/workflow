@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.6 alpha
+
+- Allow calling components directly from steps
+
 ## 0.2.5
 
 - Call the onComplete handler for canceled workflows

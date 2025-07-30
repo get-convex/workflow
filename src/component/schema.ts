@@ -1,9 +1,7 @@
 import {
-  resultValidator,
   vResultValidator,
   RunResult,
   vWorkIdValidator,
-  workIdValidator,
   vOnComplete,
 } from "@convex-dev/workpool";
 import { defineSchema, defineTable } from "convex/server";
@@ -124,8 +122,8 @@ export default defineSchema({
   onCompleteFailures: defineTable(
     v.union(
       v.object({
-        workId: workIdValidator,
-        result: resultValidator,
+        workId: vWorkIdValidator,
+        result: vResultValidator,
         context: v.any(),
       }),
       v.object({

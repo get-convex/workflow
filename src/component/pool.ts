@@ -1,7 +1,7 @@
 import {
-  resultValidator,
+  vResultValidator,
   vRetryBehavior,
-  workIdValidator,
+  vWorkIdValidator,
   Workpool,
   WorkpoolOptions,
 } from "@convex-dev/workpool";
@@ -64,8 +64,8 @@ export type OnCompleteContext = Infer<typeof onCompleteContext>;
 // For a single step
 export const onComplete = internalMutation({
   args: {
-    workId: workIdValidator,
-    result: resultValidator,
+    workId: vWorkIdValidator,
+    result: vResultValidator,
     context: v.any(), // Ensure we can catch invalid context to fail workflow.
   },
   returns: v.null(),
@@ -176,8 +176,8 @@ const handlerOnCompleteContext = v.object({
 // For the workflow handler
 export const handlerOnComplete = internalMutation({
   args: {
-    workId: workIdValidator,
-    result: resultValidator,
+    workId: vWorkIdValidator,
+    result: vResultValidator,
     context: v.any(),
   },
   returns: v.null(),

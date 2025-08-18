@@ -13,8 +13,8 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
       - run: npm i
       - run: npm run build
+      - run: npx pkg-pr-new publish
       - run: cd example && npm i && cd ..
       - run: npm run typecheck
       - run: cd example && npm run lint && cd ..
       - run: npm test
-      - run: npx pkg-pr-new publish

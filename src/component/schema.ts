@@ -2,7 +2,6 @@ import {
   vResultValidator,
   RunResult,
   vWorkIdValidator,
-  vOnComplete,
 } from "@convex-dev/workpool";
 import { defineSchema, defineTable } from "convex/server";
 import { convexToJson, Infer, v, Value } from "convex/values";
@@ -31,6 +30,12 @@ export function resultSize(result: RunResult): number {
   }
   return size;
 }
+
+export const vOnComplete = v.object({
+  fnHandle: v.string(), // mutation
+  context: v.optional(v.any()),
+});
+export type OnComplete = Infer<typeof vOnComplete>;
 
 const workflowObject = {
   name: v.optional(v.string()),

@@ -6,13 +6,9 @@ import {
   FunctionType,
 } from "convex/server";
 import { safeFunctionName } from "./safeFunctionName.js";
-import { WorkflowStep } from "./index.js";
-import { StepRequest } from "./step.js";
-import {
-  NameOption,
-  RetryOption,
-  SchedulerOptions,
-} from "@convex-dev/workpool";
+import type { RunOptions, WorkflowStep } from "./index.js";
+import type { StepRequest } from "./step.js";
+import type { RetryOption } from "@convex-dev/workpool";
 
 export class StepContext implements WorkflowStep {
   constructor(
@@ -23,7 +19,7 @@ export class StepContext implements WorkflowStep {
   async runQuery<Query extends FunctionReference<"query", "internal">>(
     query: Query,
     args: FunctionArgs<Query>,
-    opts?: NameOption & SchedulerOptions,
+    opts?: RunOptions,
   ): Promise<FunctionReturnType<Query>> {
     return this.runFunction("query", query, args, opts);
   }
@@ -31,7 +27,7 @@ export class StepContext implements WorkflowStep {
   async runMutation<Mutation extends FunctionReference<"mutation", "internal">>(
     mutation: Mutation,
     args: FunctionArgs<Mutation>,
-    opts?: NameOption & SchedulerOptions,
+    opts?: RunOptions,
   ): Promise<FunctionReturnType<Mutation>> {
     return this.runFunction("mutation", mutation, args, opts);
   }
@@ -39,7 +35,7 @@ export class StepContext implements WorkflowStep {
   async runAction<Action extends FunctionReference<"action", "internal">>(
     action: Action,
     args: FunctionArgs<Action>,
-    opts?: NameOption & SchedulerOptions & RetryOption,
+    opts?: RunOptions & RetryOption,
   ): Promise<FunctionReturnType<Action>> {
     return this.runFunction("action", action, args, opts);
   }
@@ -50,7 +46,7 @@ export class StepContext implements WorkflowStep {
     functionType: FunctionType,
     f: F,
     args: unknown,
-    opts?: NameOption & SchedulerOptions & RetryOption,
+    opts?: RunOptions & RetryOption,
   ): Promise<unknown> {
     let send: unknown;
     const { name, ...rest } = opts ?? {};

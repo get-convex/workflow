@@ -1,4 +1,4 @@
-import { vOnComplete, vResultValidator } from "@convex-dev/workpool";
+import { vResultValidator } from "@convex-dev/workpool";
 import { assert } from "convex-helpers";
 import { FunctionHandle } from "convex/server";
 import { Infer, v } from "convex/values";
@@ -6,7 +6,7 @@ import { mutation, MutationCtx, query } from "./_generated/server.js";
 import { Logger, logLevel } from "./logging.js";
 import { getWorkflow } from "./model.js";
 import { getWorkpool } from "./pool.js";
-import { journalDocument, workflowDocument } from "./schema.js";
+import { journalDocument, vOnComplete, workflowDocument } from "./schema.js";
 import { getDefaultLogger } from "./utils.js";
 import { WorkflowId, OnCompleteArgs } from "../types.js";
 

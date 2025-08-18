@@ -1,31 +1,55 @@
 import {
   createFunctionHandle,
-  FunctionArgs,
-  FunctionReference,
-  FunctionReturnType,
-  FunctionVisibility,
-  GenericDataModel,
-  GenericMutationCtx,
-  GenericQueryCtx,
-  RegisteredMutation,
-  ReturnValueForOptionalValidator,
+  type FunctionArgs,
+  type FunctionReference,
+  type FunctionReturnType,
+  type FunctionVisibility,
+  type GenericDataModel,
+  type GenericMutationCtx,
+  type GenericQueryCtx,
+  type RegisteredMutation,
+  type ReturnValueForOptionalValidator,
 } from "convex/server";
 import { safeFunctionName } from "./safeFunctionName.js";
-import { ObjectType, PropertyValidators, Validator } from "convex/values";
+import type { ObjectType, PropertyValidators, Validator } from "convex/values";
 import { api } from "../component/_generated/api.js";
 import { OnCompleteArgs, OpaqueIds, UseApi, WorkflowId } from "../types.js";
 import { workflowMutation } from "./workflowMutation.js";
-import {
-  NameOption,
+import type {
   RetryOption,
-  SchedulerOptions,
   WorkpoolOptions,
   WorkpoolRetryOptions,
 } from "@convex-dev/workpool";
-import { Step } from "../component/schema.js";
+import type { Step } from "../component/schema.js";
 export { vWorkflowId } from "../types.js";
 
 export type { WorkflowId };
+
+export type RunOptions = {
+  /**
+   * The name of the function. By default, if you pass in api.foo.bar.baz,
+   * it will use "foo/bar:baz" as the name. If you pass in a function handle,
+   * it will use the function handle directly.
+   */
+  name?: string;
+} & (
+  | {
+      /**
+       * The time (ms since epoch) to run the action at.
+       * If not provided, the action will be run as soon as possible.
+       * Note: this is advisory only. It may run later.
+       */
+      runAt?: number;
+    }
+  | {
+      /**
+       * The number of milliseconds to run the action after.
+       * If not provided, the action will be run as soon as possible.
+       * Note: this is advisory only. It may run later.
+       */
+      runAfter?: number;
+    }
+);
 
 export type CallbackOptions = {
   /**
@@ -73,7 +97,7 @@ export type WorkflowStep = {
   runQuery<Query extends FunctionReference<"query", "internal">>(
     query: Query,
     args: FunctionArgs<Query>,
-    opts?: NameOption & SchedulerOptions,
+    opts?: RunOptions,
   ): Promise<FunctionReturnType<Query>>;
 
   /**
@@ -86,7 +110,7 @@ export type WorkflowStep = {
   runMutation<Mutation extends FunctionReference<"mutation", "internal">>(
     mutation: Mutation,
     args: FunctionArgs<Mutation>,
-    opts?: NameOption & SchedulerOptions,
+    opts?: RunOptions,
   ): Promise<FunctionReturnType<Mutation>>;
 
   /**
@@ -99,7 +123,7 @@ export type WorkflowStep = {
   runAction<Action extends FunctionReference<"action", "internal">>(
     action: Action,
     args: FunctionArgs<Action>,
-    opts?: NameOption & SchedulerOptions & RetryOption,
+    opts?: RunOptions & RetryOption,
   ): Promise<FunctionReturnType<Action>>;
 };
 

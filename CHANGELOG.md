@@ -1,8 +1,10 @@
 # Changelog
 
-## 0.2.6 alpha
+## 0.2.6
 
 - Allow calling components directly from steps
+- Allow passing a function handle so you can run steps that call components
+- Fixes an issue with conflicting Workpool versions
 
 ## 0.2.5
 

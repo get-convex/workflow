@@ -1,25 +1,25 @@
 import { BaseChannel } from "async-channel";
 import {
-  GenericMutationCtx,
-  GenericDataModel,
-  FunctionType,
-  FunctionReference,
+  type GenericMutationCtx,
+  type GenericDataModel,
+  type FunctionType,
+  type FunctionReference,
   createFunctionHandle,
 } from "convex/server";
 import { convexToJson, Value } from "convex/values";
 import {
-  JournalEntry,
+  type JournalEntry,
   journalEntrySize,
   valueSize,
 } from "../component/schema.js";
 import { api } from "../component/_generated/api.js";
-import { UseApi } from "../types.js";
-import {
+import type { UseApi } from "../types.js";
+import type {
   RetryBehavior,
   WorkpoolOptions,
   RunResult,
-  SchedulerOptions,
 } from "@convex-dev/workpool";
+import type { SchedulerOptions } from "./types.js";
 
 export type OriginalEnv = {
   Date: {

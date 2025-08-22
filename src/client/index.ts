@@ -145,7 +145,7 @@ export type WorkflowDefinition<
 
 export type WorkflowStatus =
   | { type: "inProgress"; running: OpaqueIds<Step>[] }
-  | { type: "completed" }
+  | { type: "completed"; returnValue: unknown }
   | { type: "canceled" }
   | { type: "failed"; error: string };
 
@@ -249,7 +249,7 @@ export class WorkflowManager {
       case "failed":
         return { type: "failed", error: workflow.runResult.error };
       case "success":
-        return { type: "completed" };
+        return { type: "completed", returnValue: workflow.runResult.returnValue };
     }
   }
 

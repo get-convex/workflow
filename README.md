@@ -442,6 +442,11 @@ Here are a few limitations to keep in mind:
   workflow execution. If you run into journal size limits, you can work around
   this by storing results in the DB from your step functions and passing IDs
   around within the the workflow.
+- The workflow body is internally a mutation, with each step's return value read
+  from the database on each subsequent step. As a result, the limits for a
+  mutation apply and limit the number and size of steps you can perform to 16MiB
+  (including the workflow state overhead). See more about mutation limits here:
+  https://docs.convex.dev/production/state/limits#transactions
 - `console.log()` isn't currently captured, so you may see duplicate log lines
   within your Convex dashboard if you log within the workflow definition.
 - We currently do not collect backtraces from within function calls from workflows.

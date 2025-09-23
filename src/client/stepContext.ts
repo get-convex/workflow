@@ -18,7 +18,7 @@ export class StepContext implements WorkflowStep {
     private sender: BaseChannel<StepRequest>,
   ) {}
 
-  async runQuery<Query extends FunctionReference<"query", "internal">>(
+  runQuery<Query extends FunctionReference<"query", "internal">>(
     query: Query,
     args: FunctionArgs<Query>,
     opts?: RunOptions,
@@ -26,7 +26,7 @@ export class StepContext implements WorkflowStep {
     return this.runFunction("query", query, args, opts);
   }
 
-  async runMutation<Mutation extends FunctionReference<"mutation", "internal">>(
+  runMutation<Mutation extends FunctionReference<"mutation", "internal">>(
     mutation: Mutation,
     args: FunctionArgs<Mutation>,
     opts?: RunOptions,
@@ -34,7 +34,7 @@ export class StepContext implements WorkflowStep {
     return this.runFunction("mutation", mutation, args, opts);
   }
 
-  async runAction<Action extends FunctionReference<"action", "internal">>(
+  runAction<Action extends FunctionReference<"action", "internal">>(
     action: Action,
     args: FunctionArgs<Action>,
     opts?: RunOptions & RetryOption,
@@ -42,7 +42,7 @@ export class StepContext implements WorkflowStep {
     return this.runFunction("action", action, args, opts);
   }
 
-  async pause<
+  pause<
     Mutation extends FunctionReference<
       "mutation",
       "internal",

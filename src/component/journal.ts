@@ -2,17 +2,21 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server.js";
 import {
   journalDocument,
-  JournalEntry,
+  type JournalEntry,
   journalEntrySize,
   step,
   workflowDocument,
 } from "./schema.js";
 import { getWorkflow } from "./model.js";
 import { logLevel } from "./logging.js";
-import { vRetryBehavior, WorkId } from "@convex-dev/workpool";
-import { getWorkpool, OnCompleteContext, workpoolOptions } from "./pool.js";
+import { vRetryBehavior, type WorkId } from "@convex-dev/workpool";
+import {
+  getWorkpool,
+  type OnCompleteContext,
+  workpoolOptions,
+} from "./pool.js";
 import { internal } from "./_generated/api.js";
-import { FunctionHandle } from "convex/server";
+import { type FunctionHandle } from "convex/server";
 import { getDefaultLogger } from "./utils.js";
 import { assert } from "convex-helpers";
 
@@ -45,31 +49,31 @@ export const load = query({
   },
 });
 
-export const startStep = mutation({
+export const startSteps = mutation({
   args: {
     workflowId: v.string(),
     generationNumber: v.number(),
-    name: v.string(),
-    step,
-    workpoolOptions: v.optional(workpoolOptions),
-    retry: v.optional(v.union(v.boolean(), vRetryBehavior)),
-    schedulerOptions: v.optional(
-      v.union(
-        v.object({ runAt: v.optional(v.number()) }),
-        v.object({ runAfter: v.optional(v.number()) }),
-      ),
+    steps: v.array(
+      v.object({
+        step,
+        retry: v.optional(v.union(v.boolean(), vRetryBehavior)),
+        schedulerOptions: v.optional(
+          v.union(
+            v.object({ runAt: v.optional(v.number()) }),
+            v.object({ runAfter: v.optional(v.number()) }),
+          ),
+        ),
+      }),
     ),
+    workpoolOptions: v.optional(workpoolOptions),
   },
-  returns: journalDocument,
-  handler: async (ctx, args): Promise<JournalEntry> => {
-    if (!args.step.inProgress) {
+  returns: v.array(journalDocument),
+  handler: async (ctx, args): Promise<JournalEntry[]> => {
+    if (!args.steps.every((step) => step.step.inProgress)) {
       throw new Error(`Assertion failed: not in progress`);
     }
-    const workflow = await getWorkflow(
-      ctx,
-      args.workflowId,
-      args.generationNumber,
-    );
+    const { generationNumber } = args;
+    const workflow = await getWorkflow(ctx, args.workflowId, generationNumber);
     const console = await getDefaultLogger(ctx);
 
     if (workflow.runResult !== undefined) {
@@ -80,60 +84,68 @@ export const startStep = mutation({
       .withIndex("workflow", (q) => q.eq("workflowId", workflow._id))
       .order("desc")
       .first();
-    const stepNumber = maxEntry ? maxEntry.stepNumber + 1 : 0;
-    const { name, step, generationNumber, retry } = args;
-    const stepId = await ctx.db.insert("steps", {
-      workflowId: workflow._id,
-      stepNumber,
-      step,
-    });
-    const entry = await ctx.db.get(stepId);
-    assert(entry, "Step not found");
+    const stepNumberBase = maxEntry ? maxEntry.stepNumber + 1 : 0;
     const workpool = await getWorkpool(ctx, args.workpoolOptions);
     const onComplete = internal.pool.onComplete;
-    const context: OnCompleteContext = {
-      generationNumber,
-      stepId,
-    };
-    let workId: WorkId;
-    switch (step.functionType) {
-      case "query": {
-        workId = await workpool.enqueueQuery(
-          ctx,
-          step.handle as FunctionHandle<"query">,
-          step.args,
-          { context, onComplete, name, ...args.schedulerOptions },
-        );
-        break;
-      }
-      case "mutation": {
-        workId = await workpool.enqueueMutation(
-          ctx,
-          step.handle as FunctionHandle<"mutation">,
-          step.args,
-          { context, onComplete, name, ...args.schedulerOptions },
-        );
-        break;
-      }
-      case "action": {
-        workId = await workpool.enqueueAction(
-          ctx,
-          step.handle as FunctionHandle<"action">,
-          step.args,
-          { context, onComplete, name, retry, ...args.schedulerOptions },
-        );
-        break;
-      }
-    }
-    entry.step.workId = workId;
-    await ctx.db.replace(entry._id, entry);
 
-    console.event("started", {
-      workflowId: workflow._id,
-      workflowName: workflow.name,
-      stepName: step.name,
-      stepNumber,
-    });
-    return entry;
+    const entries = await Promise.all(
+      args.steps.map(async (stepArgs, index) => {
+        const { step, retry, schedulerOptions } = stepArgs;
+        const { name, handle, args } = step;
+        const stepNumber = stepNumberBase + index;
+        const stepId = await ctx.db.insert("steps", {
+          workflowId: workflow._id,
+          stepNumber,
+          step,
+        });
+        const entry = await ctx.db.get(stepId);
+        assert(entry, "Step not found");
+        const context: OnCompleteContext = {
+          generationNumber,
+          stepId,
+        };
+        let workId: WorkId;
+        switch (step.functionType) {
+          case "query": {
+            workId = await workpool.enqueueQuery(
+              ctx,
+              handle as FunctionHandle<"query">,
+              args,
+              { context, onComplete, name, ...schedulerOptions },
+            );
+            break;
+          }
+          case "mutation": {
+            workId = await workpool.enqueueMutation(
+              ctx,
+              handle as FunctionHandle<"mutation">,
+              args,
+              { context, onComplete, name, ...schedulerOptions },
+            );
+            break;
+          }
+          case "action": {
+            workId = await workpool.enqueueAction(
+              ctx,
+              handle as FunctionHandle<"action">,
+              args,
+              { context, onComplete, name, retry, ...schedulerOptions },
+            );
+            break;
+          }
+        }
+        entry.step.workId = workId;
+        await ctx.db.replace(entry._id, entry);
+
+        console.event("started", {
+          workflowId: workflow._id,
+          workflowName: workflow.name,
+          stepName: name,
+          stepNumber,
+        });
+        return entry;
+      }),
+    );
+    return entries;
   },
 });

@@ -98,22 +98,22 @@ const journalObject = {
   step,
 };
 
+export function journalEntrySize(entry: JournalEntry): number {
+  let size = 0;
+  size += entry.workflowId.length;
+  size += 8; // stepNumber
+  size += stepSize(entry.step);
+  size += entry._id.length;
+  size += 8; // _creationTime
+  return size;
+}
+
 export const journalDocument = v.object({
   _id: v.string(),
   _creationTime: v.number(),
   ...journalObject,
 });
 export type JournalEntry = Infer<typeof journalDocument>;
-
-export function journalEntrySize(entry: JournalEntry): number {
-  let size = 0;
-  size += entry._id.length;
-  size += 8; // _creationTime
-  size += entry.workflowId.length;
-  size += 8; // stepNumber
-  size += stepSize(entry.step);
-  return size;
-}
 
 export default defineSchema({
   config: defineTable({

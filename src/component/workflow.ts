@@ -107,6 +107,7 @@ export const complete = mutation({
   handler: completeHandler,
 });
 
+// When the overall workflow completes (successfully or not).
 export async function completeHandler(
   ctx: MutationCtx,
   args: Infer<typeof completeArgs>,
@@ -130,6 +131,7 @@ export async function completeHandler(
   if (workflow.runResult.kind === "canceled") {
     // We bump it so no in-flight steps succeed / we don't race to complete.
     workflow.generationNumber += 1;
+    // TODO: can we cancel these asynchronously if there's more than one?
     const inProgress = await ctx.db
       .query("steps")
       .withIndex("inProgress", (q) =>

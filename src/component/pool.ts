@@ -71,8 +71,8 @@ export const onComplete = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const console = await getDefaultLogger(ctx);
-    const stepId = args.context.stepId;
-    if (!validate(v.id("steps"), stepId, { db: ctx.db })) {
+    const stepId = ctx.db.normalizeId("steps", args.context.stepId);
+    if (!stepId) {
       // Write to failures table and return
       // So someone can investigate if this ever happens
       console.error("Invalid onComplete context", args.context);
@@ -188,23 +188,27 @@ export const handlerOnComplete = internalMutation({
     const console = await getDefaultLogger(ctx);
     if (!validate(handlerOnCompleteContext, args.context)) {
       console.error("Invalid handlerOnComplete context", args.context);
-      if (
-        validate(v.id("workflows"), args.context.workflowId, { db: ctx.db })
-      ) {
-        await ctx.db.insert("onCompleteFailures", args);
-        await completeHandler(ctx, {
-          workflowId: args.context.workflowId,
-          generationNumber: args.context.generationNumber,
-          runResult: {
-            kind: "failed",
-            error:
-              "Invalid handlerOnComplete context: " +
-              JSON.stringify(args.context),
-          },
-        }).catch((error) => {
-          console.error("Error calling completeHandler", error);
-        });
+      const workflowId = ctx.db.normalizeId(
+        "workflows",
+        args.context.workflowId,
+      );
+      await ctx.db.insert("onCompleteFailures", args);
+      if (!workflowId) {
+        console.error("Invalid workflow ID", args.context.workflowId);
+        return;
       }
+      await completeHandler(ctx, {
+        workflowId: args.context.workflowId,
+        generationNumber: args.context.generationNumber,
+        runResult: {
+          kind: "failed",
+          error:
+            "Invalid handlerOnComplete context: " +
+            JSON.stringify(args.context),
+        },
+      }).catch((error) => {
+        console.error("Error calling completeHandler", error);
+      });
       return;
     }
     const { workflowId, generationNumber } = args.context;

@@ -8,16 +8,15 @@ import {
   PropertyValidators,
   v,
 } from "convex/values";
-import { api } from "../component/_generated/api.js";
 import { createLogger } from "../component/logging.js";
 import { JournalEntry } from "../component/schema.js";
-import { UseApi } from "../types.js";
 import { setupEnvironment } from "./environment.js";
 import { WorkflowDefinition } from "./index.js";
 import { StepExecutor, StepRequest, WorkerResult } from "./step.js";
 import { StepContext } from "./stepContext.js";
 import { checkArgs } from "./validator.js";
 import { RunResult, WorkpoolOptions } from "@convex-dev/workpool";
+import { WorkflowComponent } from "./types.js";
 
 const workflowArgs = v.object({
   workflowId: v.id("workflows"),
@@ -30,7 +29,7 @@ const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke
 // one "poll" of the workflow, replaying its execution from the journal until
 // it blocks next.
 export function workflowMutation<ArgsValidator extends PropertyValidators>(
-  component: UseApi<typeof api>,
+  component: WorkflowComponent,
   registered: WorkflowDefinition<ArgsValidator>,
   defaultWorkpoolOptions?: WorkpoolOptions,
 ): RegisteredMutation<"internal", ObjectType<ArgsValidator>, void> {

@@ -1,8 +1,11 @@
+import type {
+  WorkpoolOptions,
+  WorkpoolRetryOptions,
+} from "@convex-dev/workpool";
 import {
   createFunctionHandle,
   type FunctionArgs,
   type FunctionReference,
-  type FunctionReturnType,
   type FunctionVisibility,
   type GenericDataModel,
   type GenericMutationCtx,
@@ -10,46 +13,15 @@ import {
   type RegisteredMutation,
   type ReturnValueForOptionalValidator,
 } from "convex/server";
-import { safeFunctionName } from "./safeFunctionName.js";
 import type { ObjectType, PropertyValidators, Validator } from "convex/values";
-import { api } from "../component/_generated/api.js";
-import { OnCompleteArgs, OpaqueIds, UseApi, WorkflowId } from "../types.js";
-import { workflowMutation } from "./workflowMutation.js";
-import type {
-  RetryOption,
-  WorkpoolOptions,
-  WorkpoolRetryOptions,
-} from "@convex-dev/workpool";
 import type { Step } from "../component/schema.js";
-export { vWorkflowId } from "../types.js";
+import type { OnCompleteArgs, WorkflowId } from "../types.js";
+import { safeFunctionName } from "./safeFunctionName.js";
+import type { OpaqueIds, WorkflowComponent, WorkflowStep } from "./types.js";
+import { workflowMutation } from "./workflowMutation.js";
 
-export type { WorkflowId };
-
-export type RunOptions = {
-  /**
-   * The name of the function. By default, if you pass in api.foo.bar.baz,
-   * it will use "foo/bar:baz" as the name. If you pass in a function handle,
-   * it will use the function handle directly.
-   */
-  name?: string;
-} & (
-  | {
-      /**
-       * The time (ms since epoch) to run the action at.
-       * If not provided, the action will be run as soon as possible.
-       * Note: this is advisory only. It may run later.
-       */
-      runAt?: number;
-    }
-  | {
-      /**
-       * The number of milliseconds to run the action after.
-       * If not provided, the action will be run as soon as possible.
-       * Note: this is advisory only. It may run later.
-       */
-      runAfter?: number;
-    }
-);
+export { vWorkflowId, type WorkflowId } from "../types.js";
+export type { RunOptions } from "./types.js";
 
 export type CallbackOptions = {
   /**
@@ -82,51 +54,6 @@ export type CallbackOptions = {
   context?: unknown;
 };
 
-export type WorkflowStep = {
-  /**
-   * The ID of the workflow currently running.
-   */
-  workflowId: string;
-  /**
-   * Run a query with the given name and arguments.
-   *
-   * @param query - The query to run, like `internal.index.exampleQuery`.
-   * @param args - The arguments to the query function.
-   * @param opts - Options for scheduling and naming the query.
-   */
-  runQuery<Query extends FunctionReference<"query", "internal">>(
-    query: Query,
-    args: FunctionArgs<Query>,
-    opts?: RunOptions,
-  ): Promise<FunctionReturnType<Query>>;
-
-  /**
-   * Run a mutation with the given name and arguments.
-   *
-   * @param mutation - The mutation to run, like `internal.index.exampleMutation`.
-   * @param args - The arguments to the mutation function.
-   * @param opts - Options for scheduling and naming the mutation.
-   */
-  runMutation<Mutation extends FunctionReference<"mutation", "internal">>(
-    mutation: Mutation,
-    args: FunctionArgs<Mutation>,
-    opts?: RunOptions,
-  ): Promise<FunctionReturnType<Mutation>>;
-
-  /**
-   * Run an action with the given name and arguments.
-   *
-   * @param action - The action to run, like `internal.index.exampleAction`.
-   * @param args - The arguments to the action function.
-   * @param opts - Options for retrying, scheduling and naming the action.
-   */
-  runAction<Action extends FunctionReference<"action", "internal">>(
-    action: Action,
-    args: FunctionArgs<Action>,
-    opts?: RunOptions & RetryOption,
-  ): Promise<FunctionReturnType<Action>>;
-};
-
 export type WorkflowDefinition<
   ArgsValidator extends PropertyValidators,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -151,7 +78,7 @@ export type WorkflowStatus =
 
 export class WorkflowManager {
   constructor(
-    public component: UseApi<typeof api>,
+    public component: WorkflowComponent,
     public options?: {
       workpoolOptions: WorkpoolOptions;
     },

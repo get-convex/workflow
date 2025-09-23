@@ -1,25 +1,23 @@
+import type {
+  RetryBehavior,
+  RunResult,
+  WorkpoolOptions,
+} from "@convex-dev/workpool";
 import { BaseChannel } from "async-channel";
 import {
-  type GenericMutationCtx,
-  type GenericDataModel,
-  type FunctionType,
-  type FunctionReference,
   createFunctionHandle,
+  type FunctionReference,
+  type FunctionType,
+  type GenericDataModel,
+  type GenericMutationCtx,
 } from "convex/server";
-import { convexToJson, Value } from "convex/values";
+import { convexToJson, type Value } from "convex/values";
 import {
   type JournalEntry,
   journalEntrySize,
   valueSize,
 } from "../component/schema.js";
-import { api } from "../component/_generated/api.js";
-import type { UseApi } from "../types.js";
-import type {
-  RetryBehavior,
-  WorkpoolOptions,
-  RunResult,
-} from "@convex-dev/workpool";
-import type { SchedulerOptions } from "./types.js";
+import type { SchedulerOptions, WorkflowComponent } from "./types.js";
 
 export type OriginalEnv = {
   Date: {
@@ -52,7 +50,7 @@ export class StepExecutor {
     private workflowId: string,
     private generationNumber: number,
     private ctx: GenericMutationCtx<GenericDataModel>,
-    private component: UseApi<typeof api>,
+    private component: WorkflowComponent,
     private journalEntries: Array<JournalEntry>,
     private receiver: BaseChannel<StepRequest>,
     private originalEnv: OriginalEnv,
@@ -62,9 +60,12 @@ export class StepExecutor {
       (size, entry) => size + journalEntrySize(entry),
       0,
     );
+
+    if (this.journalEntrySize > MAX_JOURNAL_SIZE) {
+      throw new Error(journalSizeError(this.journalEntrySize, this.workflowId));
+    }
   }
   async run(): Promise<WorkerResult> {
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       const message = await this.receiver.get();
       // In the future we can correlate the calls to entries by handle, args,
@@ -75,20 +76,13 @@ export class StepExecutor {
         this.completeMessage(message, entry);
         continue;
       }
-      // TODO: is this too late?
-      if (this.journalEntrySize > MAX_JOURNAL_SIZE) {
-        message.reject(journalSizeError(this.journalEntrySize));
-        continue;
-      }
       const messages = [message];
       const size = this.receiver.bufferSize;
       for (let i = 0; i < size; i++) {
         const message = await this.receiver.get();
         messages.push(message);
       }
-      for (const message of messages) {
-        await this.startStep(message);
-      }
+      await this.startSteps(messages);
       return {
         type: "executorBlocked",
       };
@@ -126,40 +120,54 @@ export class StepExecutor {
     }
   }
 
-  async startStep(message: StepRequest): Promise<JournalEntry> {
-    const step = {
-      inProgress: true,
-      name: message.name,
-      functionType: message.functionType,
-      handle: await createFunctionHandle(message.function),
-      args: message.args,
-      argsSize: valueSize(message.args as Value),
-      outcome: undefined,
-      startedAt: this.originalEnv.Date.now(),
-      completedAt: undefined,
-    };
-    const entry = (await this.ctx.runMutation(
-      this.component.journal.startStep,
+  async startSteps(messages: StepRequest[]): Promise<JournalEntry[]> {
+    const steps = await Promise.all(
+      messages.map(async (message) => {
+        const step = {
+          inProgress: true,
+          name: message.name,
+          functionType: message.functionType,
+          handle: await createFunctionHandle(message.function),
+          args: message.args,
+          argsSize: valueSize(message.args as Value),
+          outcome: undefined,
+          startedAt: this.originalEnv.Date.now(),
+          completedAt: undefined,
+        };
+        return {
+          retry: message.retry,
+          schedulerOptions: message.schedulerOptions,
+          step,
+        };
+      }),
+    );
+    const entries = (await this.ctx.runMutation(
+      this.component.journal.startSteps,
       {
         workflowId: this.workflowId,
         generationNumber: this.generationNumber,
-        step,
-        name: message.name,
-        retry: message.retry,
+        steps,
         workpoolOptions: this.workpoolOptions,
-        schedulerOptions: message.schedulerOptions,
       },
-    )) as JournalEntry;
-    this.journalEntrySize += journalEntrySize(entry);
-    return entry;
+    )) as JournalEntry[];
+    for (const entry of entries) {
+      this.journalEntrySize += journalEntrySize(entry);
+      if (this.journalEntrySize > MAX_JOURNAL_SIZE) {
+        throw new Error(
+          journalSizeError(this.journalEntrySize, this.workflowId) +
+            ` The failing step was ${entry.step.name} (${entry._id})`,
+        );
+      }
+    }
+    return entries;
   }
 }
 
-function journalSizeError(size: number): Error {
+function journalSizeError(size: number, workflowId: string): string {
   const lines = [
-    `Workflow journal size limit exceeded (${size} bytes > ${MAX_JOURNAL_SIZE} bytes).`,
+    `Workflow ${workflowId} journal size limit exceeded (${size} bytes > ${MAX_JOURNAL_SIZE} bytes).`,
     "Consider breaking up the workflow into multiple runs, using smaller step \
     arguments or return values, or using fewer steps.",
   ];
-  return new Error(lines.join("\n"));
+  return lines.join("\n");
 }

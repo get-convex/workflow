@@ -4,6 +4,7 @@ import type {
   FunctionArgs,
   FunctionReturnType,
   FunctionType,
+  DefaultFunctionArgs,
 } from "convex/server";
 import { safeFunctionName } from "./safeFunctionName.js";
 import type { StepRequest } from "./step.js";
@@ -42,38 +43,70 @@ export class StepContext implements WorkflowStep {
   }
 
   async pause<
-    Mutation extends FunctionReference<"mutation", any, any, void>,
-    Returns = void,
+    Mutation extends FunctionReference<
+      "mutation",
+      "internal",
+      DefaultFunctionArgs,
+      void
+    >,
+    Returns = unknown,
   >(
-    pauseHandler: Mutation,
-    args: FunctionArgs<Mutation>,
-    opts?: RunOptions & { returns: Validator<Returns, "required", any> },
+    opts?: {
+      /**
+       * The name for the pause. By default, if you pass in api.foo.bar.baz,
+       * it will use "foo/bar:baz" as the name. If you pass in a function handle,
+       * it will use the function handle directly. Otherwise it will use "pause".
+       */
+      name?: string;
+      returns: Validator<Returns, "required">;
+    } & (
+      | { onPause: Mutation; args: FunctionArgs<Mutation> }
+      | { onPause?: undefined; args?: undefined }
+    ),
   ): Promise<Returns> {
-    return this.runFunction("mutation", pauseHandler, args, {
-      ...opts,
-      pause: true,
-    }) as Promise<Returns>;
+    if (opts?.onPause) {
+      return this.runFunction("mutation", opts.onPause, opts.args, {
+        name: opts.name,
+        pause: true,
+      }) as Promise<Returns>;
+    } else {
+      return this.run({
+        name: opts?.name ?? "pause",
+        functionType: "mutation",
+        function: undefined,
+        args: {},
+        retry: undefined,
+        pause: true,
+        schedulerOptions: {},
+      }) as Promise<Returns>;
+    }
   }
 
-  private async runFunction<
-    F extends FunctionReference<FunctionType, "internal">,
-  >(
+  private runFunction<F extends FunctionReference<FunctionType, "internal">>(
     functionType: FunctionType,
     f: F,
     args: unknown,
     opts?: RunOptions & RetryOption & { pause?: true },
   ): Promise<unknown> {
-    let send: unknown;
     const { name, retry, pause, ...schedulerOptions } = opts ?? {};
+    return this.run({
+      name: name ?? (f ? safeFunctionName(f) : "pause"),
+      functionType,
+      function: f,
+      args: args ?? {},
+      retry,
+      pause,
+      schedulerOptions,
+    });
+  }
+
+  private async run(
+    req: Omit<StepRequest, "resolve" | "reject">,
+  ): Promise<unknown> {
+    let send: unknown;
     const p = new Promise<unknown>((resolve, reject) => {
       send = this.sender.push({
-        name: name ?? safeFunctionName(f),
-        functionType,
-        function: f,
-        args,
-        retry,
-        pause,
-        schedulerOptions,
+        ...req,
         resolve,
         reject,
       });

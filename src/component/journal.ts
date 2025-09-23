@@ -104,7 +104,8 @@ export const startSteps = mutation({
           generationNumber,
           stepId,
         };
-        let workId: WorkId;
+        let workId: WorkId | undefined = undefined;
+        // TODO: use enqueueBatch
         switch (step.functionType) {
           case "query": {
             workId = await workpool.enqueueQuery(
@@ -117,6 +118,10 @@ export const startSteps = mutation({
           }
           // Pause is a special mutation
           case "pause":
+            if (!handle) {
+              break;
+            }
+          // fallthrough
           case "mutation": {
             workId = await workpool.enqueueMutation(
               ctx,
@@ -136,8 +141,10 @@ export const startSteps = mutation({
             break;
           }
         }
-        entry.step.workId = workId;
-        await ctx.db.replace(entry._id, entry);
+        if (workId) {
+          entry.step.workId = workId;
+          await ctx.db.replace(entry._id, entry);
+        }
 
         console.event("started", {
           workflowId: workflow._id,

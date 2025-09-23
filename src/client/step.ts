@@ -43,7 +43,7 @@ export type StepRequest = {
   reject: (error: unknown) => void;
 };
 
-const MAX_JOURNAL_SIZE = 1 << 20;
+const MAX_JOURNAL_SIZE = 8 << 20;
 
 export class StepExecutor {
   private journalEntrySize: number;

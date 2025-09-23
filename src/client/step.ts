@@ -26,7 +26,7 @@ export type WorkerResult =
 export type StepRequest = {
   name: string;
   functionType: FunctionType;
-  function: FunctionReference<FunctionType, "internal">;
+  function: FunctionReference<FunctionType, "internal"> | undefined;
   args: unknown;
   retry: RetryBehavior | boolean | undefined;
   schedulerOptions: SchedulerOptions;
@@ -136,7 +136,9 @@ export class StepExecutor {
           inProgress: true,
           name: message.name,
           functionType: message.functionType,
-          handle: await createFunctionHandle(message.function),
+          handle: message.function
+            ? await createFunctionHandle(message.function)
+            : "",
           args: message.args,
           argsSize: valueSize(message.args as Value),
           pause: message.pause,

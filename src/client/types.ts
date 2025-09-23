@@ -103,11 +103,20 @@ export type WorkflowStep = {
       DefaultFunctionArgs,
       void
     >,
-    Returns = void,
+    Returns = unknown,
   >(
-    pauseHandler: Mutation,
-    args: FunctionArgs<Mutation>,
-    opts?: RunOptions & { returns: Validator<Returns, "required", any> },
+    opts?: {
+      /**
+       * The name for the pause. By default, if you pass in api.foo.bar.baz,
+       * it will use "foo/bar:baz" as the name. If you pass in a function handle,
+       * it will use the function handle directly. Otherwise it will use "pause".
+       */
+      name?: string;
+      returns: Validator<Returns, "required">;
+    } & (
+      | { onPause: Mutation; args: FunctionArgs<Mutation> }
+      | { onPause?: undefined; args?: undefined }
+    ),
   ): Promise<Returns>;
 };
 

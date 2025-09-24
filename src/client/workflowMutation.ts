@@ -11,15 +11,16 @@ import {
 import { createLogger } from "../component/logging.js";
 import { JournalEntry } from "../component/schema.js";
 import { setupEnvironment } from "./environment.js";
-import { WorkflowDefinition } from "./index.js";
-import { StepExecutor, StepRequest, WorkerResult } from "./step.js";
+import type { WorkflowDefinition } from "./index.js";
+import { StepExecutor, type StepRequest, type WorkerResult } from "./step.js";
 import { StepContext } from "./stepContext.js";
 import { checkArgs } from "./validator.js";
 import { RunResult, WorkpoolOptions } from "@convex-dev/workpool";
 import { WorkflowComponent } from "./types.js";
+import { vWorkflowId } from "../types.js";
 
 const workflowArgs = v.object({
-  workflowId: v.id("workflows"),
+  workflowId: vWorkflowId,
   generationNumber: v.number(),
 });
 const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke the workflow with ctx.runMutation() instead of workflow.start()?`;

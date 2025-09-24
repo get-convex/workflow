@@ -6,7 +6,8 @@ import type {
   FunctionReturnType,
 } from "convex/server";
 import type { api } from "../component/_generated/api.js";
-import { GenericId } from "convex/values";
+import type { GenericId } from "convex/values";
+import type { WorkflowId } from "../types.js";
 
 export type WorkflowComponent = UseApi<typeof api>;
 
@@ -41,7 +42,7 @@ export type WorkflowStep = {
   /**
    * The ID of the workflow currently running.
    */
-  workflowId: string;
+  workflowId: WorkflowId;
   /**
    * Run a query with the given name and arguments.
    *

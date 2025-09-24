@@ -10,10 +10,11 @@ import type { StepRequest } from "./step.js";
 import type { RetryOption } from "@convex-dev/workpool";
 import type { Validator } from "convex/values";
 import type { RunOptions, WorkflowStep } from "./types.js";
+import type { WorkflowId } from "../types.js";
 
 export class StepContext implements WorkflowStep {
   constructor(
-    public workflowId: string,
+    public workflowId: WorkflowId,
     private sender: BaseChannel<StepRequest>,
   ) {}
 

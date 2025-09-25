@@ -15,6 +15,9 @@
     "moduleResolution": "NodeNext",
 
     "assumeChangesOnlyAffectDirectDependencies": false,
+    // Let's see how long we can go without this...
+    // "composite": true,
+    // "rootDir": "./src",
     "isolatedModules": true,
     "declaration": true,
     "declarationMap": true,

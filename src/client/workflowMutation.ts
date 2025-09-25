@@ -125,6 +125,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
             }
           }
         } catch (error) {
+          console.error(error);
           runResult = { kind: "failed", error: (error as Error).message };
         }
         return { type: "handlerDone", runResult };

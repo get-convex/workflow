@@ -86,13 +86,12 @@ export const onComplete = internalMutation({
     assert(journalEntry, `Journal entry not found: ${stepId}`);
     const workflowId = journalEntry.workflowId;
 
-    const error = !validate(onCompleteContext, args.context)
-      ? `Invalid onComplete context for workId ${args.workId}` +
-        JSON.stringify(args.context)
-      : !journalEntry.step.inProgress
-        ? `Journal entry not in progress: ${stepId}`
-        : undefined;
-    if (error) {
+    if (
+      !validate(onCompleteContext, args.context, { allowUnknownFields: true })
+    ) {
+      const error =
+        `Invalid onComplete context for workId ${args.workId}` +
+        JSON.stringify(args.context);
       await ctx.db.patch(workflowId, {
         runResult: {
           kind: "failed",
@@ -102,6 +101,19 @@ export const onComplete = internalMutation({
       return;
     }
     const { generationNumber } = args.context;
+    const workflow = await getWorkflow(ctx, workflowId, null);
+    if (workflow.generationNumber !== generationNumber) {
+      console.error(
+        `Workflow: ${workflowId} already has generation number ${workflow.generationNumber} when completing ${stepId}`,
+      );
+      return;
+    }
+    if (!journalEntry.step.inProgress) {
+      console.error(
+        `Step finished but journal entry not in progress: ${stepId} status: ${journalEntry.step.runResult?.kind ?? "pending"}`,
+      );
+      return;
+    }
     journalEntry.step.inProgress = false;
     journalEntry.step.completedAt = Date.now();
     switch (args.result.kind) {
@@ -126,7 +138,6 @@ export const onComplete = internalMutation({
     await ctx.db.replace(journalEntry._id, journalEntry);
     console.debug(`Completed execution of ${stepId}`, journalEntry);
 
-    const workflow = await getWorkflow(ctx, workflowId, null);
     console.event("stepCompleted", {
       workflowId,
       workflowName: workflow.name,
@@ -141,12 +152,6 @@ export const onComplete = internalMutation({
           `Workflow: ${workflowId} already ${workflow.runResult.kind} when completing ${stepId} with status ${args.result.kind}`,
         );
       }
-      return;
-    }
-    if (workflow.generationNumber !== generationNumber) {
-      console.error(
-        `Workflow: ${workflowId} already has generation number ${workflow.generationNumber} when completing ${stepId}`,
-      );
       return;
     }
     const workpool = await getWorkpool(ctx, args.context.workpoolOptions);

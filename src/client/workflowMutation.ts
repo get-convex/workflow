@@ -1,6 +1,6 @@
 import { BaseChannel } from "async-channel";
 import { assert } from "convex-helpers";
-import { validate } from "convex-helpers/validators";
+import { validate, ValidationError } from "convex-helpers/validators";
 import {
   internalMutationGeneric,
   type RegisteredMutation,
@@ -21,6 +21,7 @@ import { checkArgs } from "./validator.js";
 import { type RunResult, type WorkpoolOptions } from "@convex-dev/workpool";
 import { type WorkflowComponent } from "./types.js";
 import { vWorkflowId } from "../types.js";
+import { formatErrorWithStack } from "../shared.js";
 
 const workflowArgs = v.object({
   workflowId: vWorkflowId,
@@ -117,7 +118,13 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
               });
             } catch (error) {
               const message =
-                error instanceof Error ? error.message : `${error}`;
+                error instanceof ValidationError
+                  ? error.message
+                  : formatErrorWithStack(error);
+              console.error(
+                "Workflow handler returned invalid return value: ",
+                message,
+              );
               runResult = {
                 kind: "failed",
                 error: "Invalid return value: " + message,
@@ -125,8 +132,9 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
             }
           }
         } catch (error) {
-          console.error(error);
-          runResult = { kind: "failed", error: (error as Error).message };
+          const message = formatErrorWithStack(error);
+          console.error(message);
+          runResult = { kind: "failed", error: message };
         }
         return { type: "handlerDone", runResult };
       };

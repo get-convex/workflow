@@ -10,6 +10,7 @@ import { journalDocument, vOnComplete, workflowDocument } from "./schema.js";
 import { getDefaultLogger } from "./utils.js";
 import type { WorkflowId, OnCompleteArgs } from "../types.js";
 import { internal } from "./_generated/api.js";
+import { formatErrorWithStack } from "../shared.js";
 
 export const create = mutation({
   args: {
@@ -170,10 +171,11 @@ export async function completeHandler(
         },
       );
     } catch (error) {
-      console.error("Error calling onComplete", error);
+      const message = formatErrorWithStack(error);
+      console.error("Error calling onComplete", message);
       await ctx.db.insert("onCompleteFailures", {
         ...args,
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
       });
     }
   }

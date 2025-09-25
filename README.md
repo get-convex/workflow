@@ -22,7 +22,7 @@ Welcome to the world of Convex workflows.
 - Output from previous steps is available to pass to subsequent steps.
 - Run queries, mutations, and actions.
 - Specify retry behavior on a per-step basis, along with a default policy.
-- Specify how many workflows can run in parallel to manage load.
+- Specify how many workflow steps can run in parallel to manage load.
 - Cancel long-running workflows.
 - Clean up workflows after they're done.
 
@@ -447,10 +447,8 @@ Here are a few limitations to keep in mind:
   mutation apply and limit the number and size of steps you can perform to 16MiB
   (including the workflow state overhead). See more about mutation limits here:
   https://docs.convex.dev/production/state/limits#transactions
-- `console.log()` isn't currently captured, so you may see duplicate log lines
-  within your Convex dashboard if you log within the workflow definition.
 - We currently do not collect backtraces from within function calls from workflows.
-- If you need to use side effects like `fetch`, `Math.random()`, or `Date.now()`,
+- If you need to use side effects like `fetch` or use randomness,
   you'll need to do that in a step, not in the workflow definition.
 - If the implementation of the workflow meaningfully changes (steps added,
   removed, or reordered) then it will fail with a determinism violation.

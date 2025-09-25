@@ -45,6 +45,10 @@ export const exampleWorkflow = workflow.define({
     console.log(
       `Weather in ${name}: ${farenheit.toFixed(1)}°F (${temperature}°C), ${windSpeed} km/h, ${windGust} km/h`,
     );
+    await step.runMutation(internal.example.updateFlow, {
+      workflowId: step.workflowId,
+      out: { name, celsius, farenheit, windSpeed, windGust },
+    });
     return { name, celsius, farenheit, windSpeed, windGust };
   },
   workpoolOptions: {

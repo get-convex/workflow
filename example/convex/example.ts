@@ -117,7 +117,8 @@ export const flowCompleted = internalMutation({
     await ctx.db.patch(flow._id, {
       out: args.result,
     });
-    await workflow.cleanup(ctx, args.workflowId);
+    // To delete the workflow data after it completes:
+    // await workflow.cleanup(ctx, args.workflowId);
   },
 });
 

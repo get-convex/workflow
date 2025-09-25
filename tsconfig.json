@@ -14,8 +14,8 @@
     "module": "Node16",
     "moduleResolution": "NodeNext",
 
-    "assumeChangesOnlyAffectDirectDependencies": false,
     // Let's see how long we can go without this...
+    // "assumeChangesOnlyAffectDirectDependencies": false,
     // "composite": true,
     // "rootDir": "./src",
     "isolatedModules": true,

@@ -9,6 +9,7 @@ import { getWorkpool } from "./pool.js";
 import { journalDocument, vOnComplete, workflowDocument } from "./schema.js";
 import { getDefaultLogger } from "./utils.js";
 import type { WorkflowId, OnCompleteArgs } from "../types.js";
+import { internal } from "./_generated/api.js";
 
 export const create = mutation({
   args: {
@@ -42,6 +43,10 @@ export const create = mutation({
         ctx,
         args.workflowHandle as FunctionHandle<"mutation">,
         { workflowId, generationNumber: 0 },
+        {
+          onComplete: internal.pool.handlerOnComplete,
+          context: { workflowId, generationNumber: 0 },
+        },
       );
     } else {
       // If we can't start it, may as well not create it, eh? Fail fast...

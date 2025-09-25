@@ -91,9 +91,6 @@ function createConsole(getGenerationState: () => GenerationState): Console {
         case "count":
           return (label?: string) => {
             const key = label ?? "default";
-            if (latest && counts[key] === undefined) {
-              return target[prop](label);
-            }
             counts[key] = (counts[key] ?? 0) + 1;
             if (latest) {
               console.info(`${key}: ${counts[key]}`);

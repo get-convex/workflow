@@ -1,4 +1,4 @@
-import { OriginalEnv } from "./step.js";
+import type { OriginalEnv } from "./step.js";
 import { StepContext } from "./stepContext.js";
 
 export function setupEnvironment(_ctx: StepContext): OriginalEnv {

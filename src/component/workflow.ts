@@ -1,14 +1,14 @@
 import { vResultValidator } from "@convex-dev/workpool";
 import { assert } from "convex-helpers";
-import { FunctionHandle } from "convex/server";
-import { Infer, v } from "convex/values";
-import { mutation, MutationCtx, query } from "./_generated/server.js";
-import { Logger, logLevel } from "./logging.js";
+import type { FunctionHandle } from "convex/server";
+import { type Infer, v } from "convex/values";
+import { mutation, type MutationCtx, query } from "./_generated/server.js";
+import { type Logger, logLevel } from "./logging.js";
 import { getWorkflow } from "./model.js";
 import { getWorkpool } from "./pool.js";
 import { journalDocument, vOnComplete, workflowDocument } from "./schema.js";
 import { getDefaultLogger } from "./utils.js";
-import { WorkflowId, OnCompleteArgs } from "../types.js";
+import type { WorkflowId, OnCompleteArgs } from "../types.js";
 
 export const create = mutation({
   args: {

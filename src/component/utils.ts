@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, QueryCtx } from "./_generated/server.js";
+import { internalMutation, type QueryCtx } from "./_generated/server.js";
 import { createLogger, DEFAULT_LOG_LEVEL, logLevel } from "./logging.js";
 
 export async function getDefaultLogger(ctx: QueryCtx) {

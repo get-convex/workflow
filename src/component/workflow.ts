@@ -44,6 +44,7 @@ export const create = mutation({
         args.workflowHandle as FunctionHandle<"mutation">,
         { workflowId, generationNumber: 0 },
         {
+          name: args.workflowName,
           onComplete: internal.pool.handlerOnComplete,
           context: { workflowId, generationNumber: 0 },
         },

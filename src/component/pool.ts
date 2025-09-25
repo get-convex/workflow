@@ -155,6 +155,7 @@ export const onComplete = internalMutation({
       workflow.workflowHandle as FunctionHandle<"mutation">,
       { workflowId: workflow._id, generationNumber },
       {
+        name: workflow.name,
         onComplete: internal.pool.handlerOnComplete,
         context: { workflowId, generationNumber },
       },

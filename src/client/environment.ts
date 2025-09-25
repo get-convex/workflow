@@ -108,6 +108,8 @@ function createConsole(
             return () => target.group();
           }
           return target[prop];
+        case "groupEnd":
+          return target[prop];
         case "time":
           if (!latest) {
             return (label?: string) => {
@@ -128,9 +130,6 @@ function createConsole(
               target.info(`${key}: ${now - times[key]}ms`, ...data);
             }
           };
-        // passes through
-        case "groupEnd":
-          return target[prop];
       }
       return target[prop as keyof Console];
     },

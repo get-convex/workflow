@@ -29,6 +29,7 @@ export const exampleWorkflow = workflow.define({
     windGust: number;
   }> => {
     console.time("overall");
+    console.time("geocoding");
     // Run in parallel!
     const [{ latitude, longitude, name }, weather2] = await Promise.all([
       step.runAction(internal.example.getGeocoding, args, { runAfter: 100 }),

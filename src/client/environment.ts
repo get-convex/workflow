@@ -102,14 +102,12 @@ function createConsole(
         case "countReset":
           return (label?: string) => {
             const key = label ?? "default";
-            if (latest && counts[key] === undefined) {
-              return target[prop](label);
-            }
             counts[key] = 0;
           };
         case "group":
         case "groupCollapsed":
           if (!latest) {
+            // Don't print anything if latest is false
             return () => target.group();
           }
           return target[prop];

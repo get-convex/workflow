@@ -1,7 +1,8 @@
 import type { OriginalEnv } from "./step.js";
-import { StepContext } from "./stepContext.js";
 
-export function setupEnvironment(_ctx: StepContext): OriginalEnv {
+export function setupEnvironment(
+  getGenerationState: () => { now: number; latest: boolean },
+): OriginalEnv {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const global = globalThis as any;
 
@@ -28,7 +29,8 @@ export function setupEnvironment(_ctx: StepContext): OriginalEnv {
     return new (originalDate as any)(...args);
   }
   Date.now = function () {
-    throw new Error("Date.now() isn't currently supported within workflows.");
+    const { now } = getGenerationState();
+    return now;
   };
   Date.parse = originalDate.parse;
   Date.UTC = originalDate.UTC;

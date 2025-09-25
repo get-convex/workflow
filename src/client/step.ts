@@ -53,7 +53,7 @@ export class StepExecutor {
     private component: WorkflowComponent,
     private journalEntries: Array<JournalEntry>,
     private receiver: BaseChannel<StepRequest>,
-    private originalEnv: OriginalEnv,
+    private now: number,
     private workpoolOptions: WorkpoolOptions | undefined,
   ) {
     this.journalEntrySize = journalEntries.reduce(
@@ -87,6 +87,20 @@ export class StepExecutor {
         type: "executorBlocked",
       };
     }
+  }
+
+  getGenerationState() {
+    if (this.journalEntries.length <= this.receiver.bufferSize) {
+      return { now: this.now, latest: true };
+    }
+    return {
+      // We use the next entry's startedAt, since we're in code just before that
+      // step is invoked. We use the bufferSize, since multiple steps may be
+      // currently enqueued in one generation, but the code after it has already
+      // started executing.
+      now: this.journalEntries[this.receiver.bufferSize].step.startedAt,
+      latest: false,
+    };
   }
 
   completeMessage(message: StepRequest, entry: JournalEntry) {
@@ -131,7 +145,7 @@ export class StepExecutor {
           args: message.args,
           argsSize: valueSize(message.args as Value),
           outcome: undefined,
-          startedAt: this.originalEnv.Date.now(),
+          startedAt: this.now,
           completedAt: undefined,
         };
         return {

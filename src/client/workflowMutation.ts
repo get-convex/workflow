@@ -91,7 +91,6 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         workpoolOptions.maxParallelism ?? 10,
       );
       const step = new StepContext(workflowId, channel);
-      const originalEnv = setupEnvironment(step);
       const executor = new StepExecutor(
         workflowId,
         generationNumber,
@@ -99,9 +98,10 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         component,
         journalEntries as JournalEntry[],
         channel,
-        originalEnv,
+        Date.now(),
         workpoolOptions,
       );
+      setupEnvironment(executor.getGenerationState.bind(executor));
 
       const handlerWorker = async (): Promise<WorkerResult> => {
         let runResult: RunResult;

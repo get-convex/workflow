@@ -40,7 +40,7 @@ export function setupEnvironment(
   Date.prototype.constructor = Date;
 
   global.Date = Date;
-  global.console = createConsole(getGenerationState);
+  global.console = createConsole(global.console, getGenerationState);
 
   delete global.process;
 
@@ -57,12 +57,15 @@ export function setupEnvironment(
   return { Date: originalDate };
 }
 
-function createConsole(getGenerationState: () => GenerationState): Console {
-  const capturedConsole = console;
+function noop() {}
+
+function createConsole(
+  console: Console,
+  getGenerationState: () => GenerationState,
+): Console {
   const counts: Record<string, number> = {};
   const times: Record<string, number> = {};
-  const noop = () => {};
-  return new Proxy(capturedConsole, {
+  return new Proxy(console, {
     get: (target, prop) => {
       const { now, latest } = getGenerationState();
       switch (prop) {
@@ -93,7 +96,7 @@ function createConsole(getGenerationState: () => GenerationState): Console {
             const key = label ?? "default";
             counts[key] = (counts[key] ?? 0) + 1;
             if (latest) {
-              console.info(`${key}: ${counts[key]}`);
+              target.info(`${key}: ${counts[key]}`);
             }
           };
         case "countReset":
@@ -127,7 +130,7 @@ function createConsole(getGenerationState: () => GenerationState): Console {
             if (times[key] === undefined) {
               target[prop](label);
             } else {
-              console.info(`${key}: ${now - times[key]}ms`, ...data);
+              target.info(`${key}: ${now - times[key]}ms`, ...data);
             }
           };
         // passes through

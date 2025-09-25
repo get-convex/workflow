@@ -8,7 +8,6 @@ import type {
 import { safeFunctionName } from "./safeFunctionName.js";
 import type { StepRequest } from "./step.js";
 import type { RetryOption } from "@convex-dev/workpool";
-import type { Validator } from "convex/values";
 import type { RunOptions, WorkflowStep } from "./types.js";
 import type { WorkflowId } from "../types.js";
 

@@ -71,7 +71,10 @@ export const onComplete = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const console = await getDefaultLogger(ctx);
-    const stepId = ctx.db.normalizeId("steps", args.context.stepId);
+    const stepId =
+      "stepId" in args.context
+        ? ctx.db.normalizeId("steps", args.context.stepId)
+        : null;
     if (!stepId) {
       // Write to failures table and return
       // So someone can investigate if this ever happens

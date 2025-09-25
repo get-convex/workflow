@@ -19,12 +19,6 @@ import {
 } from "../component/schema.js";
 import type { SchedulerOptions, WorkflowComponent } from "./types.js";
 
-export type OriginalEnv = {
-  Date: {
-    now: () => number;
-  };
-};
-
 export type WorkerResult =
   | { type: "handlerDone"; runResult: RunResult }
   | { type: "executorBlocked" };

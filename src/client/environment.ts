@@ -1,10 +1,8 @@
-import type { OriginalEnv } from "./step.js";
-
 type GenerationState = { now: number; latest: boolean };
 
 export function setupEnvironment(
   getGenerationState: () => GenerationState,
-): OriginalEnv {
+): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const global = globalThis as any;
 
@@ -24,8 +22,8 @@ export function setupEnvironment(
       return date.toString();
     }
     if (args.length === 0) {
-      const unixTsMs = Date.now();
-      return new originalDate(unixTsMs);
+      const { now } = getGenerationState();
+      return new originalDate(now);
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return new (originalDate as any)(...args);
@@ -54,7 +52,6 @@ export function setupEnvironment(
       `Fetch isn't currently supported within workflows. Perform the fetch within an action and call it with step.runAction().`,
     );
   };
-  return { Date: originalDate };
 }
 
 function noop() {}

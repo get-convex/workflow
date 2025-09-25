@@ -1,7 +1,9 @@
 import type { OriginalEnv } from "./step.js";
 
+type GenerationState = { now: number; latest: boolean };
+
 export function setupEnvironment(
-  getGenerationState: () => { now: number; latest: boolean },
+  getGenerationState: () => GenerationState,
 ): OriginalEnv {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const global = globalThis as any;
@@ -38,6 +40,7 @@ export function setupEnvironment(
   Date.prototype.constructor = Date;
 
   global.Date = Date;
+  global.console = createConsole(getGenerationState);
 
   delete global.process;
 
@@ -52,4 +55,89 @@ export function setupEnvironment(
     );
   };
   return { Date: originalDate };
+}
+
+function createConsole(getGenerationState: () => GenerationState): Console {
+  const capturedConsole = console;
+  const counts: Record<string, number> = {};
+  const times: Record<string, number> = {};
+  const noop = () => {};
+  return new Proxy(capturedConsole, {
+    get: (target, prop) => {
+      const { now, latest } = getGenerationState();
+      switch (prop) {
+        case "assert":
+        case "clear":
+        case "debug":
+        case "dir":
+        case "dirxml":
+        case "error":
+        case "info":
+        case "log":
+        case "table":
+        case "trace":
+        case "warn":
+        case "profile":
+        case "profileEnd":
+        case "timeStamp":
+          if (!latest) {
+            return noop;
+          }
+          return target[prop];
+        case "Console":
+          throw new Error(
+            "console.Console() is not supported within workflows",
+          );
+        case "count":
+          return (label?: string) => {
+            const key = label ?? "default";
+            if (latest && counts[key] === undefined) {
+              return target[prop](label);
+            }
+            counts[key] = (counts[key] ?? 0) + 1;
+            if (latest) {
+              console.info(`${key}: ${counts[key]}`);
+            }
+          };
+        case "countReset":
+          return (label?: string) => {
+            const key = label ?? "default";
+            if (latest && counts[key] === undefined) {
+              return target[prop](label);
+            }
+            counts[key] = 0;
+          };
+        case "group":
+        case "groupCollapsed":
+          if (!latest) {
+            return () => target.group();
+          }
+          return target[prop];
+        case "time":
+          if (!latest) {
+            return (label?: string) => {
+              times[label ?? "default"] = now;
+            };
+          }
+          return target[prop];
+        case "timeEnd":
+        case "timeLog":
+          if (!latest) {
+            return noop;
+          }
+          return (label?: string, ...data: unknown[]) => {
+            const key = label ?? "default";
+            if (times[key] === undefined) {
+              target[prop](label);
+            } else {
+              console.info(`${key}: ${now - times[key]}ms`, ...data);
+            }
+          };
+        // passes through
+        case "groupEnd":
+          return target[prop];
+      }
+      return target[prop as keyof Console];
+    },
+  });
 }

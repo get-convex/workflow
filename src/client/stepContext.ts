@@ -101,10 +101,8 @@ export class StepContext implements WorkflowStep {
     });
   }
 
-  private async run(
-    req: Omit<StepRequest, "resolve" | "reject">,
-  ): Promise<unknown> {
-    let send: unknown;
+  private run(req: Omit<StepRequest, "resolve" | "reject">): Promise<unknown> {
+    let send: Promise<void>;
     const p = new Promise<unknown>((resolve, reject) => {
       send = this.sender.push({
         ...req,
@@ -112,7 +110,6 @@ export class StepContext implements WorkflowStep {
         reject,
       });
     });
-    await send;
-    return p;
+    return send!.then(() => p);
   }
 }

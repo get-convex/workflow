@@ -16,7 +16,6 @@ export function patchMath(math: typeof Math): typeof Math {
 
   // Override random to throw
   patchedMath.random = () => {
-    console.trace("calling random");
     throw new Error("Math.random() isn't yet supported within workflows");
   };
 
@@ -51,6 +50,13 @@ export function createDeterministicDate(
   DeterministicDate.UTC = originalDate.UTC;
   DeterministicDate.prototype = originalDate.prototype;
   DeterministicDate.prototype.constructor = DeterministicDate as typeof Date;
+
+  // TODO: Additional methods that should be patched for full determinism:
+  // - getTimezoneOffset() - should return 0 (UTC)
+  // - toLocaleString() - should use fixed locale (en-US) and UTC timezone
+  // - toLocaleDateString() - should use fixed locale (en-US) and UTC timezone
+  // - toLocaleTimeString() - should use fixed locale (en-US) and UTC timezone
+  // These would require more complex prototype manipulation to work correctly.
 
   return DeterministicDate as typeof Date;
 }

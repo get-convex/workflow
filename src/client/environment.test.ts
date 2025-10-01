@@ -24,7 +24,7 @@ describe("environment patching units", () => {
       const patchedMath = patchMath(originalMath);
 
       expect(() => patchedMath.random()).toThrow(
-        "Math.random() isn't currently supported within workflows",
+        "Math.random() isn't yet supported within workflows",
       );
     });
 
@@ -110,7 +110,10 @@ describe("environment patching units", () => {
 
       expect(DeterministicDate.parse).toBe(originalDate.parse);
       expect(DeterministicDate.UTC).toBe(originalDate.UTC);
+
+      // Prototype should be the same as original (no patching currently)
       expect(DeterministicDate.prototype).toBe(originalDate.prototype);
+      expect(DeterministicDate.prototype.constructor).toBe(DeterministicDate);
     });
 
     it("should not affect the original Date constructor", () => {
@@ -120,6 +123,167 @@ describe("environment patching units", () => {
 
       // Original Date should be unchanged
       expect(Date.now).toBe(originalNow);
+    });
+
+    describe("behavior validation vs original Date", () => {
+      it("should produce identical outputs for specific dates", () => {
+        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+
+        // Test with specific timestamps
+        const timestamps = [
+          0, // Unix epoch
+          946684800000, // Y2K
+          1640995200000, // 2022-01-01
+          2023, 0, 15, 10, 30, 45, 123 // Feb 15, 2023 10:30:45.123
+        ];
+
+        for (const ts of [timestamps[0], timestamps[1], timestamps[2]]) {
+          const original = new Date(ts);
+          const deterministic = new DeterministicDate(ts);
+
+          expect(deterministic.getTime()).toBe(original.getTime());
+          expect(deterministic.getFullYear()).toBe(original.getFullYear());
+          expect(deterministic.getMonth()).toBe(original.getMonth());
+          expect(deterministic.getDate()).toBe(original.getDate());
+          expect(deterministic.getHours()).toBe(original.getHours());
+          expect(deterministic.getMinutes()).toBe(original.getMinutes());
+          expect(deterministic.getSeconds()).toBe(original.getSeconds());
+          expect(deterministic.getMilliseconds()).toBe(original.getMilliseconds());
+        }
+
+        // Test with constructor args
+        const original = new Date(2023, 0, 15, 10, 30, 45, 123);
+        const deterministic = new DeterministicDate(2023, 0, 15, 10, 30, 45, 123);
+
+        expect(deterministic.getFullYear()).toBe(original.getFullYear());
+        expect(deterministic.getMonth()).toBe(original.getMonth());
+        expect(deterministic.getDate()).toBe(original.getDate());
+        expect(deterministic.getHours()).toBe(original.getHours());
+        expect(deterministic.getMinutes()).toBe(original.getMinutes());
+        expect(deterministic.getSeconds()).toBe(original.getSeconds());
+        expect(deterministic.getMilliseconds()).toBe(original.getMilliseconds());
+      });
+
+      it("should produce identical string representations for deterministic dates", () => {
+        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+
+        const timestamp = 1640995200000; // 2022-01-01T00:00:00.000Z
+        const original = new Date(timestamp);
+        const deterministic = new DeterministicDate(timestamp);
+
+        expect(deterministic.toISOString()).toBe(original.toISOString());
+        expect(deterministic.toUTCString()).toBe(original.toUTCString());
+        expect(deterministic.toDateString()).toBe(original.toDateString());
+        expect(deterministic.toTimeString()).toBe(original.toTimeString());
+        expect(deterministic.toJSON()).toBe(original.toJSON());
+        expect(deterministic.valueOf()).toBe(original.valueOf());
+        expect(deterministic.getTime()).toBe(original.getTime());
+      });
+
+      it("should handle UTC methods identically", () => {
+        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+
+        const timestamp = 1640995200123; // 2022-01-01T00:00:00.123Z
+        const original = new Date(timestamp);
+        const deterministic = new DeterministicDate(timestamp);
+
+        expect(deterministic.getUTCFullYear()).toBe(original.getUTCFullYear());
+        expect(deterministic.getUTCMonth()).toBe(original.getUTCMonth());
+        expect(deterministic.getUTCDate()).toBe(original.getUTCDate());
+        expect(deterministic.getUTCHours()).toBe(original.getUTCHours());
+        expect(deterministic.getUTCMinutes()).toBe(original.getUTCMinutes());
+        expect(deterministic.getUTCSeconds()).toBe(original.getUTCSeconds());
+        expect(deterministic.getUTCMilliseconds()).toBe(original.getUTCMilliseconds());
+        expect(deterministic.getUTCDay()).toBe(original.getUTCDay());
+      });
+
+      it("should handle static methods identically", () => {
+        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+
+        const dateString = "2023-01-15T10:30:45.123Z";
+        const year = 2023;
+        const month = 0; // January
+        const day = 15;
+        const hour = 10;
+        const minute = 30;
+        const second = 45;
+        const ms = 123;
+
+        expect(DeterministicDate.parse(dateString)).toBe(Date.parse(dateString));
+        expect(DeterministicDate.UTC(year, month, day, hour, minute, second, ms))
+          .toBe(Date.UTC(year, month, day, hour, minute, second, ms));
+      });
+
+      it("should maintain Date compatibility", () => {
+        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+
+        const date = new DeterministicDate(2023, 0, 1);
+
+        // Should be an instance of Date (important for type compatibility)
+        expect(date instanceof Date).toBe(true);
+
+        // Should have all expected Date methods
+        expect(typeof date.getTime).toBe("function");
+        expect(typeof date.getFullYear).toBe("function");
+        expect(typeof date.toISOString).toBe("function");
+        expect(typeof date.getTimezoneOffset).toBe("function");
+        expect(typeof date.toLocaleString).toBe("function");
+      });
+
+      it("should handle Date modification methods correctly", () => {
+        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+
+        const timestamp = 1640995200000; // 2022-01-01
+        const original = new Date(timestamp);
+        const deterministic = new DeterministicDate(timestamp);
+
+        // Test setters
+        const newTime = 1641081600000; // 2022-01-02
+        original.setTime(newTime);
+        deterministic.setTime(newTime);
+
+        expect(deterministic.getTime()).toBe(original.getTime());
+
+        // Test setFullYear
+        original.setFullYear(2024);
+        deterministic.setFullYear(2024);
+
+        expect(deterministic.getFullYear()).toBe(original.getFullYear());
+        expect(deterministic.getTime()).toBe(original.getTime());
+      });
+
+      it("should have timezone and locale methods available for future patching", () => {
+        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+        const date = new DeterministicDate(1640995200000); // 2022-01-01T00:00:00.000Z
+
+        // These methods exist but are not yet fully patched for determinism
+        // They currently still use system timezone/locale settings
+        expect(typeof date.getTimezoneOffset).toBe("function");
+        expect(typeof date.toLocaleString).toBe("function");
+        expect(typeof date.toLocaleDateString).toBe("function");
+        expect(typeof date.toLocaleTimeString).toBe("function");
+
+        // The methods work but results depend on system settings
+        const timezoneOffset = date.getTimezoneOffset();
+        const localeString = date.toLocaleString();
+        const localeDateString = date.toLocaleDateString();
+        const localeTimeString = date.toLocaleTimeString();
+
+        expect(typeof timezoneOffset).toBe("number");
+        expect(typeof localeString).toBe("string");
+        expect(typeof localeDateString).toBe("string");
+        expect(typeof localeTimeString).toBe("string");
+
+        // Should be consistent when called multiple times
+        expect(date.getTimezoneOffset()).toBe(timezoneOffset);
+        expect(date.toLocaleString()).toBe(localeString);
+        expect(date.toLocaleDateString()).toBe(localeDateString);
+        expect(date.toLocaleTimeString()).toBe(localeTimeString);
+
+        // TODO: These methods should be patched for full determinism:
+        // - getTimezoneOffset() should return 0 (UTC)
+        // - locale methods should use fixed locale (en-US) and UTC timezone
+      });
     });
   });
 

@@ -158,3 +158,81 @@ export const startSteps = mutation({
     return entries;
   },
 });
+
+export const resume = mutation({
+  args: {
+    workflowHandle: v.string(),
+    workflowId: v.id("workflows"),
+    resumeValue: v.any(),
+    name: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const console = await getDefaultLogger(ctx);
+    const workflow = await getWorkflow(ctx, args.workflowId, null);
+
+    if (workflow.runResult) {
+      throw new Error(`Workflow not running: ${args.workflowId}`);
+    }
+
+    if (workflow.workflowHandle !== args.workflowHandle) {
+      throw new Error(
+        `Workflow handle mismatch: expected ${workflow.workflowHandle}, got ${args.workflowHandle}`,
+      );
+    }
+
+    let query = ctx.db
+      .query("steps")
+      .withIndex("inProgress", (q) =>
+        q.eq("step.inProgress", true).eq("workflowId", args.workflowId),
+      )
+      .filter((q) => q.eq(q.field("step.functionType"), "pause"));
+
+    if (args.name) {
+      query = query.filter((q) => q.eq(q.field("step.name"), args.name));
+    }
+
+    const pausedStep = await query.first();
+
+    if (!pausedStep) {
+      const message = args.name
+        ? `No paused step with name "${args.name}" found for workflow: ${args.workflowId}`
+        : `No paused step found for workflow: ${args.workflowId}`;
+      throw new Error(message);
+    }
+
+    pausedStep.step.inProgress = false;
+    pausedStep.step.completedAt = Date.now();
+    pausedStep.step.runResult = {
+      kind: "success",
+      returnValue: args.resumeValue,
+    };
+
+    await ctx.db.replace(pausedStep._id, pausedStep);
+
+    console.event("stepResumed", {
+      workflowId: workflow._id,
+      workflowName: workflow.name,
+      stepName: pausedStep.step.name,
+      stepNumber: pausedStep.stepNumber,
+    });
+
+    const workpool = await getWorkpool(ctx, {});
+    await workpool.enqueueMutation(
+      ctx,
+      workflow.workflowHandle as FunctionHandle<"mutation">,
+      {
+        workflowId: workflow._id,
+        generationNumber: workflow.generationNumber,
+      },
+      {
+        name: workflow.name,
+        onComplete: internal.pool.handlerOnComplete,
+        context: {
+          workflowId: workflow._id,
+          generationNumber: workflow.generationNumber,
+        },
+      },
+    );
+  },
+});

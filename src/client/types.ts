@@ -99,9 +99,7 @@ export type WorkflowStep = {
   pause<
     Mutation extends FunctionReference<
       "mutation",
-      "internal",
-      DefaultFunctionArgs,
-      void
+      "internal"
     >,
     Returns = unknown,
   >(

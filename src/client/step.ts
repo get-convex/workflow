@@ -25,7 +25,7 @@ export type WorkerResult =
 
 export type StepRequest = {
   name: string;
-  functionType: FunctionType;
+  functionType: FunctionType | "pause";
   function: FunctionReference<FunctionType, "internal"> | undefined;
   args: unknown;
   retry: RetryBehavior | boolean | undefined;
@@ -141,7 +141,6 @@ export class StepExecutor {
             : "",
           args: message.args,
           argsSize: valueSize(message.args as Value),
-          pause: message.pause,
           outcome: undefined,
           startedAt: this.now,
           completedAt: undefined,

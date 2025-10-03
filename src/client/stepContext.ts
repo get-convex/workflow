@@ -6,6 +6,7 @@ import type {
   FunctionType,
   DefaultFunctionArgs,
 } from "convex/server";
+import type { Validator } from "convex/values";
 import { safeFunctionName } from "./safeFunctionName.js";
 import type { StepRequest } from "./step.js";
 import type { RetryOption } from "@convex-dev/workpool";
@@ -65,14 +66,14 @@ export class StepContext implements WorkflowStep {
     ),
   ): Promise<Returns> {
     if (opts?.onPause) {
-      return this.runFunction("mutation", opts.onPause, opts.args, {
+      return this.runFunction("pause", opts.onPause, opts.args, {
         name: opts.name,
         pause: true,
       }) as Promise<Returns>;
     } else {
       return this.run({
         name: opts?.name ?? "pause",
-        functionType: "mutation",
+        functionType: "pause",
         function: undefined,
         args: {},
         retry: undefined,
@@ -83,7 +84,7 @@ export class StepContext implements WorkflowStep {
   }
 
   private runFunction<F extends FunctionReference<FunctionType, "internal">>(
-    functionType: FunctionType,
+    functionType: FunctionType | "pause",
     f: F,
     args: unknown,
     opts?: RunOptions & RetryOption & { pause?: true },

@@ -204,6 +204,37 @@ export class WorkflowManager {
       workflowId,
     });
   }
+
+  /**
+   * Resume a paused workflow with a type-safe value.
+   *
+   * @param ctx - The Convex context.
+   * @param workflow - The workflow function reference for type safety.
+   * @param workflowId - The workflow ID.
+   * @param resumeValue - The value to pass to the paused step.
+   * @param opts - Options including the validator for type inference and optional step name.
+   */
+  async resume<
+    F extends FunctionReference<"mutation", "internal">,
+    V extends Validator<any, "optional", any>,
+  >(
+    ctx: RunMutationCtx,
+    workflow: F,
+    workflowId: WorkflowId,
+    resumeValue: unknown,
+    opts?: {
+      returns?: V;
+      name?: string;
+    },
+  ): Promise<void> {
+    const handle = await createFunctionHandle(workflow);
+    await ctx.runMutation(this.component.journal.resume, {
+      workflowHandle: handle,
+      workflowId,
+      resumeValue,
+      name: opts?.name,
+    });
+  }
 }
 
 type RunQueryCtx = {

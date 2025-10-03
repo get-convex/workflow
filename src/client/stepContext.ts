@@ -8,7 +8,7 @@ import type {
 } from "convex/server";
 import type { Validator } from "convex/values";
 import { safeFunctionName } from "./safeFunctionName.js";
-import type { StepRequest } from "./step.js";
+import type { StepRequest, ExecutionStepRequest } from "./step.js";
 import type { RetryOption } from "@convex-dev/workpool";
 import type { RunOptions, WorkflowStep } from "./types.js";
 import type { WorkflowId } from "../types.js";
@@ -65,44 +65,62 @@ export class StepContext implements WorkflowStep {
       | { onPause?: undefined; args?: undefined }
     ),
   ): Promise<Returns> {
-    if (opts?.onPause) {
-      return this.runFunction("pause", opts.onPause, opts.args, {
-        name: opts.name,
-        pause: true,
-      }) as Promise<Returns>;
-    } else {
-      return this.run({
-        name: opts?.name ?? "pause",
-        functionType: "pause",
-        function: undefined,
-        args: {},
-        retry: undefined,
-        pause: true,
-        schedulerOptions: {},
-      }) as Promise<Returns>;
-    }
+    return this.runPause(opts);
   }
 
   private runFunction<F extends FunctionReference<FunctionType, "internal">>(
-    functionType: FunctionType | "pause",
+    functionType: FunctionType,
     f: F,
     args: unknown,
-    opts?: RunOptions & RetryOption & { pause?: true },
+    opts?: RunOptions & RetryOption,
   ): Promise<unknown> {
-    const { name, retry, pause, ...schedulerOptions } = opts ?? {};
-    return this.run({
-      name: name ?? (f ? safeFunctionName(f) : "pause"),
+    const { name, retry, ...schedulerOptions } = opts ?? {};
+    return this.runExecution({
+      type: "execution",
+      name: name ?? safeFunctionName(f),
       functionType,
       function: f,
       args: args ?? {},
       retry,
-      pause,
       schedulerOptions,
     });
   }
 
-  private async run(
-    req: Omit<StepRequest, "resolve" | "reject">,
+  private runPause<
+    Mutation extends FunctionReference<
+      "mutation",
+      "internal",
+      DefaultFunctionArgs,
+      void
+    >,
+    Returns = unknown,
+  >(
+    opts?: {
+      name?: string;
+      returns: Validator<Returns, "required">;
+    } & (
+      | { onPause: Mutation; args: FunctionArgs<Mutation> }
+      | { onPause?: undefined; args?: undefined }
+    ),
+  ): Promise<Returns> {
+    let send: unknown;
+    const p = new Promise<Returns>((resolve, reject) => {
+      send = this.sender.push({
+        type: "pause" as const,
+        name: opts?.name ?? (opts?.onPause ? safeFunctionName(opts.onPause) : "pause"),
+        onPauseFunction: opts?.onPause,
+        args: opts?.args ?? {},
+        schedulerOptions: {},
+        resolve: resolve as (result: unknown) => void,
+        reject,
+      });
+    });
+    void send;
+    return p;
+  }
+
+  private async runExecution(
+    req: Omit<ExecutionStepRequest, "resolve" | "reject">,
   ): Promise<unknown> {
     let send: unknown;
     const p = new Promise<unknown>((resolve, reject) => {

@@ -115,7 +115,7 @@ export const onComplete = internalMutation({
       return;
     }
     if (
-      journalEntry.step.functionType === "pause" &&
+      journalEntry.step.type === "pause" &&
       args.result.kind === "success"
     ) {
       console.event("stepPaused", {

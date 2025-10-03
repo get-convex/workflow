@@ -91,7 +91,6 @@ export const startSteps = mutation({
     const entries = await Promise.all(
       args.steps.map(async (stepArgs, index) => {
         const { step, retry, schedulerOptions } = stepArgs;
-        const { name, handle, args } = step;
         const stepNumber = stepNumberBase + index;
         const stepId = await ctx.db.insert("steps", {
           workflowId: workflow._id,
@@ -105,42 +104,48 @@ export const startSteps = mutation({
           stepId,
         };
         let workId: WorkId | undefined = undefined;
-        // TODO: use enqueueBatch
-        switch (step.functionType) {
-          case "query": {
-            workId = await workpool.enqueueQuery(
-              ctx,
-              handle as FunctionHandle<"query">,
-              args,
-              { context, onComplete, name, ...schedulerOptions },
-            );
-            break;
-          }
-          // Pause is a special mutation
-          case "pause":
-            if (!handle) {
+        
+        if (step.type === "execution") {
+          switch (step.functionType) {
+            case "query": {
+              workId = await workpool.enqueueQuery(
+                ctx,
+                step.handle as FunctionHandle<"query">,
+                step.args,
+                { context, onComplete, name: step.name, ...schedulerOptions },
+              );
               break;
             }
-          // fallthrough
-          case "mutation": {
+            case "mutation": {
+              workId = await workpool.enqueueMutation(
+                ctx,
+                step.handle as FunctionHandle<"mutation">,
+                step.args,
+                { context, onComplete, name: step.name, ...schedulerOptions },
+              );
+              break;
+            }
+            case "action": {
+              workId = await workpool.enqueueAction(
+                ctx,
+                step.handle as FunctionHandle<"action">,
+                step.args,
+                { context, onComplete, name: step.name, retry, ...schedulerOptions },
+              );
+              break;
+            }
+          }
+        } else if (step.type === "pause") {
+          if (step.onPauseHandle) {
             workId = await workpool.enqueueMutation(
               ctx,
-              handle as FunctionHandle<"mutation">,
-              args,
-              { context, onComplete, name, ...schedulerOptions },
+              step.onPauseHandle as FunctionHandle<"mutation">,
+              step.args,
+              { context, onComplete, name: step.name, ...schedulerOptions },
             );
-            break;
-          }
-          case "action": {
-            workId = await workpool.enqueueAction(
-              ctx,
-              handle as FunctionHandle<"action">,
-              args,
-              { context, onComplete, name, retry, ...schedulerOptions },
-            );
-            break;
           }
         }
+        
         if (workId) {
           entry.step.workId = workId;
           await ctx.db.replace(entry._id, entry);
@@ -149,7 +154,7 @@ export const startSteps = mutation({
         console.event("started", {
           workflowId: workflow._id,
           workflowName: workflow.name,
-          stepName: name,
+          stepName: step.name,
           stepNumber,
         });
         return entry;
@@ -186,7 +191,7 @@ export const resume = mutation({
       .withIndex("inProgress", (q) =>
         q.eq("step.inProgress", true).eq("workflowId", args.workflowId),
       )
-      .filter((q) => q.eq(q.field("step.functionType"), "pause"));
+      .filter((q) => q.eq(q.field("step.type"), "pause"));
 
     if (args.name) {
       query = query.filter((q) => q.eq(q.field("step.name"), args.name));

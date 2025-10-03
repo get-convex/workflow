@@ -23,18 +23,29 @@ export type WorkerResult =
   | { type: "handlerDone"; runResult: RunResult }
   | { type: "executorBlocked" };
 
-export type StepRequest = {
+export type ExecutionStepRequest = {
+  type: "execution";
   name: string;
-  functionType: FunctionType | "pause";
-  function: FunctionReference<FunctionType, "internal"> | undefined;
+  functionType: FunctionType;
+  function: FunctionReference<FunctionType, "internal">;
   args: unknown;
   retry: RetryBehavior | boolean | undefined;
   schedulerOptions: SchedulerOptions;
-  pause: boolean | undefined;
-
   resolve: (result: unknown) => void;
   reject: (error: unknown) => void;
 };
+
+export type PauseStepRequest = {
+  type: "pause";
+  name: string;
+  onPauseFunction?: FunctionReference<"mutation", "internal">;
+  args: unknown;
+  schedulerOptions: SchedulerOptions;
+  resolve: (result: unknown) => void;
+  reject: (error: unknown) => void;
+};
+
+export type StepRequest = ExecutionStepRequest | PauseStepRequest;
 
 const MAX_JOURNAL_SIZE = 8 << 20;
 
@@ -132,24 +143,44 @@ export class StepExecutor {
   async startSteps(messages: StepRequest[]): Promise<JournalEntry[]> {
     const steps = await Promise.all(
       messages.map(async (message) => {
-        const step = {
-          inProgress: true,
-          name: message.name,
-          functionType: message.functionType,
-          handle: message.function
-            ? await createFunctionHandle(message.function)
-            : "",
-          args: message.args,
-          argsSize: valueSize(message.args as Value),
-          outcome: undefined,
-          startedAt: this.now,
-          completedAt: undefined,
-        };
-        return {
-          retry: message.retry,
-          schedulerOptions: message.schedulerOptions,
-          step,
-        };
+        if (message.type === "execution") {
+          const step = {
+            type: "execution" as const,
+            inProgress: true,
+            name: message.name,
+            functionType: message.functionType,
+            handle: await createFunctionHandle(message.function),
+            args: message.args,
+            argsSize: valueSize(message.args as Value),
+            runResult: undefined,
+            startedAt: this.now,
+            completedAt: undefined,
+          };
+          return {
+            retry: message.retry,
+            schedulerOptions: message.schedulerOptions,
+            step,
+          };
+        } else {
+          const step = {
+            type: "pause" as const,
+            inProgress: true,
+            name: message.name,
+            onPauseHandle: message.onPauseFunction
+              ? await createFunctionHandle(message.onPauseFunction)
+              : undefined,
+            args: message.args,
+            argsSize: valueSize(message.args as Value),
+            runResult: undefined,
+            startedAt: this.now,
+            completedAt: undefined,
+          };
+          return {
+            retry: undefined,
+            schedulerOptions: message.schedulerOptions,
+            step,
+          };
+        }
       }),
     );
     const entries = (await this.ctx.runMutation(

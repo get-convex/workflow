@@ -216,6 +216,7 @@ export class WorkflowManager {
    */
   async resume<
     F extends FunctionReference<"mutation", "internal">,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     V extends Validator<any, "optional", any>,
   >(
     ctx: RunMutationCtx,

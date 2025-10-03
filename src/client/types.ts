@@ -1,6 +1,5 @@
 import type { RetryOption, WorkId } from "@convex-dev/workpool";
 import type {
-  DefaultFunctionArgs,
   Expand,
   FunctionArgs,
   FunctionReference,

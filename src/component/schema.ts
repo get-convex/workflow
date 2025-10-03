@@ -59,20 +59,36 @@ export const workflowDocument = v.object({
 });
 export type Workflow = Infer<typeof workflowDocument>;
 
-export const step = v.object({
+const baseStepFields = {
   name: v.string(),
   inProgress: v.boolean(),
   workId: v.optional(vWorkIdValidator),
-  functionType: literals("query", "mutation", "action", "pause"),
+  runResult: v.optional(vResultValidator),
+  startedAt: v.number(),
+  completedAt: v.optional(v.number()),
+};
+
+const executionStep = v.object({
+  ...baseStepFields,
+  type: v.literal("execution"),
+  functionType: literals("query", "mutation", "action"),
   handle: v.string(),
   argsSize: v.number(),
   args: v.any(),
-  runResult: v.optional(vResultValidator),
-
-  startedAt: v.number(),
-  completedAt: v.optional(v.number()),
 });
+
+const pauseStep = v.object({
+  ...baseStepFields,
+  type: v.literal("pause"),
+  onPauseHandle: v.optional(v.string()),
+  argsSize: v.number(),
+  args: v.any(),
+});
+
+export const step = v.union(executionStep, pauseStep);
 export type Step = Infer<typeof step>;
+export type ExecutionStep = Infer<typeof executionStep>;
+export type PauseStep = Infer<typeof pauseStep>;
 
 function stepSize(step: Step): number {
   let size = 0;
@@ -81,8 +97,17 @@ function stepSize(step: Step): number {
   if (step.workId) {
     size += step.workId.length;
   }
-  size += step.functionType.length;
-  size += step.handle.length;
+  size += step.type.length;
+  
+  if (step.type === "execution") {
+    size += step.functionType.length;
+    size += step.handle.length;
+  } else if (step.type === "pause") {
+    if (step.onPauseHandle) {
+      size += step.onPauseHandle.length;
+    }
+  }
+  
   size += 8 + step.argsSize;
   if (step.runResult) {
     size += resultSize(step.runResult);

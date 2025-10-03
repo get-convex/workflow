@@ -47,21 +47,38 @@ export type Mounts = {
         journalEntries: Array<{
           _creationTime: number;
           _id: string;
-          step: {
-            args: any;
-            argsSize: number;
-            completedAt?: number;
-            functionType: "query" | "mutation" | "action" | "pause";
-            handle: string;
-            inProgress: boolean;
-            name: string;
-            runResult?:
-              | { kind: "success"; returnValue: any }
-              | { error: string; kind: "failed" }
-              | { kind: "canceled" };
-            startedAt: number;
-            workId?: string;
-          };
+          step:
+            | {
+                args: any;
+                argsSize: number;
+                completedAt?: number;
+                functionType: "query" | "mutation" | "action";
+                handle: string;
+                inProgress: boolean;
+                name: string;
+                runResult?:
+                  | { kind: "success"; returnValue: any }
+                  | { error: string; kind: "failed" }
+                  | { kind: "canceled" };
+                startedAt: number;
+                type: "execution";
+                workId?: string;
+              }
+            | {
+                args: any;
+                argsSize: number;
+                completedAt?: number;
+                inProgress: boolean;
+                name: string;
+                onPauseHandle?: string;
+                runResult?:
+                  | { kind: "success"; returnValue: any }
+                  | { error: string; kind: "failed" }
+                  | { kind: "canceled" };
+                startedAt: number;
+                type: "pause";
+                workId?: string;
+              };
           stepNumber: number;
           workflowId: string;
         }>;
@@ -85,6 +102,17 @@ export type Mounts = {
         };
       }
     >;
+    resume: FunctionReference<
+      "mutation",
+      "public",
+      {
+        name?: string;
+        resumeValue: any;
+        workflowHandle: string;
+        workflowId: string;
+      },
+      null
+    >;
     startSteps: FunctionReference<
       "mutation",
       "public",
@@ -95,21 +123,38 @@ export type Mounts = {
             | boolean
             | { base: number; initialBackoffMs: number; maxAttempts: number };
           schedulerOptions?: { runAt?: number } | { runAfter?: number };
-          step: {
-            args: any;
-            argsSize: number;
-            completedAt?: number;
-            functionType: "query" | "mutation" | "action" | "pause";
-            handle: string;
-            inProgress: boolean;
-            name: string;
-            runResult?:
-              | { kind: "success"; returnValue: any }
-              | { error: string; kind: "failed" }
-              | { kind: "canceled" };
-            startedAt: number;
-            workId?: string;
-          };
+          step:
+            | {
+                args: any;
+                argsSize: number;
+                completedAt?: number;
+                functionType: "query" | "mutation" | "action";
+                handle: string;
+                inProgress: boolean;
+                name: string;
+                runResult?:
+                  | { kind: "success"; returnValue: any }
+                  | { error: string; kind: "failed" }
+                  | { kind: "canceled" };
+                startedAt: number;
+                type: "execution";
+                workId?: string;
+              }
+            | {
+                args: any;
+                argsSize: number;
+                completedAt?: number;
+                inProgress: boolean;
+                name: string;
+                onPauseHandle?: string;
+                runResult?:
+                  | { kind: "success"; returnValue: any }
+                  | { error: string; kind: "failed" }
+                  | { kind: "canceled" };
+                startedAt: number;
+                type: "pause";
+                workId?: string;
+              };
         }>;
         workflowId: string;
         workpoolOptions?: {
@@ -126,21 +171,38 @@ export type Mounts = {
       Array<{
         _creationTime: number;
         _id: string;
-        step: {
-          args: any;
-          argsSize: number;
-          completedAt?: number;
-          functionType: "query" | "mutation" | "action" | "pause";
-          handle: string;
-          inProgress: boolean;
-          name: string;
-          runResult?:
-            | { kind: "success"; returnValue: any }
-            | { error: string; kind: "failed" }
-            | { kind: "canceled" };
-          startedAt: number;
-          workId?: string;
-        };
+        step:
+          | {
+              args: any;
+              argsSize: number;
+              completedAt?: number;
+              functionType: "query" | "mutation" | "action";
+              handle: string;
+              inProgress: boolean;
+              name: string;
+              runResult?:
+                | { kind: "success"; returnValue: any }
+                | { error: string; kind: "failed" }
+                | { kind: "canceled" };
+              startedAt: number;
+              type: "execution";
+              workId?: string;
+            }
+          | {
+              args: any;
+              argsSize: number;
+              completedAt?: number;
+              inProgress: boolean;
+              name: string;
+              onPauseHandle?: string;
+              runResult?:
+                | { kind: "success"; returnValue: any }
+                | { error: string; kind: "failed" }
+                | { kind: "canceled" };
+              startedAt: number;
+              type: "pause";
+              workId?: string;
+            };
         stepNumber: number;
         workflowId: string;
       }>
@@ -193,21 +255,38 @@ export type Mounts = {
         inProgress: Array<{
           _creationTime: number;
           _id: string;
-          step: {
-            args: any;
-            argsSize: number;
-            completedAt?: number;
-            functionType: "query" | "mutation" | "action" | "pause";
-            handle: string;
-            inProgress: boolean;
-            name: string;
-            runResult?:
-              | { kind: "success"; returnValue: any }
-              | { error: string; kind: "failed" }
-              | { kind: "canceled" };
-            startedAt: number;
-            workId?: string;
-          };
+          step:
+            | {
+                args: any;
+                argsSize: number;
+                completedAt?: number;
+                functionType: "query" | "mutation" | "action";
+                handle: string;
+                inProgress: boolean;
+                name: string;
+                runResult?:
+                  | { kind: "success"; returnValue: any }
+                  | { error: string; kind: "failed" }
+                  | { kind: "canceled" };
+                startedAt: number;
+                type: "execution";
+                workId?: string;
+              }
+            | {
+                args: any;
+                argsSize: number;
+                completedAt?: number;
+                inProgress: boolean;
+                name: string;
+                onPauseHandle?: string;
+                runResult?:
+                  | { kind: "success"; returnValue: any }
+                  | { error: string; kind: "failed" }
+                  | { kind: "canceled" };
+                startedAt: number;
+                type: "pause";
+                workId?: string;
+              };
           stepNumber: number;
           workflowId: string;
         }>;

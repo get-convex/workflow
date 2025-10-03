@@ -191,7 +191,7 @@ export const handleOnComplete = mutation({
     workflowId: vWorkflowId,
     result: vResultValidator,
     context: v.any(), // used to pass through data from the start site.
-  }
+  },
   handler: async (ctx, args) => {
     const name = (args.context as { name: string }).name;
     if (args.result.kind === "success") {

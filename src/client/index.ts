@@ -97,7 +97,14 @@ export class WorkflowManager {
     ReturnValue extends ReturnValueForOptionalValidator<ReturnsValidator> = any,
   >(
     workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator, ReturnValue>,
-  ): RegisteredMutation<"internal", ObjectType<ArgsValidator>, void> {
+  ): RegisteredMutation<
+    "internal",
+    {
+      fn: "You should not call this directly, call workflow.start instead";
+      args: ObjectType<ArgsValidator>;
+    },
+    void
+  > {
     return workflowMutation(
       this.component,
       workflow,
@@ -116,7 +123,7 @@ export class WorkflowManager {
   async start<F extends FunctionReference<"mutation", "internal">>(
     ctx: RunMutationCtx,
     workflow: F,
-    args: FunctionArgs<F>,
+    args: FunctionArgs<F>["args"],
     options?: CallbackOptions & {
       /**
        * By default, during creation the workflow will be initiated immediately.

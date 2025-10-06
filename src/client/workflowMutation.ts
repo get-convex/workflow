@@ -36,7 +36,7 @@ const workflowArgs = v.union(
     args: v.any(),
   }),
 );
-const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke the workflow with ctx.runMutation() instead of workflow.start()?`;
+const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke the workflow with ctx.runMutation() instead of workflow.start()? Pro tip: to start a workflow directly from the CLI or dashboard, you can use args '{ fn: "path/to/file:workflowName", args: { ...your workflow args } }'`;
 
 // This function is defined in the calling component but then gets passed by
 // function handle to the workflow component for execution. This function runs
@@ -46,7 +46,14 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
   component: WorkflowComponent,
   registered: WorkflowDefinition<ArgsValidator>,
   defaultWorkpoolOptions?: WorkpoolOptions,
-): RegisteredMutation<"internal", ObjectType<ArgsValidator>, void> {
+): RegisteredMutation<
+  "internal",
+  {
+    fn: "You should not call this directly, call workflow.start instead";
+    args: ObjectType<ArgsValidator>;
+  },
+  void
+> {
   const workpoolOptions = {
     ...defaultWorkpoolOptions,
     ...registered.workpoolOptions,
@@ -58,13 +65,13 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
       }
       if ("fn" in args) {
         const fn = makeFunctionReference(args.fn);
-        await ctx.runMutation(component.workflow.create, {
+        const workflowId = await ctx.runMutation(component.workflow.create, {
           workflowName: safeFunctionName(fn),
           workflowHandle: await createFunctionHandle(fn),
           workflowArgs: args.args,
           maxParallelism: workpoolOptions.maxParallelism,
         });
-        return;
+        return workflowId;
       }
       const { workflowId, generationNumber } = args;
       const { workflow, logLevel, journalEntries, ok } = await ctx.runQuery(

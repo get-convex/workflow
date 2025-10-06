@@ -48,8 +48,9 @@ export declare const components: {
       load: FunctionReference<
         "query",
         "internal",
-        { workflowId: string },
+        { shortCircuit?: boolean; workflowId: string },
         {
+          blocked?: boolean;
           journalEntries: Array<{
             _creationTime: number;
             _id: string;

@@ -18,6 +18,7 @@ import {
   valueSize,
 } from "../component/schema.js";
 import type { SchedulerOptions, WorkflowComponent } from "./types.js";
+import { MAX_JOURNAL_SIZE } from "../shared.js";
 
 export type WorkerResult =
   | { type: "handlerDone"; runResult: RunResult }
@@ -34,8 +35,6 @@ export type StepRequest = {
   resolve: (result: unknown) => void;
   reject: (error: unknown) => void;
 };
-
-const MAX_JOURNAL_SIZE = 8 << 20;
 
 export class StepExecutor {
   private journalEntrySize: number;
@@ -56,6 +55,7 @@ export class StepExecutor {
     );
 
     if (this.journalEntrySize > MAX_JOURNAL_SIZE) {
+      // This should never happen, but we'll throw an error just in case.
       throw new Error(journalSizeError(this.journalEntrySize, this.workflowId));
     }
   }

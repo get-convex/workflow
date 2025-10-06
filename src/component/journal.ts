@@ -19,33 +19,53 @@ import { internal } from "./_generated/api.js";
 import { type FunctionHandle } from "convex/server";
 import { getDefaultLogger } from "./utils.js";
 import { assert } from "convex-helpers";
+import { MAX_JOURNAL_SIZE } from "../shared.js";
 
 export const load = query({
   args: {
     workflowId: v.id("workflows"),
+    shortCircuit: v.optional(v.boolean()),
   },
   returns: v.object({
     workflow: workflowDocument,
     journalEntries: v.array(journalDocument),
     ok: v.boolean(),
     logLevel,
+    blocked: v.optional(v.boolean()),
   }),
-  handler: async (ctx, { workflowId }) => {
+  handler: async (ctx, { workflowId, shortCircuit }) => {
     const workflow = await ctx.db.get(workflowId);
     assert(workflow, `Workflow not found: ${workflowId}`);
     const { logLevel } = await getDefaultLogger(ctx);
     const journalEntries: JournalEntry[] = [];
-    let sizeSoFar = 0;
+    let journalSize = 0;
+    if (shortCircuit) {
+      const inProgress = await ctx.db
+        .query("steps")
+        .withIndex("inProgress", (q) =>
+          q.eq("step.inProgress", true).eq("workflowId", workflowId),
+        )
+        .first();
+      if (inProgress) {
+        return {
+          journalEntries: [inProgress],
+          blocked: true,
+          workflow,
+          logLevel,
+          ok: false,
+        };
+      }
+    }
     for await (const entry of ctx.db
       .query("steps")
       .withIndex("workflow", (q) => q.eq("workflowId", workflowId))) {
       journalEntries.push(entry);
-      sizeSoFar += journalEntrySize(entry);
-      if (sizeSoFar > 4 * 1024 * 1024) {
-        return { journalEntries, ok: false, workflow, logLevel };
+      journalSize += journalEntrySize(entry);
+      if (journalSize > MAX_JOURNAL_SIZE) {
+        return { journalEntries, workflow, logLevel, ok: false };
       }
     }
-    return { journalEntries, ok: true, workflow, logLevel };
+    return { journalEntries, workflow, logLevel, ok: true };
   },
 });
 

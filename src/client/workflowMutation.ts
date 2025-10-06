@@ -69,7 +69,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
       const { workflowId, generationNumber } = args;
       const { workflow, logLevel, journalEntries, ok } = await ctx.runQuery(
         component.journal.load,
-        { workflowId },
+        { workflowId, shortCircuit: true },
       );
       const inProgress = journalEntries.filter(({ step }) => step.inProgress);
       const console = createLogger(logLevel);

@@ -42,8 +42,9 @@ export type Mounts = {
     load: FunctionReference<
       "query",
       "public",
-      { workflowId: string },
+      { shortCircuit?: boolean; workflowId: string },
       {
+        blocked?: boolean;
         journalEntries: Array<{
           _creationTime: number;
           _id: string;

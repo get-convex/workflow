@@ -2,7 +2,9 @@ import { BaseChannel } from "async-channel";
 import { assert } from "convex-helpers";
 import { validate, ValidationError } from "convex-helpers/validators";
 import {
+  createFunctionHandle,
   internalMutationGeneric,
+  makeFunctionReference,
   type RegisteredMutation,
 } from "convex/server";
 import {
@@ -22,11 +24,18 @@ import { type RunResult, type WorkpoolOptions } from "@convex-dev/workpool";
 import { type WorkflowComponent } from "./types.js";
 import { vWorkflowId } from "../types.js";
 import { formatErrorWithStack } from "../shared.js";
+import { safeFunctionName } from "./safeFunctionName.js";
 
-const workflowArgs = v.object({
-  workflowId: vWorkflowId,
-  generationNumber: v.number(),
-});
+const workflowArgs = v.union(
+  v.object({
+    workflowId: vWorkflowId,
+    generationNumber: v.number(),
+  }),
+  v.object({
+    fn: v.string(),
+    args: v.any(),
+  }),
+);
 const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke the workflow with ctx.runMutation() instead of workflow.start()?`;
 
 // This function is defined in the calling component but then gets passed by
@@ -46,6 +55,16 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
     handler: async (ctx, args) => {
       if (!validate(workflowArgs, args)) {
         throw new Error(INVALID_WORKFLOW_MESSAGE);
+      }
+      if ("fn" in args) {
+        const fn = makeFunctionReference(args.fn);
+        await ctx.runMutation(component.workflow.create, {
+          workflowName: safeFunctionName(fn),
+          workflowHandle: await createFunctionHandle(fn),
+          workflowArgs: args.args,
+          maxParallelism: workpoolOptions.maxParallelism,
+        });
+        return;
       }
       const { workflowId, generationNumber } = args;
       const { workflow, logLevel, journalEntries, ok } = await ctx.runQuery(

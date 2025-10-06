@@ -1,7 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.js", "src/**/*.d.ts"],
-  "exclude": ["src/**/*.test.*", "src/vitest.config.ts"],
+  "exclude": ["src/**/*.test.*", "src/vitest.config.ts", "src/test.ts"],
   "compilerOptions": {
     "module": "ESNext",
     "moduleResolution": "Bundler",

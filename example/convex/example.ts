@@ -6,11 +6,7 @@ import { components } from "./_generated/api.js";
 import { vWorkflowId } from "@convex-dev/workflow";
 import { vResultValidator } from "@convex-dev/workpool";
 
-export const workflow = new WorkflowManager(components.workflow, {
-  workpoolOptions: {
-    maxParallelism: 2,
-  },
-});
+export const workflow = new WorkflowManager(components.workflow);
 
 export const exampleWorkflow = workflow.define({
   args: {
@@ -113,7 +109,8 @@ export const flowCompleted = internalMutation({
       .withIndex("workflowId", (q) => q.eq("workflowId", args.workflowId))
       .first();
     if (!flow) {
-      throw new Error(`Flow not found: ${args.workflowId}`);
+      console.error(`Flow not found: ${args.workflowId}`);
+      return;
     }
     await ctx.db.patch(flow._id, {
       out: args.result,

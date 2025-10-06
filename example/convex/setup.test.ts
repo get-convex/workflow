@@ -2,19 +2,13 @@
 import { test } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "./schema";
-export const modules = import.meta.glob("./**/*.*s");
+import workflow from "@convex-dev/workflow/test";
 
-// Sorry about everything
-import componentSchema from "../../node_modules/@convex-dev/workflow/src/component/schema";
-export { componentSchema };
-export const componentModules = import.meta.glob(
-  "../../node_modules/@convex-dev/workflow/src/component/**/*.ts",
-);
+export const modules = import.meta.glob("./**/*.*s");
 
 export function initConvexTest() {
   const t = convexTest(schema, modules);
-  t.registerComponent("bigPool", componentSchema, componentModules);
-  t.registerComponent("smallPool", componentSchema, componentModules);
+  t.registerComponent("workflow", workflow.schema, workflow.modules);
   return t;
 }
 

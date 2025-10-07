@@ -183,7 +183,6 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         }
       }
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   }) as any;
 }
 

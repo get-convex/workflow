@@ -56,7 +56,6 @@ export type CallbackOptions = {
 
 export type WorkflowDefinition<
   ArgsValidator extends PropertyValidators,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ReturnsValidator extends Validator<any, "required", any> | void = any,
 > = {
   args?: ArgsValidator;

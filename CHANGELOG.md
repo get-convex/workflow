@@ -5,6 +5,9 @@
 - Adds asynchronous events - wait for an event in a workflow, send
   events asynchronously - allows pause/resume, human-in-loop, etc.
 - Supports nested workflows with step.runWorkflow.
+- You can start a workflow directly from the CLI / dashboard without having to
+  make a mutation to call workflow.start:
+  - `{ fn: "path/to/file:workflowName", args: { ...your workflow args } }`
 - Reduces read bandwidth when reading the journal after running many steps in parallel.
 
 ## 0.2.7

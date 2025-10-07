@@ -58,7 +58,6 @@ export async function awaitEvent(
   }
   assert(entry.step.kind === "event", "Step is not an event");
   entry.step.eventId = event._id;
-  await ctx.db.replace(entry._id, entry);
   // if there's a name, see if there's one to consume.
   // if it's there, mark it consumed and swap in the result.
   return entry;

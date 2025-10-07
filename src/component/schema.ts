@@ -62,7 +62,6 @@ export type Workflow = Infer<typeof workflowDocument>;
 const stepCommonFields = {
   name: v.string(),
   inProgress: v.boolean(),
-  workId: v.optional(vWorkIdValidator),
   argsSize: v.number(),
   args: v.any(),
   runResult: v.optional(vResultValidator),
@@ -75,6 +74,13 @@ export const step = v.union(
     kind: v.optional(v.literal("function")),
     functionType: literals("query", "mutation", "action"),
     handle: v.string(),
+    workId: v.optional(vWorkIdValidator),
+    ...stepCommonFields,
+  }),
+  v.object({
+    kind: v.literal("workflow"),
+    handle: v.string(),
+    workflowId: v.optional(v.id("workflows")),
     ...stepCommonFields,
   }),
   v.object({
@@ -90,13 +96,21 @@ function stepSize(step: Step): number {
   let size = 0;
   size += step.name.length;
   size += 1; // inProgress
-  if (step.workId) {
-    size += step.workId.length;
-  }
   if (step.kind) size += step.kind.length;
-  if (step.kind !== "event") {
-    size += step.functionType.length;
-    size += step.handle.length;
+  switch (step.kind) {
+    case undefined:
+    case "function":
+      size += step.handle.length;
+      size += step.functionType.length;
+      size += step.workId?.length ?? 0;
+      break;
+    case "workflow":
+      size += step.handle.length;
+      size += step.workflowId?.length ?? 0;
+      break;
+    case "event":
+      size += step.eventId?.length ?? 0;
+      break;
   }
   size += 8 + step.argsSize;
   if (step.runResult) {
@@ -173,7 +187,8 @@ export default defineSchema({
   onCompleteFailures: defineTable(
     v.union(
       v.object({
-        workId: vWorkIdValidator,
+        workId: v.optional(vWorkIdValidator),
+        workflowId: v.optional(v.string()),
         result: vResultValidator,
         context: v.any(),
       }),

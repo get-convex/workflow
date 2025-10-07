@@ -3,6 +3,8 @@ import {
   vRetryBehavior,
   vWorkIdValidator,
   Workpool,
+  type RunResult,
+  type WorkId,
   type WorkpoolOptions,
 } from "@convex-dev/workpool";
 import { assert } from "convex-helpers";
@@ -20,6 +22,7 @@ import { getWorkflow } from "./model.js";
 import { getDefaultLogger } from "./utils.js";
 import { completeHandler } from "./workflow.js";
 import type { Doc } from "./_generated/dataModel.js";
+import { vWorkflowId, type WorkflowId } from "../types.js";
 
 export const workpoolOptions = v.object({
   logLevel: v.optional(logLevel),
@@ -70,95 +73,116 @@ export const onComplete = internalMutation({
     context: v.any(), // Ensure we can catch invalid context to fail workflow.
   },
   returns: v.null(),
-  handler: async (ctx, args) => {
-    const console = await getDefaultLogger(ctx);
-    const stepId =
-      "stepId" in args.context
-        ? ctx.db.normalizeId("steps", args.context.stepId)
-        : null;
-    if (!stepId) {
-      // Write to failures table and return
-      // So someone can investigate if this ever happens
-      console.error("Invalid onComplete context", args.context);
-      await ctx.db.insert("onCompleteFailures", args);
-      return;
-    }
-    const journalEntry = await ctx.db.get(stepId);
-    assert(journalEntry, `Journal entry not found: ${stepId}`);
-    const workflowId = journalEntry.workflowId;
-
-    if (
-      !validate(onCompleteContext, args.context, { allowUnknownFields: true })
-    ) {
-      const error =
-        `Invalid onComplete context for workId ${args.workId}` +
-        JSON.stringify(args.context);
-      await ctx.db.patch(workflowId, {
-        runResult: {
-          kind: "failed",
-          error,
-        },
-      });
-      return;
-    }
-    const { generationNumber } = args.context;
-    const workflow = await getWorkflow(ctx, workflowId, null);
-    if (workflow.generationNumber !== generationNumber) {
-      console.error(
-        `Workflow: ${workflowId} already has generation number ${workflow.generationNumber} when completing ${stepId}`,
-      );
-      return;
-    }
-    if (!journalEntry.step.inProgress) {
-      console.error(
-        `Step finished but journal entry not in progress: ${stepId} status: ${journalEntry.step.runResult?.kind ?? "pending"}`,
-      );
-      return;
-    }
-    journalEntry.step.inProgress = false;
-    journalEntry.step.completedAt = Date.now();
-    switch (args.result.kind) {
-      case "success":
-        journalEntry.step.runResult = {
-          kind: "success",
-          returnValue: args.result.returnValue,
-        };
-        break;
-      case "failed":
-        journalEntry.step.runResult = {
-          kind: "failed",
-          error: args.result.error,
-        };
-        break;
-      case "canceled":
-        journalEntry.step.runResult = {
-          kind: "canceled",
-        };
-        break;
-    }
-    await ctx.db.replace(journalEntry._id, journalEntry);
-    console.debug(`Completed execution of ${stepId}`, journalEntry);
-
-    console.event("stepCompleted", {
-      workflowId,
-      workflowName: workflow.name,
-      status: args.result.kind,
-      stepName: journalEntry.step.name,
-      stepNumber: journalEntry.stepNumber,
-      durationMs: journalEntry.step.completedAt - journalEntry.step.startedAt,
-    });
-    if (workflow.runResult !== undefined) {
-      if (workflow.runResult.kind !== "canceled") {
-        console.error(
-          `Workflow: ${workflowId} already ${workflow.runResult.kind} when completing ${stepId} with status ${args.result.kind}`,
-        );
-      }
-      return;
-    }
-    const workpool = await getWorkpool(ctx, args.context.workpoolOptions);
-    await enqueueWorkflow(ctx, workflow, workpool);
-  },
+  handler: onCompleteHandler,
 });
+
+// For a nested workflow
+export const nestedWorkflowOnComplete = internalMutation({
+  args: {
+    workflowId: vWorkflowId,
+    result: vResultValidator,
+    context: v.any(),
+  },
+  returns: v.null(),
+  handler: onCompleteHandler,
+});
+
+async function onCompleteHandler(
+  ctx: MutationCtx,
+  args: {
+    workId?: WorkId;
+    workflowId?: WorkflowId;
+    result: RunResult;
+    context: object;
+  },
+) {
+  const console = await getDefaultLogger(ctx);
+  const stepId =
+    "stepId" in args.context && typeof args.context.stepId === "string"
+      ? ctx.db.normalizeId("steps", args.context.stepId)
+      : null;
+  if (!stepId) {
+    // Write to failures table and return
+    // So someone can investigate if this ever happens
+    console.error("Invalid onComplete context", args.context);
+    await ctx.db.insert("onCompleteFailures", args);
+    return;
+  }
+  const journalEntry = await ctx.db.get(stepId);
+  assert(journalEntry, `Journal entry not found: ${stepId}`);
+  const workflowId = journalEntry.workflowId;
+
+  if (
+    !validate(onCompleteContext, args.context, { allowUnknownFields: true })
+  ) {
+    const error =
+      `Invalid onComplete context for ${args.workId ? `workId ${args.workId}` : `nested workflowId ${args.workflowId}`}` +
+      JSON.stringify(args.context);
+    await ctx.db.patch(workflowId, {
+      runResult: {
+        kind: "failed",
+        error,
+      },
+    });
+    return;
+  }
+  const { generationNumber } = args.context;
+  const workflow = await getWorkflow(ctx, workflowId, null);
+  if (workflow.generationNumber !== generationNumber) {
+    console.error(
+      `Workflow: ${workflowId} already has generation number ${workflow.generationNumber} when completing ${stepId}`,
+    );
+    return;
+  }
+  if (!journalEntry.step.inProgress) {
+    console.error(
+      `Step finished but journal entry not in progress: ${stepId} status: ${journalEntry.step.runResult?.kind ?? "pending"}`,
+    );
+    return;
+  }
+  journalEntry.step.inProgress = false;
+  journalEntry.step.completedAt = Date.now();
+  switch (args.result.kind) {
+    case "success":
+      journalEntry.step.runResult = {
+        kind: "success",
+        returnValue: args.result.returnValue,
+      };
+      break;
+    case "failed":
+      journalEntry.step.runResult = {
+        kind: "failed",
+        error: args.result.error,
+      };
+      break;
+    case "canceled":
+      journalEntry.step.runResult = {
+        kind: "canceled",
+      };
+      break;
+  }
+  await ctx.db.replace(journalEntry._id, journalEntry);
+  console.debug(`Completed execution of ${stepId}`, journalEntry);
+
+  console.event("stepCompleted", {
+    workflowId,
+    workflowName: workflow.name,
+    status: args.result.kind,
+    stepName: journalEntry.step.name,
+    stepNumber: journalEntry.stepNumber,
+    durationMs: journalEntry.step.completedAt - journalEntry.step.startedAt,
+  });
+  if (workflow.runResult !== undefined) {
+    if (workflow.runResult.kind !== "canceled") {
+      console.error(
+        `Workflow: ${workflowId} already ${workflow.runResult.kind} when completing ${stepId} with status ${args.result.kind}`,
+      );
+    }
+    return;
+  }
+  const workpool = await getWorkpool(ctx, args.context.workpoolOptions);
+  await enqueueWorkflow(ctx, workflow, workpool);
+}
 
 export async function enqueueWorkflow(
   ctx: MutationCtx,

@@ -106,6 +106,21 @@ export declare const components: {
                   workId?: string;
                 }
               | {
+                  args: any;
+                  argsSize: number;
+                  completedAt?: number;
+                  handle: string;
+                  inProgress: boolean;
+                  kind: "workflow";
+                  name: string;
+                  runResult?:
+                    | { kind: "success"; returnValue: any }
+                    | { error: string; kind: "failed" }
+                    | { kind: "canceled" };
+                  startedAt: number;
+                  workflowId?: string;
+                }
+              | {
                   args: { eventId?: string };
                   argsSize: number;
                   completedAt?: number;
@@ -118,7 +133,6 @@ export declare const components: {
                     | { error: string; kind: "failed" }
                     | { kind: "canceled" };
                   startedAt: number;
-                  workId?: string;
                 };
             stepNumber: number;
             workflowId: string;
@@ -171,6 +185,21 @@ export declare const components: {
                   workId?: string;
                 }
               | {
+                  args: any;
+                  argsSize: number;
+                  completedAt?: number;
+                  handle: string;
+                  inProgress: boolean;
+                  kind: "workflow";
+                  name: string;
+                  runResult?:
+                    | { kind: "success"; returnValue: any }
+                    | { error: string; kind: "failed" }
+                    | { kind: "canceled" };
+                  startedAt: number;
+                  workflowId?: string;
+                }
+              | {
                   args: { eventId?: string };
                   argsSize: number;
                   completedAt?: number;
@@ -183,7 +212,6 @@ export declare const components: {
                     | { error: string; kind: "failed" }
                     | { kind: "canceled" };
                   startedAt: number;
-                  workId?: string;
                 };
           }>;
           workflowId: string;
@@ -219,6 +247,21 @@ export declare const components: {
                 workId?: string;
               }
             | {
+                args: any;
+                argsSize: number;
+                completedAt?: number;
+                handle: string;
+                inProgress: boolean;
+                kind: "workflow";
+                name: string;
+                runResult?:
+                  | { kind: "success"; returnValue: any }
+                  | { error: string; kind: "failed" }
+                  | { kind: "canceled" };
+                startedAt: number;
+                workflowId?: string;
+              }
+            | {
                 args: { eventId?: string };
                 argsSize: number;
                 completedAt?: number;
@@ -231,7 +274,6 @@ export declare const components: {
                   | { error: string; kind: "failed" }
                   | { kind: "canceled" };
                 startedAt: number;
-                workId?: string;
               };
           stepNumber: number;
           workflowId: string;
@@ -303,6 +345,21 @@ export declare const components: {
                   workId?: string;
                 }
               | {
+                  args: any;
+                  argsSize: number;
+                  completedAt?: number;
+                  handle: string;
+                  inProgress: boolean;
+                  kind: "workflow";
+                  name: string;
+                  runResult?:
+                    | { kind: "success"; returnValue: any }
+                    | { error: string; kind: "failed" }
+                    | { kind: "canceled" };
+                  startedAt: number;
+                  workflowId?: string;
+                }
+              | {
                   args: { eventId?: string };
                   argsSize: number;
                   completedAt?: number;
@@ -315,7 +372,6 @@ export declare const components: {
                     | { error: string; kind: "failed" }
                     | { kind: "canceled" };
                   startedAt: number;
-                  workId?: string;
                 };
             stepNumber: number;
             workflowId: string;

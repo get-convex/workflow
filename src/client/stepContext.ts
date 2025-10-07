@@ -42,6 +42,24 @@ export class StepContext implements WorkflowStep {
     return this.runFunction("action", action, args, opts);
   }
 
+  async runWorkflow<Workflow extends FunctionReference<"mutation", "internal">>(
+    workflow: Workflow,
+    args: FunctionArgs<Workflow>,
+    opts?: RunOptions,
+  ): Promise<FunctionReturnType<Workflow>> {
+    const { name, ...schedulerOptions } = opts ?? {};
+    return this.run({
+      name: name ?? safeFunctionName(workflow),
+      target: {
+        kind: "workflow",
+        function: workflow,
+        args,
+      },
+      retry: undefined,
+      schedulerOptions,
+    });
+  }
+
   async awaitEvent<T, Name extends string = string>(
     event: EventSpec<Name, T>,
   ): Promise<T> {

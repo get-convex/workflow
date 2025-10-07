@@ -9,57 +9,66 @@ import { getWorkpool } from "./pool.js";
 import { journalDocument, vOnComplete, workflowDocument } from "./schema.js";
 import { getDefaultLogger } from "./utils.js";
 import type { WorkflowId, OnCompleteArgs } from "../types.js";
-import { internal } from "./_generated/api.js";
+import { api, internal } from "./_generated/api.js";
 import { formatErrorWithStack } from "../shared.js";
+import type { SchedulerOptions } from "../client/types.js";
 
-export const create = mutation({
-  args: {
-    workflowName: v.string(),
-    workflowHandle: v.string(),
-    workflowArgs: v.any(),
-    maxParallelism: v.optional(v.number()),
-    onComplete: v.optional(vOnComplete),
-    startAsync: v.optional(v.boolean()),
-    // TODO: ttl
-  },
-  returns: v.id("workflows"),
-  handler: async (ctx, args) => {
-    const console = await getDefaultLogger(ctx);
-    await updateMaxParallelism(ctx, console, args.maxParallelism);
-    const workflowId = await ctx.db.insert("workflows", {
-      name: args.workflowName,
-      workflowHandle: args.workflowHandle,
-      args: args.workflowArgs,
-      generationNumber: 0,
-      onComplete: args.onComplete,
-    });
-    console.debug(
-      `Created workflow ${workflowId}:`,
-      args.workflowArgs,
-      args.workflowHandle,
-    );
-    if (args.startAsync) {
-      const workpool = await getWorkpool(ctx, args);
-      await workpool.enqueueMutation(
-        ctx,
-        args.workflowHandle as FunctionHandle<"mutation">,
-        { workflowId, generationNumber: 0 },
-        {
-          name: args.workflowName,
-          onComplete: internal.pool.handlerOnComplete,
-          context: { workflowId, generationNumber: 0 },
-        },
-      );
-    } else {
-      // If we can't start it, may as well not create it, eh? Fail fast...
-      await ctx.runMutation(args.workflowHandle as FunctionHandle<"mutation">, {
-        workflowId,
-        generationNumber: 0,
-      });
-    }
-    return workflowId;
-  },
+const createArgs = v.object({
+  workflowName: v.string(),
+  workflowHandle: v.string(),
+  workflowArgs: v.any(),
+  maxParallelism: v.optional(v.number()),
+  onComplete: v.optional(vOnComplete),
+  startAsync: v.optional(v.boolean()),
+  // TODO: ttl
 });
+export const create = mutation({
+  args: createArgs,
+  returns: v.id("workflows"),
+  handler: createHandler,
+});
+
+export async function createHandler(
+  ctx: MutationCtx,
+  args: Infer<typeof createArgs>,
+  schedulerOptions?: SchedulerOptions,
+) {
+  const console = await getDefaultLogger(ctx);
+  await updateMaxParallelism(ctx, console, args.maxParallelism);
+  const workflowId = await ctx.db.insert("workflows", {
+    name: args.workflowName,
+    workflowHandle: args.workflowHandle,
+    args: args.workflowArgs,
+    generationNumber: 0,
+    onComplete: args.onComplete,
+  });
+  console.debug(
+    `Created workflow ${workflowId}:`,
+    args.workflowArgs,
+    args.workflowHandle,
+  );
+  if (args.startAsync) {
+    const workpool = await getWorkpool(ctx, args);
+    await workpool.enqueueMutation(
+      ctx,
+      args.workflowHandle as FunctionHandle<"mutation">,
+      { workflowId, generationNumber: 0 },
+      {
+        name: args.workflowName,
+        onComplete: internal.pool.handlerOnComplete,
+        context: { workflowId, generationNumber: 0 },
+        ...schedulerOptions,
+      },
+    );
+  } else {
+    // If we can't start it, may as well not create it, eh? Fail fast...
+    await ctx.runMutation(args.workflowHandle as FunctionHandle<"mutation">, {
+      workflowId,
+      generationNumber: 0,
+    });
+  }
+  return workflowId;
+}
 
 export const getStatus = query({
   args: {
@@ -147,9 +156,17 @@ export async function completeHandler(
       .collect();
     if (inProgress.length > 0) {
       const workpool = await getWorkpool(ctx, {});
-      for (const step of inProgress) {
-        if (step.step.workId) {
-          await workpool.cancel(ctx, step.step.workId);
+      for (const { step } of inProgress) {
+        if (!step.kind || step.kind === "function") {
+          if (step.workId) {
+            await workpool.cancel(ctx, step.workId);
+          }
+        } else if (step.kind === "workflow") {
+          if (step.workflowId) {
+            await ctx.runMutation(api.workflow.cancel, {
+              workflowId: step.workflowId,
+            });
+          }
         }
       }
     }

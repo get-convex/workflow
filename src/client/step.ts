@@ -37,6 +37,11 @@ export type StepRequest = {
     | {
         kind: "event";
         args: { eventId?: EventId<string> };
+      }
+    | {
+        kind: "workflow";
+        function: FunctionReference<"mutation", "internal">;
+        args: unknown;
       };
   retry: RetryBehavior | boolean | undefined;
   schedulerOptions: SchedulerOptions;
@@ -163,15 +168,22 @@ export class StepExecutor {
           target.kind === "function"
             ? {
                 kind: "function" as const,
-                ...commonFields,
                 functionType: target.functionType,
                 handle: await createFunctionHandle(target.function),
-              }
-            : {
-                kind: "event" as const,
                 ...commonFields,
-                args: target.args,
-              };
+              }
+            : target.kind === "workflow"
+              ? {
+                  kind: "workflow" as const,
+                  handle: await createFunctionHandle(target.function),
+                  ...commonFields,
+                }
+              : {
+                  kind: "event" as const,
+                  eventId: target.args.eventId,
+                  ...commonFields,
+                  args: target.args,
+                };
         return {
           retry: message.retry,
           schedulerOptions: message.schedulerOptions,

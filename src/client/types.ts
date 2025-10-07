@@ -83,6 +83,19 @@ export type WorkflowStep = {
   ): Promise<FunctionReturnType<Action>>;
 
   /**
+   * Run a workflow with the given name and arguments.
+   *
+   * @param workflow - The workflow to run, like `internal.index.exampleWorkflow`.
+   * @param args - The arguments to the workflow function.
+   * @param opts - Options for retrying, scheduling and naming the workflow.
+   */
+  runWorkflow<Workflow extends FunctionReference<"mutation", "internal">>(
+    workflow: Workflow,
+    args: FunctionArgs<Workflow>,
+    opts?: RunOptions,
+  ): Promise<FunctionReturnType<Workflow>>;
+
+  /**
    * Blocks until a matching event is sent to this workflow.
    *
    * If an ID is specified, an event with that ID must already exist and must

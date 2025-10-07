@@ -16,11 +16,12 @@ import {
   workpoolOptions,
 } from "./pool.js";
 import { internal } from "./_generated/api.js";
-import { type FunctionHandle } from "convex/server";
+import { createFunctionHandle, type FunctionHandle } from "convex/server";
 import { getDefaultLogger } from "./utils.js";
 import { assert } from "convex-helpers";
 import { MAX_JOURNAL_SIZE } from "../shared.js";
 import { awaitEvent } from "./event.js";
+import { createHandler } from "./workflow.js";
 
 export const load = query({
   args: {
@@ -111,15 +112,16 @@ export const startSteps = mutation({
 
     const entries = await Promise.all(
       args.steps.map(async (stepArgs, index) => {
-        const { step, retry, schedulerOptions } = stepArgs;
+        const { retry, schedulerOptions } = stepArgs;
         const stepNumber = stepNumberBase + index;
         const stepId = await ctx.db.insert("steps", {
           workflowId: workflow._id,
           stepNumber,
-          step,
+          step: stepArgs.step,
         });
         let entry = await ctx.db.get(stepId);
         assert(entry, "Step not found");
+        const step = entry.step;
         const { name } = step;
         if (step.kind === "event") {
           // Note: This modifies entry in place as well.
@@ -127,16 +129,35 @@ export const startSteps = mutation({
             name,
             eventId: step.args.eventId,
           });
-          if (entry.step.runResult) {
+          if (step.runResult) {
             console.event("eventConsumed", {
               workflowId: entry.workflowId,
               workflowName: workflow.name,
-              status: entry.step.runResult.kind,
-              eventName: entry.step.name,
-              stepNumber: entry.stepNumber,
-              durationMs: entry.step.completedAt! - entry.step.startedAt,
+              status: step.runResult.kind,
+              eventName: step.name,
+              stepNumber: stepNumber,
+              durationMs: step.completedAt! - step.startedAt,
             });
           }
+        } else if (step.kind === "workflow") {
+          const workflowId = await createHandler(ctx, {
+            workflowName: step.name,
+            workflowHandle: step.handle,
+            workflowArgs: step.args,
+            maxParallelism: args.workpoolOptions?.maxParallelism,
+            onComplete: {
+              fnHandle: await createFunctionHandle(
+                internal.pool.nestedWorkflowOnComplete,
+              ),
+              context: {
+                stepId,
+                generationNumber,
+                workpoolOptions: args.workpoolOptions,
+              } satisfies OnCompleteContext,
+            },
+            startAsync: true,
+          });
+          step.workflowId = workflowId;
         } else {
           const context: OnCompleteContext = {
             generationNumber,
@@ -173,9 +194,9 @@ export const startSteps = mutation({
               break;
             }
           }
-          entry.step.workId = workId;
-          await ctx.db.replace(entry._id, entry);
+          step.workId = workId;
         }
+        await ctx.db.replace(entry._id, entry);
 
         console.event("started", {
           workflowId: workflow._id,

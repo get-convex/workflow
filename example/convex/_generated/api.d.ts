@@ -109,6 +109,7 @@ export declare const components: {
                   args: { eventId?: string };
                   argsSize: number;
                   completedAt?: number;
+                  eventId?: string;
                   inProgress: boolean;
                   kind: "event";
                   name: string;
@@ -173,6 +174,7 @@ export declare const components: {
                   args: { eventId?: string };
                   argsSize: number;
                   completedAt?: number;
+                  eventId?: string;
                   inProgress: boolean;
                   kind: "event";
                   name: string;
@@ -220,6 +222,7 @@ export declare const components: {
                 args: { eventId?: string };
                 argsSize: number;
                 completedAt?: number;
+                eventId?: string;
                 inProgress: boolean;
                 kind: "event";
                 name: string;
@@ -303,6 +306,7 @@ export declare const components: {
                   args: { eventId?: string };
                   argsSize: number;
                   completedAt?: number;
+                  eventId?: string;
                   inProgress: boolean;
                   kind: "event";
                   name: string;

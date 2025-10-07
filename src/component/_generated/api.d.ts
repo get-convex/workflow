@@ -103,6 +103,7 @@ export type Mounts = {
                 args: { eventId?: string };
                 argsSize: number;
                 completedAt?: number;
+                eventId?: string;
                 inProgress: boolean;
                 kind: "event";
                 name: string;
@@ -167,6 +168,7 @@ export type Mounts = {
                 args: { eventId?: string };
                 argsSize: number;
                 completedAt?: number;
+                eventId?: string;
                 inProgress: boolean;
                 kind: "event";
                 name: string;
@@ -214,6 +216,7 @@ export type Mounts = {
               args: { eventId?: string };
               argsSize: number;
               completedAt?: number;
+              eventId?: string;
               inProgress: boolean;
               kind: "event";
               name: string;
@@ -297,6 +300,7 @@ export type Mounts = {
                 args: { eventId?: string };
                 argsSize: number;
                 completedAt?: number;
+                eventId?: string;
                 inProgress: boolean;
                 kind: "event";
                 name: string;

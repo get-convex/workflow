@@ -80,6 +80,7 @@ export const step = v.union(
   v.object({
     kind: v.literal("event"),
     ...stepCommonFields,
+    eventId: v.optional(v.id("events")),
     args: v.object({ eventId: v.optional(v.id("events")) }),
   }),
 );

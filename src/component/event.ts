@@ -56,7 +56,8 @@ export async function awaitEvent(
       break;
     }
   }
-  entry.step.args = { eventId: event._id };
+  assert(entry.step.kind === "event", "Step is not an event");
+  entry.step.eventId = event._id;
   await ctx.db.replace(entry._id, entry);
   // if there's a name, see if there's one to consume.
   // if it's there, mark it consumed and swap in the result.
@@ -142,7 +143,8 @@ export const send = mutation({
           step,
           `Entry ${event.state.stepId} not found when sending event ${event._id} (${name}) in workflow ${args.workflowId}`,
         );
-        step.step.args = { eventId: event._id };
+        assert(step.step.kind === "event", "Step is not an event");
+        step.step.eventId = event._id;
         step.step.runResult = args.result;
         step.step.inProgress = false;
         step.step.completedAt = Date.now();

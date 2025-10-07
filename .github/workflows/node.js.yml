@@ -14,7 +14,5 @@ jobs:
       - run: npm i
       - run: npm run build
       - run: npx pkg-pr-new publish
-      - run: cd example && npm i && cd ..
       - run: npm run typecheck
-      - run: cd example && npm run lint && cd ..
       - run: npm test

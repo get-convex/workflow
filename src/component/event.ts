@@ -12,7 +12,10 @@ export async function awaitEvent(
   entry: Doc<"steps">,
   args: { eventId?: Id<"events">; name: string },
 ) {
-  const event = await getOrCreateEvent(ctx, entry.workflowId, args);
+  const event = await getOrCreateEvent(ctx, entry.workflowId, args, [
+    "sent",
+    "created",
+  ]);
   switch (event.state.kind) {
     case "consumed": {
       throw new Error(
@@ -64,6 +67,7 @@ async function getOrCreateEvent(
   ctx: MutationCtx,
   workflowId: Id<"workflows">,
   args: { eventId?: Id<"events">; name?: string },
+  statuses: Doc<"events">["state"]["kind"][],
 ): Promise<Doc<"events">> {
   if (args.eventId) {
     const event = await ctx.db.get(args.eventId);
@@ -75,22 +79,16 @@ async function getOrCreateEvent(
     return event;
   }
   assert(args.name, "Name is required if eventId is not specified");
-  const sentEvent = await ctx.db
-    .query("events")
-    .withIndex("workflowId_state", (q) =>
-      q.eq("workflowId", workflowId).eq("state.kind", "sent"),
-    )
-    .filter((q) => q.eq("name", args.name))
-    .first();
-  if (sentEvent) return sentEvent;
-  const createdEvent = await ctx.db
-    .query("events")
-    .withIndex("workflowId_state", (q) =>
-      q.eq("workflowId", workflowId).eq("state.kind", "created"),
-    )
-    .filter((q) => q.eq("name", args.name))
-    .first();
-  if (createdEvent) return createdEvent;
+  for (const status of statuses) {
+    const event = await ctx.db
+      .query("events")
+      .withIndex("workflowId_state", (q) =>
+        q.eq("workflowId", workflowId).eq("state.kind", status),
+      )
+      .filter((q) => q.eq(q.field("name"), args.name))
+      .first();
+    if (event) return event;
+  }
   const eventId = await ctx.db.insert("events", {
     workflowId,
     name: args.name,
@@ -111,10 +109,15 @@ export const send = mutation({
   },
   returns: v.id("events"),
   handler: async (ctx, args) => {
-    const event = await getOrCreateEvent(ctx, args.workflowId, {
-      eventId: args.eventId,
-      name: args.name,
-    });
+    const event = await getOrCreateEvent(
+      ctx,
+      args.workflowId,
+      {
+        eventId: args.eventId,
+        name: args.name,
+      },
+      ["waiting", "created"],
+    );
     const name = args.name ?? event.name;
     switch (event.state.kind) {
       case "sent": {

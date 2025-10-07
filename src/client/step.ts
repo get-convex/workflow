@@ -76,7 +76,14 @@ export class StepExecutor {
         const message = await this.receiver.get();
         messages.push(message);
       }
-      await this.startSteps(messages);
+      const entries = await this.startSteps(messages);
+      if (entries.every((entry) => entry.step.runResult)) {
+        for (let i = 0; i < entries.length; i++) {
+          const entry = entries[i];
+          this.completeMessage(messages[i], entry);
+        }
+        continue;
+      }
       return {
         type: "executorBlocked",
       };

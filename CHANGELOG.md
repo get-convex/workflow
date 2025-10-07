@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.8 alpha
+
+- Adds asynchronous events - wait for an event in a workflow, send
+  events asynchronously - allows pause/resume, human-in-loop, etc.
+- Supports nested workflows with step.runWorkflow.
+- Reduces read bandwidth when reading the journal after running many steps in parallel.
+
 ## 0.2.7
 
 - Support for console logging & timing in workflows

@@ -19,6 +19,7 @@ import {
 } from "../component/schema.js";
 import type { SchedulerOptions, WorkflowComponent } from "./types.js";
 import { MAX_JOURNAL_SIZE } from "../shared.js";
+import type { EventId } from "../types.js";
 
 export type WorkerResult =
   | { type: "handlerDone"; runResult: RunResult }
@@ -26,9 +27,17 @@ export type WorkerResult =
 
 export type StepRequest = {
   name: string;
-  functionType: FunctionType;
-  function: FunctionReference<FunctionType, "internal">;
-  args: unknown;
+  target:
+    | {
+        kind: "function";
+        functionType: FunctionType;
+        function: FunctionReference<FunctionType, "internal">;
+        args: unknown;
+      }
+    | {
+        kind: "event";
+        args: { eventId?: EventId<string> };
+      };
   retry: RetryBehavior | boolean | undefined;
   schedulerOptions: SchedulerOptions;
 
@@ -111,10 +120,12 @@ export class StepExecutor {
       );
     }
     const stepArgsJson = JSON.stringify(convexToJson(entry.step.args));
-    const messageArgsJson = JSON.stringify(convexToJson(message.args as Value));
+    const messageArgsJson = JSON.stringify(
+      convexToJson(message.target.args as Value),
+    );
     if (stepArgsJson !== messageArgsJson) {
       throw new Error(
-        `Journal entry mismatch: ${entry.step.args} !== ${message.args}`,
+        `Journal entry mismatch: ${entry.step.args} !== ${message.target.args}`,
       );
     }
     if (entry.step.runResult === undefined) {
@@ -138,17 +149,29 @@ export class StepExecutor {
   async startSteps(messages: StepRequest[]): Promise<JournalEntry[]> {
     const steps = await Promise.all(
       messages.map(async (message) => {
-        const step = {
+        const commonFields = {
           inProgress: true,
           name: message.name,
-          functionType: message.functionType,
-          handle: await createFunctionHandle(message.function),
-          args: message.args,
-          argsSize: valueSize(message.args as Value),
+          args: message.target.args,
+          argsSize: valueSize(message.target.args as Value),
           outcome: undefined,
           startedAt: this.now,
           completedAt: undefined,
         };
+        const target = message.target;
+        const step =
+          target.kind === "function"
+            ? {
+                kind: "function" as const,
+                ...commonFields,
+                functionType: target.functionType,
+                handle: await createFunctionHandle(target.function),
+              }
+            : {
+                kind: "event" as const,
+                ...commonFields,
+                args: target.args,
+              };
         return {
           retry: message.retry,
           schedulerOptions: message.schedulerOptions,

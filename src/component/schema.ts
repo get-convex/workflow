@@ -59,19 +59,30 @@ export const workflowDocument = v.object({
 });
 export type Workflow = Infer<typeof workflowDocument>;
 
-export const step = v.object({
+const stepCommonFields = {
   name: v.string(),
   inProgress: v.boolean(),
   workId: v.optional(vWorkIdValidator),
-  functionType: literals("query", "mutation", "action"),
-  handle: v.string(),
   argsSize: v.number(),
   args: v.any(),
   runResult: v.optional(vResultValidator),
-
   startedAt: v.number(),
   completedAt: v.optional(v.number()),
-});
+};
+
+export const step = v.union(
+  v.object({
+    kind: v.optional(v.literal("function")),
+    functionType: literals("query", "mutation", "action"),
+    handle: v.string(),
+    ...stepCommonFields,
+  }),
+  v.object({
+    kind: v.literal("event"),
+    ...stepCommonFields,
+    args: v.object({ eventId: v.optional(v.id("events")) }),
+  }),
+);
 export type Step = Infer<typeof step>;
 
 function stepSize(step: Step): number {
@@ -81,8 +92,11 @@ function stepSize(step: Step): number {
   if (step.workId) {
     size += step.workId.length;
   }
-  size += step.functionType.length;
-  size += step.handle.length;
+  if (step.kind) size += step.kind.length;
+  if (step.kind !== "event") {
+    size += step.functionType.length;
+    size += step.handle.length;
+  }
   size += 8 + step.argsSize;
   if (step.runResult) {
     size += resultSize(step.runResult);
@@ -115,6 +129,33 @@ export const journalDocument = v.object({
 });
 export type JournalEntry = Infer<typeof journalDocument>;
 
+export const event = {
+  workflowId: v.id("workflows"),
+  name: v.string(),
+  state: v.union(
+    v.object({
+      kind: v.literal("created"),
+    }),
+    v.object({
+      kind: v.literal("sent"),
+      result: vResultValidator,
+      sentAt: v.number(),
+    }),
+    v.object({
+      kind: v.literal("waiting"),
+      waitingAt: v.number(),
+      stepId: v.id("steps"),
+    }),
+    v.object({
+      kind: v.literal("consumed"),
+      waitingAt: v.number(),
+      sentAt: v.number(),
+      consumedAt: v.number(),
+      stepId: v.id("steps"),
+    }),
+  ),
+};
+
 export default defineSchema({
   config: defineTable({
     logLevel: v.optional(logLevel),
@@ -124,6 +165,10 @@ export default defineSchema({
   steps: defineTable(journalObject)
     .index("workflow", ["workflowId", "stepNumber"])
     .index("inProgress", ["step.inProgress", "workflowId"]),
+  events: defineTable(event).index("workflowId_state", [
+    "workflowId",
+    "state.kind",
+  ]),
   onCompleteFailures: defineTable(
     v.union(
       v.object({

@@ -19,6 +19,7 @@ import { logLevel } from "./logging.js";
 import { getWorkflow } from "./model.js";
 import { getDefaultLogger } from "./utils.js";
 import { completeHandler } from "./workflow.js";
+import type { Doc } from "./_generated/dataModel.js";
 
 export const workpoolOptions = v.object({
   logLevel: v.optional(logLevel),
@@ -53,7 +54,7 @@ export async function getWorkpool(
   });
 }
 
-export const onCompleteContext = v.object({
+const onCompleteContext = v.object({
   generationNumber: v.number(),
   stepId: v.id("steps"),
   workpoolOptions: v.optional(workpoolOptions),
@@ -155,18 +156,27 @@ export const onComplete = internalMutation({
       return;
     }
     const workpool = await getWorkpool(ctx, args.context.workpoolOptions);
-    await workpool.enqueueMutation(
-      ctx,
-      workflow.workflowHandle as FunctionHandle<"mutation">,
-      { workflowId: workflow._id, generationNumber },
-      {
-        name: workflow.name,
-        onComplete: internal.pool.handlerOnComplete,
-        context: { workflowId, generationNumber },
-      },
-    );
+    await enqueueWorkflow(ctx, workflow, workpool);
   },
 });
+
+export async function enqueueWorkflow(
+  ctx: MutationCtx,
+  workflow: Doc<"workflows">,
+  workpool: Workpool,
+) {
+  const { _id: workflowId, generationNumber, name, workflowHandle } = workflow;
+  await workpool.enqueueMutation(
+    ctx,
+    workflowHandle as FunctionHandle<"mutation">,
+    { workflowId, generationNumber },
+    {
+      name,
+      onComplete: internal.pool.handlerOnComplete,
+      context: { workflowId, generationNumber },
+    },
+  );
+}
 
 export type OnComplete =
   typeof onComplete extends RegisteredAction<

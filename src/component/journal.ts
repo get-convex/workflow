@@ -20,6 +20,7 @@ import { type FunctionHandle } from "convex/server";
 import { getDefaultLogger } from "./utils.js";
 import { assert } from "convex-helpers";
 import { MAX_JOURNAL_SIZE } from "../shared.js";
+import { awaitEvent } from "./event.js";
 
 export const load = query({
   args: {
@@ -111,51 +112,70 @@ export const startSteps = mutation({
     const entries = await Promise.all(
       args.steps.map(async (stepArgs, index) => {
         const { step, retry, schedulerOptions } = stepArgs;
-        const { name, handle, args } = step;
         const stepNumber = stepNumberBase + index;
         const stepId = await ctx.db.insert("steps", {
           workflowId: workflow._id,
           stepNumber,
           step,
         });
-        const entry = await ctx.db.get(stepId);
+        let entry = await ctx.db.get(stepId);
         assert(entry, "Step not found");
-        const context: OnCompleteContext = {
-          generationNumber,
-          stepId,
-        };
-        let workId: WorkId;
-        switch (step.functionType) {
-          case "query": {
-            workId = await workpool.enqueueQuery(
-              ctx,
-              handle as FunctionHandle<"query">,
-              args,
-              { context, onComplete, name, ...schedulerOptions },
-            );
-            break;
+        const { name } = step;
+        if (step.kind === "event") {
+          // Note: This modifies entry in place as well.
+          entry = await awaitEvent(ctx, entry, {
+            name,
+            eventId: step.args.eventId,
+          });
+          if (entry.step.runResult) {
+            console.event("eventConsumed", {
+              workflowId: entry.workflowId,
+              workflowName: workflow.name,
+              status: entry.step.runResult.kind,
+              eventName: entry.step.name,
+              stepNumber: entry.stepNumber,
+              durationMs: entry.step.completedAt! - entry.step.startedAt,
+            });
           }
-          case "mutation": {
-            workId = await workpool.enqueueMutation(
-              ctx,
-              handle as FunctionHandle<"mutation">,
-              args,
-              { context, onComplete, name, ...schedulerOptions },
-            );
-            break;
+        } else {
+          const context: OnCompleteContext = {
+            generationNumber,
+            stepId,
+            workpoolOptions: args.workpoolOptions,
+          };
+          let workId: WorkId;
+          switch (step.functionType) {
+            case "query": {
+              workId = await workpool.enqueueQuery(
+                ctx,
+                step.handle as FunctionHandle<"query">,
+                step.args,
+                { context, onComplete, name, ...schedulerOptions },
+              );
+              break;
+            }
+            case "mutation": {
+              workId = await workpool.enqueueMutation(
+                ctx,
+                step.handle as FunctionHandle<"mutation">,
+                step.args,
+                { context, onComplete, name, ...schedulerOptions },
+              );
+              break;
+            }
+            case "action": {
+              workId = await workpool.enqueueAction(
+                ctx,
+                step.handle as FunctionHandle<"action">,
+                step.args,
+                { context, onComplete, name, retry, ...schedulerOptions },
+              );
+              break;
+            }
           }
-          case "action": {
-            workId = await workpool.enqueueAction(
-              ctx,
-              handle as FunctionHandle<"action">,
-              args,
-              { context, onComplete, name, retry, ...schedulerOptions },
-            );
-            break;
-          }
+          entry.step.workId = workId;
+          await ctx.db.replace(entry._id, entry);
         }
-        entry.step.workId = workId;
-        await ctx.db.replace(entry._id, entry);
 
         console.event("started", {
           workflowId: workflow._id,

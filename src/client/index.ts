@@ -15,13 +15,20 @@ import {
 } from "convex/server";
 import type { ObjectType, PropertyValidators, Validator } from "convex/values";
 import type { Step } from "../component/schema.js";
-import type { OnCompleteArgs, WorkflowId } from "../types.js";
+import type {
+  EventId,
+  EventSpec,
+  OnCompleteArgs,
+  WorkflowId,
+} from "../types.js";
 import { safeFunctionName } from "./safeFunctionName.js";
 import type { OpaqueIds, WorkflowComponent, WorkflowStep } from "./types.js";
 import { workflowMutation } from "./workflowMutation.js";
+import { parse } from "convex-helpers/validators";
 
 export { vWorkflowId, type WorkflowId } from "../types.js";
 export type { RunOptions } from "./types.js";
+export { defineEvent } from "./events.js";
 
 export type CallbackOptions = {
   /**
@@ -205,6 +212,48 @@ export class WorkflowManager {
     return await ctx.runMutation(this.component.workflow.cleanup, {
       workflowId,
     });
+  }
+
+  /**
+   * Send an event to a workflow.
+   *
+   * @param ctx - Either ctx from a mutation/action or a workflow step.
+   * @param args - The event arguments.
+   */
+  async sendEvent<T = null, Name extends string = string>(
+    ctx: RunMutationCtx,
+    workflowId: WorkflowId,
+    args: EventSpec<Name, T>,
+    ...runResult: T extends null ? [] : [T]
+  ): Promise<EventId<Name>> {
+    let result = {
+      kind: "success" as const,
+      returnValue: runResult[0] ?? (null as T),
+    };
+    if (args.validator && result.kind === "success") {
+      result = {
+        ...result,
+        returnValue: parse(args.validator, result.returnValue),
+      };
+    }
+    return (await ctx.runMutation(this.component.event.send, {
+      eventId: args.id,
+      result,
+      name: args.name,
+      workflowId: workflowId,
+      workpoolOptions: this.options?.workpoolOptions,
+    })) as EventId<Name>;
+  }
+
+  async createEvent<Name extends string>(
+    ctx: RunMutationCtx,
+    component: WorkflowComponent,
+    args: { name: Name; workflowId: WorkflowId },
+  ): Promise<EventId<Name>> {
+    return (await ctx.runMutation(component.event.create, {
+      name: args.name,
+      workflowId: args.workflowId,
+    })) as EventId<Name>;
   }
 }
 

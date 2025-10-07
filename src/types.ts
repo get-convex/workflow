@@ -1,8 +1,21 @@
 import type { RunResult } from "@convex-dev/workpool";
-import { v, type VString } from "convex/values";
+import { v, type Validator, type VNull, type VString } from "convex/values";
 
 export type WorkflowId = string & { __isWorkflowId: true };
 export const vWorkflowId = v.string() as VString<WorkflowId>;
+
+export type EventId<Name extends string> = string & {
+  __isEventId: true;
+  __name: Name;
+};
+export type VEventId<Name extends string> = VString<EventId<Name>>;
+export const vEventId = v.string() as VString<EventId<string>>;
+
+export type EventSpec<Name extends string = string, T = unknown> = {
+  name: Name;
+  validator?: Validator<T, any, any>;
+  id?: EventId<Name>;
+};
 
 export type OnCompleteArgs = {
   /**

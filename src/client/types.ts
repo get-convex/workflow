@@ -7,7 +7,7 @@ import type {
 } from "convex/server";
 import type { api } from "../component/_generated/api.js";
 import type { GenericId } from "convex/values";
-import type { WorkflowId } from "../types.js";
+import type { EventSpec, WorkflowId } from "../types.js";
 
 export type WorkflowComponent = UseApi<typeof api>;
 
@@ -81,6 +81,21 @@ export type WorkflowStep = {
     args: FunctionArgs<Action>,
     opts?: RunOptions & RetryOption,
   ): Promise<FunctionReturnType<Action>>;
+
+  /**
+   * Blocks until a matching event is sent to this workflow.
+   *
+   * If an ID is specified, an event with that ID must already exist and must
+   * not already be "awaited" or "consumed".
+   *
+   * If a name is specified, the first available event is consumed that matches
+   * the name. If there is no available event, it will create one with that name
+   * with status "awaited".
+   * @param event
+   */
+  awaitEvent<T, Name extends string = string>(
+    event: EventSpec<Name, T>,
+  ): Promise<T>;
 };
 
 export type UseApi<API> = Expand<{

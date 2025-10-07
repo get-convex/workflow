@@ -9,7 +9,8 @@ import { safeFunctionName } from "./safeFunctionName.js";
 import type { StepRequest } from "./step.js";
 import type { RetryOption } from "@convex-dev/workpool";
 import type { RunOptions, WorkflowStep } from "./types.js";
-import type { WorkflowId } from "../types.js";
+import type { EventSpec, WorkflowId } from "../types.js";
+import { parse } from "convex-helpers/validators";
 
 export class StepContext implements WorkflowStep {
   constructor(
@@ -41,6 +42,24 @@ export class StepContext implements WorkflowStep {
     return this.runFunction("action", action, args, opts);
   }
 
+  async awaitEvent<T, Name extends string = string>(
+    event: EventSpec<Name, T>,
+  ): Promise<T> {
+    const result = await this.run({
+      name: event.name,
+      target: {
+        kind: "event",
+        args: { eventId: event.id },
+      },
+      retry: undefined,
+      schedulerOptions: {},
+    });
+    if (event.validator) {
+      return parse(event.validator, result);
+    }
+    return result as T;
+  }
+
   private async runFunction<
     F extends FunctionReference<FunctionType, "internal">,
   >(
@@ -49,17 +68,27 @@ export class StepContext implements WorkflowStep {
     args: unknown,
     opts?: RunOptions & RetryOption,
   ): Promise<unknown> {
-    let send: unknown;
-    const { name, ...rest } = opts ?? {};
-    const { retry, ...schedulerOptions } = rest;
-    const p = new Promise<unknown>((resolve, reject) => {
-      send = this.sender.push({
-        name: name ?? safeFunctionName(f),
+    const { name, retry, ...schedulerOptions } = opts ?? {};
+    return this.run({
+      name: name ?? safeFunctionName(f),
+      target: {
+        kind: "function",
         functionType,
         function: f,
         args,
-        retry,
-        schedulerOptions,
+      },
+      retry,
+      schedulerOptions,
+    });
+  }
+
+  private async run(
+    request: Omit<StepRequest, "resolve" | "reject">,
+  ): Promise<unknown> {
+    let send: unknown;
+    const p = new Promise<unknown>((resolve, reject) => {
+      send = this.sender.push({
+        ...request,
         resolve,
         reject,
       });

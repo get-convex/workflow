@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.7 alpha
+## 0.2.7
 
 - Support for console logging & timing in workflows
 - Support for Date.now() in workflows
@@ -11,6 +11,7 @@
   on their first invocation.
 - Increases the max journal size from 1MB to 8MB
 - Adds the WorkflowId type to step.workflowId
+- Exposes /test entrypoint to make testing easier
 
 ## 0.2.6
 

@@ -32,7 +32,7 @@ export const confirmationWorkflow = workflow.define({
 
 export const generateProposals = internalAction({
   args: { prompt: v.string() },
-  handler: async (ctx, args) => {
+  handler: async (_ctx, _args) => {
     // imagine this is a call to an LLM
     return ["proposal1", "proposal2", "proposal3"];
   },

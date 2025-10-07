@@ -58,14 +58,12 @@ export type WorkflowDefinition<
   ArgsValidator extends PropertyValidators,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ReturnsValidator extends Validator<any, "required", any> | void = any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ReturnValue extends ReturnValueForOptionalValidator<ReturnsValidator> = any,
 > = {
   args?: ArgsValidator;
   handler: (
     step: WorkflowStep,
     args: ObjectType<ArgsValidator>,
-  ) => Promise<ReturnValue>;
+  ) => Promise<ReturnValueForOptionalValidator<ReturnsValidator>>;
   returns?: ReturnsValidator;
   workpoolOptions?: WorkpoolRetryOptions;
 };
@@ -93,10 +91,8 @@ export class WorkflowManager {
   define<
     ArgsValidator extends PropertyValidators,
     ReturnsValidator extends Validator<unknown, "required", string> | void,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ReturnValue extends ReturnValueForOptionalValidator<ReturnsValidator> = any,
   >(
-    workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator, ReturnValue>,
+    workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator>,
   ): RegisteredMutation<
     "internal",
     {

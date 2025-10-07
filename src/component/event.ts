@@ -142,6 +142,11 @@ export const send = mutation({
           step,
           `Entry ${event.state.stepId} not found when sending event ${event._id} (${name}) in workflow ${args.workflowId}`,
         );
+        step.step.args = { eventId: event._id };
+        step.step.runResult = args.result;
+        step.step.inProgress = false;
+        step.step.completedAt = Date.now();
+        await ctx.db.replace(step._id, step);
         await ctx.db.patch(event._id, {
           state: {
             kind: "consumed",

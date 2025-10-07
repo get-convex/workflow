@@ -28,13 +28,16 @@ export const exampleWorkflow = workflow.define({
     windSpeed: number;
     windGust: number;
   }> => {
+    console.time("overall");
+    console.time("geocoding");
     // Run in parallel!
     const [{ latitude, longitude, name }, weather2] = await Promise.all([
       step.runAction(internal.example.getGeocoding, args, { runAfter: 100 }),
       step.runAction(internal.example.getGeocoding, args, { retry: true }),
     ]);
     console.log("Is geocoding is consistent?", latitude === weather2.latitude);
-
+    console.timeLog("geocoding", name);
+    console.time("weather");
     const weather = await step.runAction(internal.example.getWeather, {
       latitude,
       longitude,
@@ -45,6 +48,12 @@ export const exampleWorkflow = workflow.define({
     console.log(
       `Weather in ${name}: ${farenheit.toFixed(1)}°F (${temperature}°C), ${windSpeed} km/h, ${windGust} km/h`,
     );
+    console.timeLog("weather", temperature);
+    await step.runMutation(internal.example.updateFlow, {
+      workflowId: step.workflowId,
+      out: { name, celsius, farenheit, windSpeed, windGust },
+    });
+    console.timeEnd("overall");
     return { name, celsius, farenheit, windSpeed, windGust };
   },
   workpoolOptions: {
@@ -109,7 +118,8 @@ export const flowCompleted = internalMutation({
     await ctx.db.patch(flow._id, {
       out: args.result,
     });
-    await workflow.cleanup(ctx, args.workflowId);
+    // To delete the workflow data after it completes:
+    // await workflow.cleanup(ctx, args.workflowId);
   },
 });
 

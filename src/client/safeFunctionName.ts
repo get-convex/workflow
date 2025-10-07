@@ -1,7 +1,7 @@
 import {
-  FunctionReference,
-  FunctionType,
-  FunctionVisibility,
+  type FunctionReference,
+  type FunctionType,
+  type FunctionVisibility,
   getFunctionAddress,
   getFunctionName,
 } from "convex/server";

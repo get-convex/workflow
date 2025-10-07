@@ -3,19 +3,27 @@
     "allowJs": true,
     "checkJs": true,
     "strict": true,
+    "jsx": "react-jsx",
 
     "target": "ESNext",
-    "lib": ["ES2021", "dom"],
+    "lib": ["ES2021", "dom", "dom.iterable"],
     "forceConsistentCasingInFileNames": true,
     "allowSyntheticDefaultImports": true,
-    "module": "NodeNext",
+    // We enforce stricter module resolution for Node16 compatibility
+    // But when building we use Bundler & ESNext for ESM
+    "module": "Node16",
     "moduleResolution": "NodeNext",
 
+    // Let's see how long we can go without this...
+    // "assumeChangesOnlyAffectDirectDependencies": false,
+    // "composite": true,
+    // "rootDir": "./src",
     "isolatedModules": true,
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "./dist",
+    "verbatimModuleSyntax": true,
     "skipLibCheck": true
   },
   "include": ["./src/**/*"]

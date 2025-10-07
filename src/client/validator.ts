@@ -1,4 +1,9 @@
-import { GenericValidator, PropertyValidators, v, Value } from "convex/values";
+import {
+  type GenericValidator,
+  type PropertyValidators,
+  v,
+  type Value,
+} from "convex/values";
 
 export function checkArgs(
   args: Value,

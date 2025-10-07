@@ -85,31 +85,32 @@ export type Mounts = {
         };
       }
     >;
-    startStep: FunctionReference<
+    startSteps: FunctionReference<
       "mutation",
       "public",
       {
         generationNumber: number;
-        name: string;
-        retry?:
-          | boolean
-          | { base: number; initialBackoffMs: number; maxAttempts: number };
-        schedulerOptions?: { runAt?: number } | { runAfter?: number };
-        step: {
-          args: any;
-          argsSize: number;
-          completedAt?: number;
-          functionType: "query" | "mutation" | "action";
-          handle: string;
-          inProgress: boolean;
-          name: string;
-          runResult?:
-            | { kind: "success"; returnValue: any }
-            | { error: string; kind: "failed" }
-            | { kind: "canceled" };
-          startedAt: number;
-          workId?: string;
-        };
+        steps: Array<{
+          retry?:
+            | boolean
+            | { base: number; initialBackoffMs: number; maxAttempts: number };
+          schedulerOptions?: { runAt?: number } | { runAfter?: number };
+          step: {
+            args: any;
+            argsSize: number;
+            completedAt?: number;
+            functionType: "query" | "mutation" | "action";
+            handle: string;
+            inProgress: boolean;
+            name: string;
+            runResult?:
+              | { kind: "success"; returnValue: any }
+              | { error: string; kind: "failed" }
+              | { kind: "canceled" };
+            startedAt: number;
+            workId?: string;
+          };
+        }>;
         workflowId: string;
         workpoolOptions?: {
           defaultRetryBehavior?: {
@@ -122,7 +123,7 @@ export type Mounts = {
           retryActionsByDefault?: boolean;
         };
       },
-      {
+      Array<{
         _creationTime: number;
         _id: string;
         step: {
@@ -142,7 +143,7 @@ export type Mounts = {
         };
         stepNumber: number;
         workflowId: string;
-      }
+      }>
     >;
   };
   workflow: {
@@ -288,6 +289,30 @@ export declare const components: {
         },
         string
       >;
+      enqueueBatch: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          config: {
+            logLevel: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
+            maxParallelism: number;
+          };
+          items: Array<{
+            fnArgs: any;
+            fnHandle: string;
+            fnName: string;
+            fnType: "action" | "mutation" | "query";
+            onComplete?: { context?: any; fnHandle: string };
+            retryBehavior?: {
+              base: number;
+              initialBackoffMs: number;
+              maxAttempts: number;
+            };
+            runAt: number;
+          }>;
+        },
+        Array<string>
+      >;
       status: FunctionReference<
         "query",
         "internal",
@@ -295,6 +320,16 @@ export declare const components: {
         | { previousAttempts: number; state: "pending" }
         | { previousAttempts: number; state: "running" }
         | { state: "finished" }
+      >;
+      statusBatch: FunctionReference<
+        "query",
+        "internal",
+        { ids: Array<string> },
+        Array<
+          | { previousAttempts: number; state: "pending" }
+          | { previousAttempts: number; state: "running" }
+          | { state: "finished" }
+        >
       >;
     };
   };

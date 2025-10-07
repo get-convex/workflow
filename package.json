@@ -1,6 +1,6 @@
 {
   "name": "@convex-dev/workflow",
-  "version": "0.2.6",
+  "version": "0.2.7-alpha.0",
   "description": "Convex component for durably executing workflows.",
   "keywords": [
     "convex",
@@ -13,15 +13,15 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "example": "cd example && npm run dev",
+    "example": "convex dev --typecheck-components --live-component-sources",
     "dev": "run-p -r 'example' 'build:watch'",
     "dashboard": "cd example && npx convex dashboard",
     "all": "run-p -r 'example' 'build:watch' 'test:watch'",
-    "setup": "npm i && npm run build && cd example && npm i && npx convex dev --once && printf 'VITE_CONVEX_SITE_URL=' >> .env.local && npx convex env get CONVEX_SITE_URL >> .env.local",
+    "setup": "npm i && npm run build && npx convex dev --once",
     "build:watch": "cd src && npx chokidar -d 1000 '../tsconfig.json' '**/*.ts' -c 'npm run build' --initial",
     "build": "tsc --project ./tsconfig.build.json && npm run copy:dts && echo '{\\n  \"type\": \"module\"\\n}' > dist/package.json",
     "copy:dts": "rsync -a --include='*/' --include='*.d.ts' --exclude='*' src/ dist/ || cpy 'src/**/*.d.ts' 'dist/' --parents",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p example/convex",
     "clean": "rm -rf dist tsconfig.build.tsbuildinfo",
     "alpha": "npm run clean && npm run build && run-p test lint typecheck && npm version prerelease --preid alpha && npm publish --tag alpha && git push --tags",
     "release": "npm run clean && npm run build && run-p test lint typecheck && npm version patch && npm publish && git push --tags && git push",
@@ -29,7 +29,7 @@
     "test:watch": "vitest --typecheck",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:coverage": "vitest run --coverage --coverage.reporter=text",
-    "lint": "eslint src",
+    "lint": "eslint src && eslint example/convex",
     "version": "pbcopy <<<$npm_package_version; vim CHANGELOG.md && git add CHANGELOG.md"
   },
   "files": [
@@ -50,7 +50,7 @@
     }
   },
   "peerDependencies": {
-    "@convex-dev/workpool": "^0.2.17",
+    "@convex-dev/workpool": "^0.2.18",
     "convex": ">=1.25.0 <1.35.0",
     "convex-helpers": "^0.1.99"
   },
@@ -58,6 +58,7 @@
     "async-channel": "^0.2.0"
   },
   "devDependencies": {
+    "@convex-dev/workflow": "file:.",
     "@edge-runtime/vm": "5.0.0",
     "@eslint/eslintrc": "3.3.1",
     "@eslint/js": "9.37.0",

@@ -1,14 +1,16 @@
 import { vResultValidator } from "@convex-dev/workpool";
 import { assert } from "convex-helpers";
-import { FunctionHandle } from "convex/server";
-import { Infer, v } from "convex/values";
-import { mutation, MutationCtx, query } from "./_generated/server.js";
-import { Logger, logLevel } from "./logging.js";
+import type { FunctionHandle } from "convex/server";
+import { type Infer, v } from "convex/values";
+import { mutation, type MutationCtx, query } from "./_generated/server.js";
+import { type Logger, logLevel } from "./logging.js";
 import { getWorkflow } from "./model.js";
 import { getWorkpool } from "./pool.js";
 import { journalDocument, vOnComplete, workflowDocument } from "./schema.js";
 import { getDefaultLogger } from "./utils.js";
-import { WorkflowId, OnCompleteArgs } from "../types.js";
+import type { WorkflowId, OnCompleteArgs } from "../types.js";
+import { internal } from "./_generated/api.js";
+import { formatErrorWithStack } from "../shared.js";
 
 export const create = mutation({
   args: {
@@ -42,6 +44,11 @@ export const create = mutation({
         ctx,
         args.workflowHandle as FunctionHandle<"mutation">,
         { workflowId, generationNumber: 0 },
+        {
+          name: args.workflowName,
+          onComplete: internal.pool.handlerOnComplete,
+          context: { workflowId, generationNumber: 0 },
+        },
       );
     } else {
       // If we can't start it, may as well not create it, eh? Fail fast...
@@ -107,6 +114,7 @@ export const complete = mutation({
   handler: completeHandler,
 });
 
+// When the overall workflow completes (successfully or not).
 export async function completeHandler(
   ctx: MutationCtx,
   args: Infer<typeof completeArgs>,
@@ -130,6 +138,7 @@ export async function completeHandler(
   if (workflow.runResult.kind === "canceled") {
     // We bump it so no in-flight steps succeed / we don't race to complete.
     workflow.generationNumber += 1;
+    // TODO: can we cancel these asynchronously if there's more than one?
     const inProgress = await ctx.db
       .query("steps")
       .withIndex("inProgress", (q) =>
@@ -162,10 +171,11 @@ export async function completeHandler(
         },
       );
     } catch (error) {
-      console.error("Error calling onComplete", error);
+      const message = formatErrorWithStack(error);
+      console.error("Error calling onComplete", message);
       await ctx.db.insert("onCompleteFailures", {
         ...args,
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
       });
     }
   }

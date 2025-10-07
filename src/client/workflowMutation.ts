@@ -1,26 +1,30 @@
 import { BaseChannel } from "async-channel";
 import { assert } from "convex-helpers";
-import { validate } from "convex-helpers/validators";
-import { internalMutationGeneric, RegisteredMutation } from "convex/server";
+import { validate, ValidationError } from "convex-helpers/validators";
+import {
+  internalMutationGeneric,
+  type RegisteredMutation,
+} from "convex/server";
 import {
   asObjectValidator,
-  ObjectType,
-  PropertyValidators,
+  type ObjectType,
+  type PropertyValidators,
   v,
 } from "convex/values";
-import { api } from "../component/_generated/api.js";
 import { createLogger } from "../component/logging.js";
-import { JournalEntry } from "../component/schema.js";
-import { UseApi } from "../types.js";
+import { type JournalEntry } from "../component/schema.js";
 import { setupEnvironment } from "./environment.js";
-import { WorkflowDefinition } from "./index.js";
-import { StepExecutor, StepRequest, WorkerResult } from "./step.js";
+import type { WorkflowDefinition } from "./index.js";
+import { StepExecutor, type StepRequest, type WorkerResult } from "./step.js";
 import { StepContext } from "./stepContext.js";
 import { checkArgs } from "./validator.js";
-import { RunResult, WorkpoolOptions } from "@convex-dev/workpool";
+import { type RunResult, type WorkpoolOptions } from "@convex-dev/workpool";
+import { type WorkflowComponent } from "./types.js";
+import { vWorkflowId } from "../types.js";
+import { formatErrorWithStack } from "../shared.js";
 
 const workflowArgs = v.object({
-  workflowId: v.id("workflows"),
+  workflowId: vWorkflowId,
   generationNumber: v.number(),
 });
 const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke the workflow with ctx.runMutation() instead of workflow.start()?`;
@@ -30,7 +34,7 @@ const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke
 // one "poll" of the workflow, replaying its execution from the journal until
 // it blocks next.
 export function workflowMutation<ArgsValidator extends PropertyValidators>(
-  component: UseApi<typeof api>,
+  component: WorkflowComponent,
   registered: WorkflowDefinition<ArgsValidator>,
   defaultWorkpoolOptions?: WorkpoolOptions,
 ): RegisteredMutation<"internal", ObjectType<ArgsValidator>, void> {
@@ -88,7 +92,6 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         workpoolOptions.maxParallelism ?? 10,
       );
       const step = new StepContext(workflowId, channel);
-      const originalEnv = setupEnvironment(step);
       const executor = new StepExecutor(
         workflowId,
         generationNumber,
@@ -96,9 +99,10 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         component,
         journalEntries as JournalEntry[],
         channel,
-        originalEnv,
+        Date.now(),
         workpoolOptions,
       );
+      setupEnvironment(executor.getGenerationState.bind(executor));
 
       const handlerWorker = async (): Promise<WorkerResult> => {
         let runResult: RunResult;
@@ -114,7 +118,13 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
               });
             } catch (error) {
               const message =
-                error instanceof Error ? error.message : `${error}`;
+                error instanceof ValidationError
+                  ? error.message
+                  : formatErrorWithStack(error);
+              console.error(
+                "Workflow handler returned invalid return value: ",
+                message,
+              );
               runResult = {
                 kind: "failed",
                 error: "Invalid return value: " + message,
@@ -122,7 +132,9 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
             }
           }
         } catch (error) {
-          runResult = { kind: "failed", error: (error as Error).message };
+          const message = formatErrorWithStack(error);
+          console.error(message);
+          runResult = { kind: "failed", error: message };
         }
         return { type: "handlerDone", runResult };
       };

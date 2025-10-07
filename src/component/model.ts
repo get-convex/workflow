@@ -1,4 +1,4 @@
-import { QueryCtx } from "./_generated/server.js";
+import type { QueryCtx } from "./_generated/server.js";
 
 export async function getWorkflow(
   ctx: QueryCtx,

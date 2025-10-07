@@ -3,18 +3,18 @@ import {
   vRetryBehavior,
   vWorkIdValidator,
   Workpool,
-  WorkpoolOptions,
+  type WorkpoolOptions,
 } from "@convex-dev/workpool";
 import { assert } from "convex-helpers";
 import { validate } from "convex-helpers/validators";
 import {
-  FunctionHandle,
-  FunctionReference,
-  RegisteredAction,
+  type FunctionHandle,
+  type FunctionReference,
+  type RegisteredAction,
 } from "convex/server";
-import { Infer, v } from "convex/values";
+import { type Infer, v } from "convex/values";
 import { components, internal } from "./_generated/api.js";
-import { internalMutation, MutationCtx } from "./_generated/server.js";
+import { internalMutation, type MutationCtx } from "./_generated/server.js";
 import { logLevel } from "./logging.js";
 import { getWorkflow } from "./model.js";
 import { getDefaultLogger } from "./utils.js";
@@ -71,8 +71,11 @@ export const onComplete = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const console = await getDefaultLogger(ctx);
-    const stepId = args.context.stepId;
-    if (!validate(v.id("steps"), stepId, { db: ctx.db })) {
+    const stepId =
+      "stepId" in args.context
+        ? ctx.db.normalizeId("steps", args.context.stepId)
+        : null;
+    if (!stepId) {
       // Write to failures table and return
       // So someone can investigate if this ever happens
       console.error("Invalid onComplete context", args.context);
@@ -83,13 +86,12 @@ export const onComplete = internalMutation({
     assert(journalEntry, `Journal entry not found: ${stepId}`);
     const workflowId = journalEntry.workflowId;
 
-    const error = !validate(onCompleteContext, args.context)
-      ? `Invalid onComplete context for workId ${args.workId}` +
-        JSON.stringify(args.context)
-      : !journalEntry.step.inProgress
-        ? `Journal entry not in progress: ${stepId}`
-        : undefined;
-    if (error) {
+    if (
+      !validate(onCompleteContext, args.context, { allowUnknownFields: true })
+    ) {
+      const error =
+        `Invalid onComplete context for workId ${args.workId}` +
+        JSON.stringify(args.context);
       await ctx.db.patch(workflowId, {
         runResult: {
           kind: "failed",
@@ -99,6 +101,19 @@ export const onComplete = internalMutation({
       return;
     }
     const { generationNumber } = args.context;
+    const workflow = await getWorkflow(ctx, workflowId, null);
+    if (workflow.generationNumber !== generationNumber) {
+      console.error(
+        `Workflow: ${workflowId} already has generation number ${workflow.generationNumber} when completing ${stepId}`,
+      );
+      return;
+    }
+    if (!journalEntry.step.inProgress) {
+      console.error(
+        `Step finished but journal entry not in progress: ${stepId} status: ${journalEntry.step.runResult?.kind ?? "pending"}`,
+      );
+      return;
+    }
     journalEntry.step.inProgress = false;
     journalEntry.step.completedAt = Date.now();
     switch (args.result.kind) {
@@ -123,7 +138,6 @@ export const onComplete = internalMutation({
     await ctx.db.replace(journalEntry._id, journalEntry);
     console.debug(`Completed execution of ${stepId}`, journalEntry);
 
-    const workflow = await getWorkflow(ctx, workflowId, null);
     console.event("stepCompleted", {
       workflowId,
       workflowName: workflow.name,
@@ -140,18 +154,13 @@ export const onComplete = internalMutation({
       }
       return;
     }
-    if (workflow.generationNumber !== generationNumber) {
-      console.error(
-        `Workflow: ${workflowId} already has generation number ${workflow.generationNumber} when completing ${stepId}`,
-      );
-      return;
-    }
     const workpool = await getWorkpool(ctx, args.context.workpoolOptions);
     await workpool.enqueueMutation(
       ctx,
       workflow.workflowHandle as FunctionHandle<"mutation">,
       { workflowId: workflow._id, generationNumber },
       {
+        name: workflow.name,
         onComplete: internal.pool.handlerOnComplete,
         context: { workflowId, generationNumber },
       },
@@ -188,23 +197,27 @@ export const handlerOnComplete = internalMutation({
     const console = await getDefaultLogger(ctx);
     if (!validate(handlerOnCompleteContext, args.context)) {
       console.error("Invalid handlerOnComplete context", args.context);
-      if (
-        validate(v.id("workflows"), args.context.workflowId, { db: ctx.db })
-      ) {
-        await ctx.db.insert("onCompleteFailures", args);
-        await completeHandler(ctx, {
-          workflowId: args.context.workflowId,
-          generationNumber: args.context.generationNumber,
-          runResult: {
-            kind: "failed",
-            error:
-              "Invalid handlerOnComplete context: " +
-              JSON.stringify(args.context),
-          },
-        }).catch((error) => {
-          console.error("Error calling completeHandler", error);
-        });
+      const workflowId = ctx.db.normalizeId(
+        "workflows",
+        args.context.workflowId,
+      );
+      await ctx.db.insert("onCompleteFailures", args);
+      if (!workflowId) {
+        console.error("Invalid workflow ID", args.context.workflowId);
+        return;
       }
+      await completeHandler(ctx, {
+        workflowId: args.context.workflowId,
+        generationNumber: args.context.generationNumber,
+        runResult: {
+          kind: "failed",
+          error:
+            "Invalid handlerOnComplete context: " +
+            JSON.stringify(args.context),
+        },
+      }).catch((error) => {
+        console.error("Error calling completeHandler", error);
+      });
       return;
     }
     const { workflowId, generationNumber } = args.context;

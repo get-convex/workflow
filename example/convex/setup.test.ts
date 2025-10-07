@@ -5,10 +5,10 @@ import schema from "./schema";
 export const modules = import.meta.glob("./**/*.*s");
 
 // Sorry about everything
-import componentSchema from "../node_modules/@convex-dev/workflow/src/component/schema";
+import componentSchema from "../../node_modules/@convex-dev/workflow/src/component/schema";
 export { componentSchema };
 export const componentModules = import.meta.glob(
-  "../node_modules/@convex-dev/workflow/src/component/**/*.ts",
+  "../../node_modules/@convex-dev/workflow/src/component/**/*.ts",
 );
 
 export function initConvexTest() {

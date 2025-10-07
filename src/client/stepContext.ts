@@ -1,18 +1,19 @@
 import { BaseChannel } from "async-channel";
-import {
+import type {
   FunctionReference,
   FunctionArgs,
   FunctionReturnType,
   FunctionType,
 } from "convex/server";
 import { safeFunctionName } from "./safeFunctionName.js";
-import type { RunOptions, WorkflowStep } from "./index.js";
 import type { StepRequest } from "./step.js";
 import type { RetryOption } from "@convex-dev/workpool";
+import type { RunOptions, WorkflowStep } from "./types.js";
+import type { WorkflowId } from "../types.js";
 
 export class StepContext implements WorkflowStep {
   constructor(
-    public workflowId: string,
+    public workflowId: WorkflowId,
     private sender: BaseChannel<StepRequest>,
   ) {}
 

@@ -1,0 +1,451 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  patchMath,
+  createDeterministicDate,
+  createConsole,
+} from "./environment.js";
+
+describe("environment patching units", () => {
+  describe("patchMath", () => {
+    it("should preserve all Math methods except random", () => {
+      const originalMath = Math;
+      const patchedMath = patchMath(originalMath);
+
+      // Should preserve all other methods
+      expect(patchedMath.abs).toBe(originalMath.abs);
+      expect(patchedMath.sin).toBe(originalMath.sin);
+      expect(patchedMath.cos).toBe(originalMath.cos);
+      expect(patchedMath.PI).toBe(originalMath.PI);
+      expect(patchedMath.E).toBe(originalMath.E);
+    });
+
+    it("should replace Math.random with function that throws", () => {
+      const originalMath = Math;
+      const patchedMath = patchMath(originalMath);
+
+      expect(() => patchedMath.random()).toThrow(
+        "Math.random() isn't yet supported within workflows",
+      );
+    });
+
+    it("should not mutate the original Math object", () => {
+      const originalMath = Math;
+      const originalRandom = Math.random;
+
+      patchMath(originalMath);
+
+      // Original Math should be unchanged
+      expect(Math.random).toBe(originalRandom);
+    });
+  });
+
+  describe("createDeterministicDate", () => {
+    const mockGetGenerationState = vi.fn();
+
+    beforeEach(() => {
+      mockGetGenerationState.mockReturnValue({
+        now: 1234567890000,
+        latest: true,
+      });
+    });
+
+    afterEach(() => {
+      mockGetGenerationState.mockReset();
+    });
+
+    it("should create Date that uses generation state for Date.now()", () => {
+      const testTime = 9876543210000;
+      mockGetGenerationState.mockReturnValue({ now: testTime, latest: true });
+
+      const DeterministicDate = createDeterministicDate(
+        Date,
+        mockGetGenerationState,
+      );
+
+      expect(DeterministicDate.now()).toBe(testTime);
+      expect(mockGetGenerationState).toHaveBeenCalled();
+    });
+
+    it("should create new Date with current timestamp when no args", () => {
+      const testTime = 1111111111111;
+      mockGetGenerationState.mockReturnValue({ now: testTime, latest: true });
+
+      const DeterministicDate = createDeterministicDate(
+        Date,
+        mockGetGenerationState,
+      );
+      const date = new DeterministicDate();
+
+      expect(date.getTime()).toBe(testTime);
+    });
+
+    it("should create Date with provided args", () => {
+      const DeterministicDate = createDeterministicDate(
+        Date,
+        mockGetGenerationState,
+      );
+      const date = new DeterministicDate(2023, 0, 1);
+
+      expect(date.getFullYear()).toBe(2023);
+      expect(date.getMonth()).toBe(0);
+      expect(date.getDate()).toBe(1);
+    });
+
+    it("should return string when called without new", () => {
+      const DeterministicDate = createDeterministicDate(
+        Date,
+        mockGetGenerationState,
+      );
+
+      const dateString = (DeterministicDate as unknown as () => string)();
+      expect(typeof dateString).toBe("string");
+    });
+
+    it("should preserve original Date static methods", () => {
+      const originalDate = Date;
+      const DeterministicDate = createDeterministicDate(
+        originalDate,
+        mockGetGenerationState,
+      );
+
+      expect(DeterministicDate.parse).toBe(originalDate.parse);
+      expect(DeterministicDate.UTC).toBe(originalDate.UTC);
+
+      // Prototype should be the same as original (no patching currently)
+      expect(DeterministicDate.prototype).toBe(originalDate.prototype);
+      expect(DeterministicDate.prototype.constructor).toBe(DeterministicDate);
+    });
+
+    it("should not affect the original Date constructor", () => {
+      const originalNow = Date.now;
+
+      createDeterministicDate(Date, mockGetGenerationState);
+
+      // Original Date should be unchanged
+      expect(Date.now).toBe(originalNow);
+    });
+
+    describe("behavior validation vs original Date", () => {
+      it("should produce identical outputs for specific dates", () => {
+        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+
+        // Test with specific timestamps
+        const timestamps = [
+          0, // Unix epoch
+          946684800000, // Y2K
+          1640995200000, // 2022-01-01
+          2023, 0, 15, 10, 30, 45, 123 // Feb 15, 2023 10:30:45.123
+        ];
+
+        for (const ts of [timestamps[0], timestamps[1], timestamps[2]]) {
+          const original = new Date(ts);
+          const deterministic = new DeterministicDate(ts);
+
+          expect(deterministic.getTime()).toBe(original.getTime());
+          expect(deterministic.getFullYear()).toBe(original.getFullYear());
+          expect(deterministic.getMonth()).toBe(original.getMonth());
+          expect(deterministic.getDate()).toBe(original.getDate());
+          expect(deterministic.getHours()).toBe(original.getHours());
+          expect(deterministic.getMinutes()).toBe(original.getMinutes());
+          expect(deterministic.getSeconds()).toBe(original.getSeconds());
+          expect(deterministic.getMilliseconds()).toBe(original.getMilliseconds());
+        }
+
+        // Test with constructor args
+        const original = new Date(2023, 0, 15, 10, 30, 45, 123);
+        const deterministic = new DeterministicDate(2023, 0, 15, 10, 30, 45, 123);
+
+        expect(deterministic.getFullYear()).toBe(original.getFullYear());
+        expect(deterministic.getMonth()).toBe(original.getMonth());
+        expect(deterministic.getDate()).toBe(original.getDate());
+        expect(deterministic.getHours()).toBe(original.getHours());
+        expect(deterministic.getMinutes()).toBe(original.getMinutes());
+        expect(deterministic.getSeconds()).toBe(original.getSeconds());
+        expect(deterministic.getMilliseconds()).toBe(original.getMilliseconds());
+      });
+
+      it("should produce identical string representations for deterministic dates", () => {
+        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+
+        const timestamp = 1640995200000; // 2022-01-01T00:00:00.000Z
+        const original = new Date(timestamp);
+        const deterministic = new DeterministicDate(timestamp);
+
+        expect(deterministic.toISOString()).toBe(original.toISOString());
+        expect(deterministic.toUTCString()).toBe(original.toUTCString());
+        expect(deterministic.toDateString()).toBe(original.toDateString());
+        expect(deterministic.toTimeString()).toBe(original.toTimeString());
+        expect(deterministic.toJSON()).toBe(original.toJSON());
+        expect(deterministic.valueOf()).toBe(original.valueOf());
+        expect(deterministic.getTime()).toBe(original.getTime());
+      });
+
+      it("should handle UTC methods identically", () => {
+        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+
+        const timestamp = 1640995200123; // 2022-01-01T00:00:00.123Z
+        const original = new Date(timestamp);
+        const deterministic = new DeterministicDate(timestamp);
+
+        expect(deterministic.getUTCFullYear()).toBe(original.getUTCFullYear());
+        expect(deterministic.getUTCMonth()).toBe(original.getUTCMonth());
+        expect(deterministic.getUTCDate()).toBe(original.getUTCDate());
+        expect(deterministic.getUTCHours()).toBe(original.getUTCHours());
+        expect(deterministic.getUTCMinutes()).toBe(original.getUTCMinutes());
+        expect(deterministic.getUTCSeconds()).toBe(original.getUTCSeconds());
+        expect(deterministic.getUTCMilliseconds()).toBe(original.getUTCMilliseconds());
+        expect(deterministic.getUTCDay()).toBe(original.getUTCDay());
+      });
+
+      it("should handle static methods identically", () => {
+        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+
+        const dateString = "2023-01-15T10:30:45.123Z";
+        const year = 2023;
+        const month = 0; // January
+        const day = 15;
+        const hour = 10;
+        const minute = 30;
+        const second = 45;
+        const ms = 123;
+
+        expect(DeterministicDate.parse(dateString)).toBe(Date.parse(dateString));
+        expect(DeterministicDate.UTC(year, month, day, hour, minute, second, ms))
+          .toBe(Date.UTC(year, month, day, hour, minute, second, ms));
+      });
+
+      it("should maintain Date compatibility", () => {
+        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+
+        const date = new DeterministicDate(2023, 0, 1);
+
+        // Should be an instance of Date (important for type compatibility)
+        expect(date instanceof Date).toBe(true);
+
+        // Should have all expected Date methods
+        expect(typeof date.getTime).toBe("function");
+        expect(typeof date.getFullYear).toBe("function");
+        expect(typeof date.toISOString).toBe("function");
+        expect(typeof date.getTimezoneOffset).toBe("function");
+        expect(typeof date.toLocaleString).toBe("function");
+      });
+
+      it("should handle Date modification methods correctly", () => {
+        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+
+        const timestamp = 1640995200000; // 2022-01-01
+        const original = new Date(timestamp);
+        const deterministic = new DeterministicDate(timestamp);
+
+        // Test setters
+        const newTime = 1641081600000; // 2022-01-02
+        original.setTime(newTime);
+        deterministic.setTime(newTime);
+
+        expect(deterministic.getTime()).toBe(original.getTime());
+
+        // Test setFullYear
+        original.setFullYear(2024);
+        deterministic.setFullYear(2024);
+
+        expect(deterministic.getFullYear()).toBe(original.getFullYear());
+        expect(deterministic.getTime()).toBe(original.getTime());
+      });
+
+      it("should have timezone and locale methods available for future patching", () => {
+        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+        const date = new DeterministicDate(1640995200000); // 2022-01-01T00:00:00.000Z
+
+        // These methods exist but are not yet fully patched for determinism
+        // They currently still use system timezone/locale settings
+        expect(typeof date.getTimezoneOffset).toBe("function");
+        expect(typeof date.toLocaleString).toBe("function");
+        expect(typeof date.toLocaleDateString).toBe("function");
+        expect(typeof date.toLocaleTimeString).toBe("function");
+
+        // The methods work but results depend on system settings
+        const timezoneOffset = date.getTimezoneOffset();
+        const localeString = date.toLocaleString();
+        const localeDateString = date.toLocaleDateString();
+        const localeTimeString = date.toLocaleTimeString();
+
+        expect(typeof timezoneOffset).toBe("number");
+        expect(typeof localeString).toBe("string");
+        expect(typeof localeDateString).toBe("string");
+        expect(typeof localeTimeString).toBe("string");
+
+        // Should be consistent when called multiple times
+        expect(date.getTimezoneOffset()).toBe(timezoneOffset);
+        expect(date.toLocaleString()).toBe(localeString);
+        expect(date.toLocaleDateString()).toBe(localeDateString);
+        expect(date.toLocaleTimeString()).toBe(localeTimeString);
+
+        // TODO: These methods should be patched for full determinism:
+        // - getTimezoneOffset() should return 0 (UTC)
+        // - locale methods should use fixed locale (en-US) and UTC timezone
+      });
+    });
+  });
+
+  describe("createConsole", () => {
+    const mockGetGenerationState = vi.fn();
+    let mockConsole: {
+      log: ReturnType<typeof vi.fn>;
+      info: ReturnType<typeof vi.fn>;
+      warn: ReturnType<typeof vi.fn>;
+      error: ReturnType<typeof vi.fn>;
+      debug: ReturnType<typeof vi.fn>;
+      group: ReturnType<typeof vi.fn>;
+      groupEnd: ReturnType<typeof vi.fn>;
+    };
+
+    beforeEach(() => {
+      mockConsole = {
+        log: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+        group: vi.fn(),
+        groupEnd: vi.fn(),
+      };
+    });
+
+    afterEach(() => {
+      mockGetGenerationState.mockReset();
+    });
+
+    it("should allow console methods when latest is true", () => {
+      mockGetGenerationState.mockReturnValue({ now: 1000, latest: true });
+
+      const proxiedConsole = createConsole(
+        mockConsole as unknown as Console,
+        mockGetGenerationState,
+      );
+
+      proxiedConsole.log("test");
+      proxiedConsole.info("test");
+      proxiedConsole.warn("test");
+      proxiedConsole.error("test");
+
+      expect(mockConsole.log).toHaveBeenCalledWith("test");
+      expect(mockConsole.info).toHaveBeenCalledWith("test");
+      expect(mockConsole.warn).toHaveBeenCalledWith("test");
+      expect(mockConsole.error).toHaveBeenCalledWith("test");
+    });
+
+    it("should return noop function when latest is false", () => {
+      mockGetGenerationState.mockReturnValue({ now: 1000, latest: false });
+
+      const proxiedConsole = createConsole(
+        mockConsole as unknown as Console,
+        mockGetGenerationState,
+      );
+
+      // Methods should be functions (noop) but not call the original
+      expect(typeof proxiedConsole.log).toBe("function");
+      expect(typeof proxiedConsole.info).toBe("function");
+
+      proxiedConsole.log("test");
+      proxiedConsole.info("test");
+
+      expect(mockConsole.log).not.toHaveBeenCalled();
+      expect(mockConsole.info).not.toHaveBeenCalled();
+    });
+
+    it("should throw error for console.Console access", () => {
+      mockGetGenerationState.mockReturnValue({ now: 1000, latest: true });
+
+      const proxiedConsole = createConsole(
+        mockConsole as unknown as Console,
+        mockGetGenerationState,
+      );
+
+      expect(() => proxiedConsole.Console).toThrow(
+        "console.Console() is not supported within workflows",
+      );
+    });
+
+    it("should handle console.count with state tracking", () => {
+      mockGetGenerationState.mockReturnValue({ now: 1000, latest: true });
+
+      const proxiedConsole = createConsole(
+        mockConsole as unknown as Console,
+        mockGetGenerationState,
+      );
+
+      proxiedConsole.count("test");
+      proxiedConsole.count("test");
+      proxiedConsole.count(); // default label
+
+      expect(mockConsole.info).toHaveBeenCalledWith("test: 1");
+      expect(mockConsole.info).toHaveBeenCalledWith("test: 2");
+      expect(mockConsole.info).toHaveBeenCalledWith("default: 1");
+    });
+
+    it("should handle console.countReset", () => {
+      mockGetGenerationState.mockReturnValue({ now: 1000, latest: true });
+
+      const proxiedConsole = createConsole(
+        mockConsole as unknown as Console,
+        mockGetGenerationState,
+      );
+
+      proxiedConsole.count("test");
+      proxiedConsole.count("test");
+      proxiedConsole.countReset("test");
+      proxiedConsole.count("test");
+
+      expect(mockConsole.info).toHaveBeenCalledWith("test: 1");
+      expect(mockConsole.info).toHaveBeenCalledWith("test: 2");
+      expect(mockConsole.info).toHaveBeenCalledWith("test: 1");
+    });
+
+    it("should always pass through groupEnd", () => {
+      mockGetGenerationState.mockReturnValue({ now: 1000, latest: false });
+
+      const proxiedConsole = createConsole(
+        mockConsole as unknown as Console,
+        mockGetGenerationState,
+      );
+
+      proxiedConsole.groupEnd();
+      expect(mockConsole.groupEnd).toHaveBeenCalled();
+    });
+
+    it("should handle time/timeEnd with generation state", () => {
+      const startTime = 1000;
+      const endTime = 1500;
+
+      // Mock different return values for different calls
+      mockGetGenerationState
+        .mockReturnValueOnce({ now: startTime, latest: false }) // for time()
+        .mockReturnValueOnce({ now: endTime, latest: true }); // for timeEnd()
+
+      const proxiedConsole = createConsole(
+        mockConsole as unknown as Console,
+        mockGetGenerationState,
+      );
+
+      proxiedConsole.time("test");
+      proxiedConsole.timeEnd("test");
+
+      expect(mockConsole.info).toHaveBeenCalledWith("test: 500ms");
+    });
+
+    it("should not call console methods for count when latest is false", () => {
+      mockGetGenerationState.mockReturnValue({ now: 1000, latest: false });
+
+      const proxiedConsole = createConsole(
+        mockConsole as unknown as Console,
+        mockGetGenerationState,
+      );
+
+      proxiedConsole.count("test");
+      proxiedConsole.count("test");
+
+      // Should not call info when latest is false
+      expect(mockConsole.info).not.toHaveBeenCalled();
+    });
+  });
+});

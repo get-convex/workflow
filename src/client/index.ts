@@ -10,6 +10,8 @@ import {
   type GenericDataModel,
   type GenericMutationCtx,
   type GenericQueryCtx,
+  type PaginationOptions,
+  type PaginationResult,
   type RegisteredMutation,
   type ReturnValueForOptionalValidator,
 } from "convex/server";
@@ -20,13 +22,19 @@ import type {
   EventSpec,
   OnCompleteArgs,
   WorkflowId,
+  WorkflowStep,
 } from "../types.js";
 import { safeFunctionName } from "./safeFunctionName.js";
-import type { OpaqueIds, WorkflowComponent, WorkflowStep } from "./types.js";
+import type { OpaqueIds, WorkflowComponent, WorkflowCtx } from "./types.js";
 import { workflowMutation } from "./workflowMutation.js";
 import { parse } from "convex-helpers/validators";
 
-export { vWorkflowId, type WorkflowId } from "../types.js";
+export {
+  vWorkflowId,
+  type WorkflowId,
+  vWorkflowStep,
+  type WorkflowStep,
+} from "../types.js";
 export type { RunOptions } from "./types.js";
 export { defineEvent } from "./events.js";
 
@@ -67,7 +75,7 @@ export type WorkflowDefinition<
 > = {
   args?: ArgsValidator;
   handler: (
-    step: WorkflowStep,
+    step: WorkflowCtx,
     args: ObjectType<ArgsValidator>,
   ) => Promise<ReturnValueForOptionalValidator<ReturnsValidator>>;
   returns?: ReturnsValidator;
@@ -199,6 +207,36 @@ export class WorkflowManager {
     await ctx.runMutation(this.component.workflow.cancel, {
       workflowId,
     });
+  }
+
+  /**
+   * List the steps in a workflow, including their name, args, return value etc.
+   *
+   * @param ctx - The Convex context from a query, mutation, or action.
+   * @param workflowId - The workflow ID.
+   * @param opts - How many steps to fetch and in what order.
+   *   e.g. `{ order: "desc", paginationOpts: { cursor: null, numItems: 10 } }`
+   *   will get the last 10 steps in descending order.
+   *   Defaults to 100 steps in ascending order.
+   * @returns The pagination result with per-step data.
+   */
+  async listSteps(
+    ctx: RunQueryCtx,
+    workflowId: WorkflowId,
+    opts?: {
+      order?: "asc" | "desc";
+      paginationOpts?: PaginationOptions;
+    },
+  ): Promise<PaginationResult<WorkflowStep>> {
+    const steps = await ctx.runQuery(this.component.workflow.listSteps, {
+      workflowId,
+      order: opts?.order ?? "asc",
+      paginationOpts: opts?.paginationOpts ?? {
+        cursor: null,
+        numItems: 100,
+      },
+    });
+    return steps as PaginationResult<WorkflowStep>;
   }
 
   /**

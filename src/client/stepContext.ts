@@ -8,11 +8,11 @@ import type {
 import { safeFunctionName } from "./safeFunctionName.js";
 import type { StepRequest } from "./step.js";
 import type { RetryOption } from "@convex-dev/workpool";
-import type { RunOptions, WorkflowStep } from "./types.js";
+import type { RunOptions, WorkflowCtx } from "./types.js";
 import type { EventSpec, WorkflowId } from "../types.js";
 import { parse } from "convex-helpers/validators";
 
-export class StepContext implements WorkflowStep {
+export class StepContext implements WorkflowCtx {
   constructor(
     public workflowId: WorkflowId,
     private sender: BaseChannel<StepRequest>,

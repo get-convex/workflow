@@ -1,17 +1,35 @@
 import { vResultValidator } from "@convex-dev/workpool";
 import { assert } from "convex-helpers";
-import type { FunctionHandle } from "convex/server";
+import {
+  paginationOptsValidator,
+  type FunctionHandle,
+  type PaginationResult,
+} from "convex/server";
 import { type Infer, v } from "convex/values";
 import { mutation, type MutationCtx, query } from "./_generated/server.js";
 import { type Logger, logLevel } from "./logging.js";
 import { getWorkflow } from "./model.js";
 import { getWorkpool } from "./pool.js";
-import { journalDocument, vOnComplete, workflowDocument } from "./schema.js";
+import schema, {
+  journalDocument,
+  vOnComplete,
+  workflowDocument,
+  type JournalEntry,
+} from "./schema.js";
 import { getDefaultLogger } from "./utils.js";
-import type { WorkflowId, OnCompleteArgs } from "../types.js";
+import {
+  type WorkflowId,
+  type OnCompleteArgs,
+  type WorkflowStep,
+  type EventId,
+  vPaginationResult,
+  vWorkflowStep,
+} from "../types.js";
 import { api, internal } from "./_generated/api.js";
 import { formatErrorWithStack } from "../shared.js";
 import type { SchedulerOptions } from "../client/types.js";
+import type { Id } from "./_generated/dataModel.js";
+import { paginator } from "convex-helpers/server/pagination";
 
 const createArgs = v.object({
   workflowName: v.string(),
@@ -92,6 +110,60 @@ export const getStatus = query({
       .collect();
     console.debug(`${args.workflowId} blocked by`, inProgress);
     return { workflow, inProgress, logLevel: console.logLevel };
+  },
+});
+
+function publicWorkflowId(workflowId: Id<"workflows">): WorkflowId {
+  return workflowId as any;
+}
+
+function publicStep(step: JournalEntry): WorkflowStep {
+  return {
+    workflowId: publicWorkflowId(step.workflowId),
+    name: step.step.name,
+    stepId: step._id,
+    stepNumber: step.stepNumber,
+
+    args: step.step.args,
+    runResult: step.step.runResult,
+
+    startedAt: step.step.startedAt,
+    completedAt: step.step.completedAt,
+
+    ...(step.step.kind === "event"
+      ? {
+          kind: "event",
+          eventId: step.step.eventId as unknown as EventId,
+        }
+      : step.step.kind === "workflow"
+        ? {
+            kind: "workflow",
+            nestedWorkflowId: publicWorkflowId(step.step.workflowId!),
+          }
+        : {
+            kind: "function",
+            workId: step.step.workId!,
+          }),
+  } satisfies WorkflowStep;
+}
+
+export const listSteps = query({
+  args: {
+    workflowId: v.id("workflows"),
+    order: v.union(v.literal("asc"), v.literal("desc")),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: vPaginationResult(vWorkflowStep),
+  handler: async (ctx, args) => {
+    const result = await paginator(ctx.db, schema)
+      .query("steps")
+      .withIndex("workflow", (q) => q.eq("workflowId", args.workflowId))
+      .order(args.order)
+      .paginate(args.paginationOpts);
+    return {
+      ...result,
+      page: result.page.map(publicStep),
+    } as PaginationResult<Infer<typeof vWorkflowStep>>;
   },
 });
 

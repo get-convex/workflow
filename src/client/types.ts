@@ -7,7 +7,7 @@ import type {
 } from "convex/server";
 import type { api } from "../component/_generated/api.js";
 import type { GenericId } from "convex/values";
-import type { EventSpec, WorkflowId } from "../types.js";
+import type { EventId, EventSpec, WorkflowId } from "../types.js";
 
 export type WorkflowComponent = UseApi<typeof api>;
 
@@ -38,7 +38,7 @@ export type SchedulerOptions =
       runAfter?: number;
     };
 
-export type WorkflowStep = {
+export type WorkflowCtx = {
   /**
    * The ID of the workflow currently running.
    */
@@ -132,7 +132,7 @@ export type UseApi<API> = Expand<{
 export type OpaqueIds<T> =
   T extends GenericId<infer _T>
     ? string
-    : T extends WorkId
+    : T extends WorkId | WorkflowId | EventId<any>
       ? string
       : T extends (infer U)[]
         ? OpaqueIds<U>[]

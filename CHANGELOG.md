@@ -10,6 +10,8 @@
   make a mutation to call workflow.start:
   - `{ fn: "path/to/file:workflowName", args: { ...your workflow args } }`
 - Reduces read bandwidth when reading the journal after running many steps in parallel.
+- Simplifies the onComplete type requirement so you can accept a workflowId as a string.
+  This helps when you have statically generated types which can't do branded strings.
 
 ## 0.2.7
 

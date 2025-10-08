@@ -82,7 +82,7 @@ export type OnCompleteArgs = {
   /**
    * The ID of the work that completed.
    */
-  workflowId: WorkflowId;
+  workflowId: string;
   /**
    * The context object passed when enqueuing the work.
    * Useful for passing data from the enqueue site to the onComplete site.

@@ -20,8 +20,8 @@ import { safeFunctionName } from "./safeFunctionName.js";
 import type { OpaqueIds, WorkflowComponent, WorkflowStep } from "./types.js";
 import { workflowMutation } from "./workflowMutation.js";
 
-export { vWorkflowId, type WorkflowId, type WorkflowStep } from "../types.js";
-export type { RunOptions } from "./types.js";
+export { vWorkflowId, type WorkflowId } from "../types.js";
+export type { RunOptions, WorkflowStep } from "./types.js";
 
 export type CallbackOptions = {
   /**

@@ -3,7 +3,7 @@
 ## Running locally
 
 ```sh
-npm run setup
+npm i
 npm run dev
 ```
 
@@ -11,6 +11,7 @@ npm run dev
 
 ```sh
 npm run clean
+npm run build
 npm run typecheck
 npm run lint
 npm run test

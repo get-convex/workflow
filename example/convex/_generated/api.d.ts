@@ -11,7 +11,8 @@
 import type * as admin from "../admin.js";
 import type * as example from "../example.js";
 import type * as transcription from "../transcription.js";
-import type * as userConfirmation from "../userConfirmation.js";
+import type * as userConfirmation_steps from "../userConfirmation/steps.js";
+import type * as userConfirmation_workflow from "../userConfirmation/workflow.js";
 
 import type {
   ApiFromModules,
@@ -31,7 +32,8 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   example: typeof example;
   transcription: typeof transcription;
-  userConfirmation: typeof userConfirmation;
+  "userConfirmation/steps": typeof userConfirmation_steps;
+  "userConfirmation/workflow": typeof userConfirmation_workflow;
 }>;
 declare const fullApiWithMounts: typeof fullApi;
 

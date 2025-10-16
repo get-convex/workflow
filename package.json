@@ -1,6 +1,6 @@
 {
   "name": "@convex-dev/workflow",
-  "version": "0.2.8-alpha.3",
+  "version": "0.2.8-alpha.4",
   "description": "Convex component for durably executing workflows.",
   "keywords": [
     "convex",
@@ -52,7 +52,7 @@
     }
   },
   "peerDependencies": {
-    "@convex-dev/workpool": "^0.2.18",
+    "@convex-dev/workpool": "^0.2.19",
     "convex": ">=1.25.0 <1.35.0",
     "convex-helpers": "^0.1.99"
   },
@@ -60,7 +60,6 @@
     "async-channel": "^0.2.0"
   },
   "devDependencies": {
-    "@convex-dev/workpool": "^0.2.19-alpha.2",
     "@edge-runtime/vm": "5.0.0",
     "@eslint/eslintrc": "3.3.1",
     "@eslint/js": "9.37.0",

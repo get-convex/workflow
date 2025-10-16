@@ -132,8 +132,10 @@ export type UseApi<API> = Expand<{
 export type OpaqueIds<T> =
   T extends GenericId<infer _T>
     ? string
-    : T extends WorkId | WorkflowId | EventId<any>
-      ? string
+    : T extends string
+      ? `${T}` extends T
+        ? T
+        : string
       : T extends (infer U)[]
         ? OpaqueIds<U>[]
         : T extends object

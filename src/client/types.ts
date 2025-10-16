@@ -138,6 +138,8 @@ export type OpaqueIds<T> =
         : string
       : T extends (infer U)[]
         ? OpaqueIds<U>[]
-        : T extends object
-          ? { [K in keyof T]: OpaqueIds<T[K]> }
-          : T;
+        : T extends ArrayBuffer
+          ? ArrayBuffer
+          : T extends object
+            ? { [K in keyof T]: OpaqueIds<T[K]> }
+            : T;

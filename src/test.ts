@@ -1,5 +1,6 @@
 import type { TestConvex } from "convex-test";
 import type { GenericSchema, SchemaDefinition } from "convex/server";
+import workpool from "@convex-dev/workpool/test";
 import schema from "./component/schema.js";
 const modules = import.meta.glob("./component/**/*.ts");
 
@@ -10,8 +11,9 @@ const modules = import.meta.glob("./component/**/*.ts");
  */
 function register(
   t: TestConvex<SchemaDefinition<GenericSchema, boolean>>,
-  name: string,
+  name: string = "workflow",
 ) {
   t.registerComponent(name, schema, modules);
+  workpool.register(t, "workpool");
 }
 export default { register, schema, modules };

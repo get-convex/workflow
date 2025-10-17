@@ -35,7 +35,7 @@ export {
   vWorkflowStep,
   type WorkflowStep,
 } from "../types.js";
-export type { RunOptions } from "./types.js";
+export type { RunOptions, WorkflowCtx } from "./types.js";
 export { defineEvent } from "./events.js";
 
 export type CallbackOptions = {

@@ -15,12 +15,7 @@ import {
   type RegisteredMutation,
   type ReturnValueForOptionalValidator,
 } from "convex/server";
-import type {
-  Infer,
-  ObjectType,
-  PropertyValidators,
-  Validator,
-} from "convex/values";
+import type { ObjectType, PropertyValidators, Validator } from "convex/values";
 import type { Step } from "../component/schema.js";
 import type {
   EventId,
@@ -118,15 +113,59 @@ export class WorkflowManager {
       fn: "You should not call this directly, call workflow.start instead";
       args: ObjectType<ArgsValidator>;
     },
-    ReturnsValidator extends Validator<unknown, "required", string>
-      ? Infer<ReturnsValidator>
-      : void
-  > {
-    return workflowMutation(
-      this.component,
-      workflow,
-      this.options?.workpoolOptions,
-    );
+    ReturnValueForOptionalValidator<ReturnsValidator>
+  >;
+  define<
+    ArgsValidator extends PropertyValidators,
+    ReturnsValidator extends Validator<unknown, "required", string> | void,
+  >(
+    workflow: Omit<
+      WorkflowDefinition<ArgsValidator, ReturnsValidator>,
+      "handler"
+    >,
+  ): {
+    handler: (
+      handler: (
+        step: WorkflowCtx,
+        args: ObjectType<ArgsValidator>,
+      ) => Promise<ReturnValueForOptionalValidator<ReturnsValidator>>,
+    ) => RegisteredMutation<
+      "internal",
+      {
+        fn: "You should not call this directly, call workflow.start instead";
+        args: ObjectType<ArgsValidator>;
+      },
+      ReturnValueForOptionalValidator<ReturnsValidator>
+    >;
+  };
+  define<
+    ArgsValidator extends PropertyValidators,
+    ReturnsValidator extends Validator<unknown, "required", string> | void,
+  >(
+    workflow:
+      | Omit<WorkflowDefinition<ArgsValidator, ReturnsValidator>, "handler">
+      | WorkflowDefinition<ArgsValidator, ReturnsValidator>,
+  ): unknown {
+    if ("handler" in workflow) {
+      return workflowMutation(
+        this.component,
+        workflow,
+        this.options?.workpoolOptions,
+      );
+    }
+    return {
+      handler: (
+        handler: (
+          step: WorkflowCtx,
+          args: ObjectType<ArgsValidator>,
+        ) => Promise<ReturnValueForOptionalValidator<ReturnsValidator>>,
+      ) =>
+        workflowMutation(
+          this.component,
+          { ...workflow, handler },
+          this.options?.workpoolOptions,
+        ),
+    };
   }
 
   /**

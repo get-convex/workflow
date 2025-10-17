@@ -1,4 +1,4 @@
-import type { RetryOption, WorkId } from "@convex-dev/workpool";
+import type { RetryOption } from "@convex-dev/workpool";
 import type {
   Expand,
   FunctionArgs,
@@ -7,7 +7,7 @@ import type {
 } from "convex/server";
 import type { api } from "../component/_generated/api.js";
 import type { GenericId } from "convex/values";
-import type { EventId, EventSpec, WorkflowId } from "../types.js";
+import type { EventSpec, WorkflowId } from "../types.js";
 
 export type WorkflowComponent = UseApi<typeof api>;
 

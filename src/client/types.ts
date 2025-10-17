@@ -91,7 +91,7 @@ export type WorkflowCtx = {
    */
   runWorkflow<Workflow extends FunctionReference<"mutation", "internal">>(
     workflow: Workflow,
-    args: FunctionArgs<Workflow>,
+    args: FunctionArgs<Workflow>["args"],
     opts?: RunOptions,
   ): Promise<FunctionReturnType<Workflow>>;
 

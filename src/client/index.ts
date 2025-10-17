@@ -15,7 +15,12 @@ import {
   type RegisteredMutation,
   type ReturnValueForOptionalValidator,
 } from "convex/server";
-import type { ObjectType, PropertyValidators, Validator } from "convex/values";
+import type {
+  Infer,
+  ObjectType,
+  PropertyValidators,
+  Validator,
+} from "convex/values";
 import type { Step } from "../component/schema.js";
 import type {
   EventId,
@@ -113,7 +118,9 @@ export class WorkflowManager {
       fn: "You should not call this directly, call workflow.start instead";
       args: ObjectType<ArgsValidator>;
     },
-    void
+    ReturnsValidator extends Validator<unknown, "required", string>
+      ? Infer<ReturnsValidator>
+      : void
   > {
     return workflowMutation(
       this.component,

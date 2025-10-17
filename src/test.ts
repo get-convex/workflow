@@ -14,6 +14,6 @@ function register(
   name: string = "workflow",
 ) {
   t.registerComponent(name, schema, modules);
-  workpool.register(t, "workpool");
+  workpool.register(t, `${name}/workpool`);
 }
 export default { register, schema, modules };

@@ -64,6 +64,24 @@ export const vWorkflowStep = v.object({
 // type assertion to keep us in check
 const _: Infer<typeof vWorkflowStep> = {} as WorkflowStep;
 
+export type SchedulerOptions =
+  | {
+      /**
+       * The time (ms since epoch) to run the action at.
+       * If not provided, the action will be run as soon as possible.
+       * Note: this is advisory only. It may run later.
+       */
+      runAt?: number;
+    }
+  | {
+      /**
+       * The number of milliseconds to run the action after.
+       * If not provided, the action will be run as soon as possible.
+       * Note: this is advisory only. It may run later.
+       */
+      runAfter?: number;
+    };
+
 export type OnCompleteArgs = {
   /**
    * The ID of the work that completed.

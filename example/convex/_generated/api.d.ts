@@ -11,9 +11,9 @@
 import type * as admin from "../admin.js";
 import type * as example from "../example.js";
 import type * as nestedWorkflow from "../nestedWorkflow.js";
+import type * as passingSignals from "../passingSignals.js";
 import type * as transcription from "../transcription.js";
-import type * as userConfirmation_steps from "../userConfirmation/steps.js";
-import type * as userConfirmation_workflow from "../userConfirmation/workflow.js";
+import type * as userConfirmation from "../userConfirmation.js";
 
 import type {
   ApiFromModules,
@@ -33,9 +33,9 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   example: typeof example;
   nestedWorkflow: typeof nestedWorkflow;
+  passingSignals: typeof passingSignals;
   transcription: typeof transcription;
-  "userConfirmation/steps": typeof userConfirmation_steps;
-  "userConfirmation/workflow": typeof userConfirmation_workflow;
+  userConfirmation: typeof userConfirmation;
 }>;
 declare const fullApiWithMounts: typeof fullApi;
 

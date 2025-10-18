@@ -17,9 +17,9 @@ import {
   journalEntrySize,
   valueSize,
 } from "../component/schema.js";
-import type { SchedulerOptions, WorkflowComponent } from "./types.js";
+import type { WorkflowComponent } from "./types.js";
 import { MAX_JOURNAL_SIZE } from "../shared.js";
-import type { EventId } from "../types.js";
+import type { EventId, SchedulerOptions } from "../types.js";
 
 export type WorkerResult =
   | { type: "handlerDone"; runResult: RunResult }

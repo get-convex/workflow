@@ -24,10 +24,10 @@ import {
   type EventId,
   vPaginationResult,
   vWorkflowStep,
+  type SchedulerOptions,
 } from "../types.js";
 import { api, internal } from "./_generated/api.js";
 import { formatErrorWithStack } from "../shared.js";
-import type { SchedulerOptions } from "../client/types.js";
 import type { Id } from "./_generated/dataModel.js";
 import { paginator } from "convex-helpers/server/pagination";
 

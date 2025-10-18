@@ -18,7 +18,7 @@ import { type JournalEntry } from "../component/schema.js";
 import { setupEnvironment } from "./environment.js";
 import type { WorkflowDefinition } from "./index.js";
 import { StepExecutor, type StepRequest, type WorkerResult } from "./step.js";
-import { StepContext } from "./stepContext.js";
+import { createWorkflowCtx } from "./workflowContext.js";
 import { checkArgs } from "./validator.js";
 import { type RunResult, type WorkpoolOptions } from "@convex-dev/workpool";
 import { type WorkflowComponent } from "./types.js";
@@ -117,7 +117,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
       const channel = new BaseChannel<StepRequest>(
         workpoolOptions.maxParallelism ?? 10,
       );
-      const step = new StepContext(workflowId, channel);
+      const step = createWorkflowCtx(workflowId, channel);
       const executor = new StepExecutor(
         workflowId,
         generationNumber,

@@ -3,6 +3,7 @@ import type {
   WorkpoolOptions,
   WorkpoolRetryOptions,
 } from "@convex-dev/workpool";
+import { parse } from "convex-helpers/validators";
 import {
   createFunctionHandle,
   type FunctionArgs,
@@ -25,24 +26,22 @@ import type {
 import type { Step } from "../component/schema.js";
 import type {
   EventId,
-  EventSpec,
   OnCompleteArgs,
   WorkflowId,
   WorkflowStep,
 } from "../types.js";
 import { safeFunctionName } from "./safeFunctionName.js";
-import type { OpaqueIds, WorkflowComponent, WorkflowCtx } from "./types.js";
+import type { OpaqueIds, WorkflowComponent } from "./types.js";
+import type { WorkflowCtx } from "./workflowContext.js";
 import { workflowMutation } from "./workflowMutation.js";
-import { parse } from "convex-helpers/validators";
 
 export {
   vWorkflowId,
-  type WorkflowId,
   vWorkflowStep,
+  type WorkflowId,
   type WorkflowStep,
 } from "../types.js";
-export type { RunOptions, WorkflowCtx } from "./types.js";
-export { defineEvent } from "./events.js";
+export type { RunOptions, WorkflowCtx } from "./workflowContext.js";
 
 export type CallbackOptions = {
   /**
@@ -263,49 +262,91 @@ export class WorkflowManager {
   /**
    * Send an event to a workflow.
    *
-   * @param ctx - Either ctx from a mutation/action or a workflow step.
-   * @param args - The event arguments.
+   * @param ctx - From a mutation, action or workflow step.
+   * @param args - Either send an event by its ID, or by name and workflow ID.
+   *   If you have a validator, you must provide a value.
+   *   If you provide an error string, awaiting the event will throw an error.
    */
   async sendEvent<T = null, Name extends string = string>(
     ctx: RunMutationCtx,
-    {
-      workflowId,
-      event,
-      value,
-    }: (
-      | { workflowId: WorkflowId; event: EventSpec<Name, T> }
-      | { workflowId?: undefined; event: EventSpec<Name, T> & { id: string } }
+    args: (
+      | { workflowId: WorkflowId; name: Name; id?: EventId<Name> }
+      | { workflowId?: undefined; name?: Name; id: EventId<Name> }
     ) &
       (
-        | (T extends null
-            ? { value?: null; error?: undefined }
-            : { value: T; error?: undefined })
+        | { validator?: undefined; value?: T }
+        | { validator: Validator<T, any, any>; value: T }
         | { error: string; value?: undefined }
       ),
   ): Promise<EventId<Name>> {
-    let result = {
-      kind: "success" as const,
-      returnValue: event.validator ? parse(event.validator, value) : value,
-    } satisfies RunResult;
+    let result: RunResult =
+      "error" in args
+        ? {
+            kind: "failed",
+            error: args.error,
+          }
+        : {
+            kind: "success" as const,
+            returnValue: args.validator
+              ? parse(args.validator, args.value)
+              : "value" in args
+                ? args.value
+                : null,
+          };
     return (await ctx.runMutation(this.component.event.send, {
-      eventId: event.id,
+      eventId: args.id,
       result,
-      name: event.name,
-      workflowId: workflowId,
+      name: args.name,
+      workflowId: args.workflowId,
       workpoolOptions: this.options?.workpoolOptions,
     })) as EventId<Name>;
   }
 
+  /**
+   * Create an event ahead of time, enabling awaiting a specific event by ID.
+   * @param ctx - From an action, mutation or workflow step.
+   * @param args - The name of the event and what workflow it belongs to.
+   * @returns The event ID, which can be used to send the event or await it.
+   */
   async createEvent<Name extends string>(
     ctx: RunMutationCtx,
-    component: WorkflowComponent,
     args: { name: Name; workflowId: WorkflowId },
   ): Promise<EventId<Name>> {
-    return (await ctx.runMutation(component.event.create, {
+    return (await ctx.runMutation(this.component.event.create, {
       name: args.name,
       workflowId: args.workflowId,
     })) as EventId<Name>;
   }
+}
+
+/**
+ * Define an event specification: a name and a validator.
+ * This helps share definitions between workflow.sendEvent and ctx.awaitEvent.
+ * e.g.
+ * ```ts
+ * const approvalEvent = defineEvent({
+ *   name: "approval",
+ *   validator: v.object({ approved: v.boolean() }),
+ * });
+ * ```
+ * Then you can await it in a workflow:
+ * ```ts
+ * const result = await ctx.awaitEvent(approvalEvent);
+ * ```
+ * And send from somewhere else:
+ * ```ts
+ * await workflow.sendEvent(ctx, {
+ *   ...approvalEvent,
+ *   workflowId,
+ *   value: { approved: true },
+ * });
+ * ```
+ */
+export function defineEvent<
+  Name extends string,
+  V extends Validator<unknown, "required", string>,
+>(spec: { name: Name; validator: V }) {
+  return spec;
 }
 
 type RunQueryCtx = {

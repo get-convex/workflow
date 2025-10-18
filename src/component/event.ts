@@ -65,7 +65,7 @@ export async function awaitEvent(
 
 async function getOrCreateEvent(
   ctx: MutationCtx,
-  workflowId: Id<"workflows">,
+  workflowId: Id<"workflows"> | undefined,
   args: { eventId?: Id<"events">; name?: string },
   statuses: Doc<"events">["state"]["kind"][],
 ): Promise<Doc<"events">> {
@@ -79,6 +79,7 @@ async function getOrCreateEvent(
     return event;
   }
   assert(args.name, "Name is required if eventId is not specified");
+  assert(workflowId, "workflowId is required if eventId is not specified");
   for (const status of statuses) {
     const event = await ctx.db
       .query("events")
@@ -101,7 +102,7 @@ async function getOrCreateEvent(
 
 export const send = mutation({
   args: {
-    workflowId: v.id("workflows"),
+    workflowId: v.optional(v.id("workflows")),
     eventId: v.optional(v.id("events")),
     name: v.optional(v.string()),
     result: vResultValidator,
@@ -118,16 +119,17 @@ export const send = mutation({
       },
       ["waiting", "created"],
     );
+    const { workflowId } = event;
     const name = args.name ?? event.name;
     switch (event.state.kind) {
       case "sent": {
         throw new Error(
-          `Event already sent: ${event._id} (${name}) in workflow ${args.workflowId}`,
+          `Event already sent: ${event._id} (${name}) in workflow ${workflowId}`,
         );
       }
       case "consumed": {
         throw new Error(
-          `Event already consumed: ${event._id} (${name}) in workflow ${args.workflowId}`,
+          `Event already consumed: ${event._id} (${name}) in workflow ${workflowId}`,
         );
       }
       case "created": {
@@ -140,7 +142,7 @@ export const send = mutation({
         const step = await ctx.db.get(event.state.stepId);
         assert(
           step,
-          `Entry ${event.state.stepId} not found when sending event ${event._id} (${name}) in workflow ${args.workflowId}`,
+          `Entry ${event.state.stepId} not found when sending event ${event._id} (${name}) in workflow ${workflowId}`,
         );
         assert(step.step.kind === "event", "Step is not an event");
         step.step.eventId = event._id;
@@ -160,13 +162,13 @@ export const send = mutation({
         const anyMoreEvents = await ctx.db
           .query("events")
           .withIndex("workflowId_state", (q) =>
-            q.eq("workflowId", args.workflowId).eq("state.kind", "waiting"),
+            q.eq("workflowId", workflowId).eq("state.kind", "waiting"),
           )
           .order("desc")
           .first();
         if (!anyMoreEvents) {
-          const workflow = await ctx.db.get(args.workflowId);
-          assert(workflow, `Workflow ${args.workflowId} not found`);
+          const workflow = await ctx.db.get(workflowId);
+          assert(workflow, `Workflow ${workflowId} not found`);
           const workpool = await getWorkpool(ctx, args.workpoolOptions);
           await enqueueWorkflow(ctx, workflow, workpool);
         }

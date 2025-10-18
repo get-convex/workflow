@@ -22,10 +22,11 @@ export type EventId<Name extends string = string> = string & {
 export type VEventId<Name extends string> = VString<EventId<Name>>;
 export const vEventId = v.string() as VString<EventId<string>>;
 
-export type EventSpec<Name extends string = string, T = unknown> = {
-  name: Name;
+export type EventSpec<Name extends string = string, T = unknown> = (
+  | { name: Name; id?: EventId<Name> }
+  | { name?: Name; id: EventId<Name> }
+) & {
   validator?: Validator<T, any, any>;
-  id?: EventId<Name>;
 };
 
 export type WorkflowStep = {
@@ -40,18 +41,9 @@ export type WorkflowStep = {
   startedAt: number;
   completedAt?: number;
 } & (
-  | {
-      kind: "function";
-      workId: WorkId;
-    }
-  | {
-      kind: "workflow";
-      nestedWorkflowId: WorkflowId;
-    }
-  | {
-      kind: "event";
-      eventId: EventId;
-    }
+  | { kind: "function"; workId: WorkId }
+  | { kind: "workflow"; nestedWorkflowId: WorkflowId }
+  | { kind: "event"; eventId: EventId }
 );
 
 export const vWorkflowStep = v.object({

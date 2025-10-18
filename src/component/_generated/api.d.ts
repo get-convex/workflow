@@ -57,7 +57,7 @@ export type Mounts = {
           | { kind: "success"; returnValue: any }
           | { error: string; kind: "failed" }
           | { kind: "canceled" };
-        workflowId: string;
+        workflowId?: string;
         workpoolOptions?: {
           defaultRetryBehavior?: {
             base: number;

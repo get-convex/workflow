@@ -20,14 +20,8 @@ export type EventId<Name extends string = string> = string & {
   __name: Name;
 };
 export type VEventId<Name extends string> = VString<EventId<Name>>;
-export const vEventId = v.string() as VString<EventId<string>>;
-
-export type EventSpec<Name extends string = string, T = unknown> = (
-  | { name: Name; id?: EventId<Name> }
-  | { name?: Name; id: EventId<Name> }
-) & {
-  validator?: Validator<T, any, any>;
-};
+export const vEventId = <Name extends string = string>(_name?: Name) =>
+  v.string() as VString<EventId<Name>>;
 
 export type WorkflowStep = {
   workflowId: WorkflowId;
@@ -65,7 +59,7 @@ export const vWorkflowStep = v.object({
   ),
   workId: v.optional(vWorkIdValidator),
   nestedWorkflowId: v.optional(vWorkflowId),
-  eventId: v.optional(vEventId),
+  eventId: v.optional(vEventId()),
 });
 // type assertion to keep us in check
 const _: Infer<typeof vWorkflowStep> = {} as WorkflowStep;

@@ -1,4 +1,5 @@
 import type {
+  RunResult,
   WorkpoolOptions,
   WorkpoolRetryOptions,
 } from "@convex-dev/workpool";
@@ -267,24 +268,29 @@ export class WorkflowManager {
    */
   async sendEvent<T = null, Name extends string = string>(
     ctx: RunMutationCtx,
-    workflowId: WorkflowId,
-    args: EventSpec<Name, T>,
-    ...runResult: T extends null ? [] : [T]
+    {
+      workflowId,
+      event,
+      value,
+    }: (
+      | { workflowId: WorkflowId; event: EventSpec<Name, T> }
+      | { workflowId?: undefined; event: EventSpec<Name, T> & { id: string } }
+    ) &
+      (
+        | (T extends null
+            ? { value?: null; error?: undefined }
+            : { value: T; error?: undefined })
+        | { error: string; value?: undefined }
+      ),
   ): Promise<EventId<Name>> {
     let result = {
       kind: "success" as const,
-      returnValue: runResult[0] ?? (null as T),
-    };
-    if (args.validator && result.kind === "success") {
-      result = {
-        ...result,
-        returnValue: parse(args.validator, result.returnValue),
-      };
-    }
+      returnValue: event.validator ? parse(event.validator, value) : value,
+    } satisfies RunResult;
     return (await ctx.runMutation(this.component.event.send, {
-      eventId: args.id,
+      eventId: event.id,
       result,
-      name: args.name,
+      name: event.name,
       workflowId: workflowId,
       workpoolOptions: this.options?.workpoolOptions,
     })) as EventId<Name>;

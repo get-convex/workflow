@@ -1,8 +1,10 @@
-# Convex Workflow
+# Convex Durable Workflows
 
 [![npm version](https://badge.fury.io/js/@convex-dev%2Fworkflow.svg?)](https://badge.fury.io/js/@convex-dev%2Fworkflow)
 
 <!-- START: Include on https://convex.dev/components -->
+
+The Workflow component enables you
 
 Have you ever wanted to run a series of functions reliably and durably, where
 each can have its own retry behavior, the overall workflow will survive server
@@ -10,7 +12,7 @@ restarts, and you can have long-running workflows spanning months that can be
 canceled? Do you want to observe the status of a workflow reactively, as well as
 the results written from each step?
 
-And do you want to do this with code, instead of a DSL?
+And do you want to do this with code, instead of a static configuration?
 
 Welcome to the world of Convex workflows.
 
@@ -32,23 +34,39 @@ import { components } from "./_generated/api";
 
 export const workflow = new WorkflowManager(components.workflow);
 
-export const exampleWorkflow = workflow.define({
+export const userOnboarding = workflow.define({
   args: {
-    storageId: v.id("_storage"),
+    userId: v.id("users"),
   },
-  handler: async (step, args): Promise<number[]> => {
-    const transcription = await step.runAction(
-      internal.index.computeTranscription,
+  handler: async (ctx, args): Promise<void> => {
+    const status = await ctx.runMutation(
+      internal.emails.sendVerificationEmail,
       { storageId: args.storageId },
     );
 
-    const embedding = await step.runAction(
-      internal.index.computeEmbedding,
-      { transcription },
-      // Run this a month after the transcription is computed.
-      { runAfter: 30 * 24 * 60 * 60 * 1000 },
+    if (status === "needsVerification") {
+      // Waits until verification is completed asynchronously.
+      await ctx.awaitEvent({ name: "verificationEmail" });
+    }
+    const result = await ctx.runAction(
+      internal.llm.generateCustomContent,
+      { userId: args.userId },
+      // Retry this on transient errors with the default retry policy.
+      { retry: true },
     );
-    return embedding;
+    if (result.needsHumanInput) {
+      // Run a whole workflow as a single step.
+      await ctx.runWorkflow(internal.llm.refineContentWorkflow, {
+        userId: args.userId,
+      });
+    }
+
+    await ctx.runMutation(
+      internal.emails.sendFollowUpEmailMaybe,
+      { userId: args.userId },
+      // Runs one day after the previous step.
+      { runAfter: 24 * 60 * 60 * 1000 },
+    );
   },
 });
 ```
@@ -97,9 +115,9 @@ is designed to feel like a Convex action but with a few restrictions:
 
 1. The workflow runs in the background, so it can't return a value.
 2. The workflow must be _deterministic_, so it should implement most of its logic
-   by calling out to other Convex functions. We will be lifting some of these
-   restrictions over time by implementing `Math.random()`, `Date.now()`, and
-   `fetch` within our workflow environment.
+   by calling out to other Convex functions. We restrict access to some
+   non-deterministic functions like `Math.random()` and `fetch`. Others we
+   patch, such as `console` for logging and `Date` for time.
 
 Note: To help avoid type cycles, always annotate the return type of the `handler`
 with the return type of the workflow.
@@ -107,7 +125,9 @@ with the return type of the workflow.
 ```ts
 export const exampleWorkflow = workflow.define({
   args: { name: v.string() },
+  returns: v.string(),
   handler: async (step, args): Promise<string> => {
+    //                         ^ Specify the return type of the handler
     const queryResult = await step.runQuery(
       internal.example.exampleQuery,
       args,
@@ -283,11 +303,13 @@ export const exampleWorkflow = workflow.define({
 });
 ```
 
-### Specifying how many workflows can run in parallel
+### Specifying step parallelism
 
 You can specify how many steps can run in parallel by setting the
 `maxParallelism` workpool option. It has a reasonable default.
-On the free tier, you should not exceed 20.
+On the free tier, you should not exceed 20, otherwise your other scheduled
+functions may become delayed while competing for available functions with your
+workflow steps.
 On a Pro account, you should not exceed 100 across all your workflows and workpools.
 If you want to do a lot of work in parallel, you should employ batching, where
 each workflow operates on a batch of work, e.g. scraping a list of links instead

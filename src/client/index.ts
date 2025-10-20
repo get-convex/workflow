@@ -17,7 +17,7 @@ import type { ObjectType, PropertyValidators, Validator } from "convex/values";
 import type { Step } from "../component/schema.js";
 import type { OnCompleteArgs, WorkflowId } from "../types.js";
 import { safeFunctionName } from "./safeFunctionName.js";
-import type { OpaqueIds, WorkflowComponent, WorkflowStep } from "./types.js";
+import type { WorkflowComponent, WorkflowStep } from "./types.js";
 import { workflowMutation } from "./workflowMutation.js";
 
 export { vWorkflowId, type WorkflowId } from "../types.js";
@@ -71,7 +71,7 @@ export type WorkflowDefinition<
 };
 
 export type WorkflowStatus =
-  | { type: "inProgress"; running: OpaqueIds<Step>[] }
+  | { type: "inProgress"; running: Step[] }
   | { type: "completed" }
   | { type: "canceled" }
   | { type: "failed"; error: string };

@@ -8,6 +8,7 @@
  * @module
  */
 
+import type { ComponentApi } from "../../client/types.ts";
 import type * as journal from "../journal.js";
 import type * as logging from "../logging.js";
 import type * as model from "../model.js";
@@ -247,90 +248,7 @@ export declare const internal: FilterApi<
 >;
 
 export declare const components: {
-  workpool: {
-    lib: {
-      cancel: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          id: string;
-          logLevel: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
-        },
-        any
-      >;
-      cancelAll: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          before?: number;
-          logLevel: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
-        },
-        any
-      >;
-      enqueue: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          config: {
-            logLevel: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
-            maxParallelism: number;
-          };
-          fnArgs: any;
-          fnHandle: string;
-          fnName: string;
-          fnType: "action" | "mutation" | "query";
-          onComplete?: { context?: any; fnHandle: string };
-          retryBehavior?: {
-            base: number;
-            initialBackoffMs: number;
-            maxAttempts: number;
-          };
-          runAt: number;
-        },
-        string
-      >;
-      enqueueBatch: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          config: {
-            logLevel: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
-            maxParallelism: number;
-          };
-          items: Array<{
-            fnArgs: any;
-            fnHandle: string;
-            fnName: string;
-            fnType: "action" | "mutation" | "query";
-            onComplete?: { context?: any; fnHandle: string };
-            retryBehavior?: {
-              base: number;
-              initialBackoffMs: number;
-              maxAttempts: number;
-            };
-            runAt: number;
-          }>;
-        },
-        Array<string>
-      >;
-      status: FunctionReference<
-        "query",
-        "internal",
-        { id: string },
-        | { previousAttempts: number; state: "pending" }
-        | { previousAttempts: number; state: "running" }
-        | { state: "finished" }
-      >;
-      statusBatch: FunctionReference<
-        "query",
-        "internal",
-        { ids: Array<string> },
-        Array<
-          | { previousAttempts: number; state: "pending" }
-          | { previousAttempts: number; state: "running" }
-          | { state: "finished" }
-        >
-      >;
-    };
-  };
+  workpool: ComponentApi<
+    typeof import("../../../node_modules/@convex-dev/workpool/dist/component/_generated/api.js").api
+  >;
 };

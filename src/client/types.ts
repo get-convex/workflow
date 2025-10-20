@@ -1,4 +1,4 @@
-import type { RetryOption, WorkId } from "@convex-dev/workpool";
+import type { RetryOption } from "@convex-dev/workpool";
 import type {
   Expand,
   FunctionArgs,
@@ -6,10 +6,10 @@ import type {
   FunctionReturnType,
 } from "convex/server";
 import type { api } from "../component/_generated/api.js";
-import type { GenericId } from "convex/values";
+import type { GenericId, Value } from "convex/values";
 import type { WorkflowId } from "../types.js";
 
-export type WorkflowComponent = UseApi<typeof api>;
+export type WorkflowComponent = ComponentApi<typeof api>;
 
 export type RunOptions = {
   /**
@@ -83,31 +83,27 @@ export type WorkflowStep = {
   ): Promise<FunctionReturnType<Action>>;
 };
 
-export type UseApi<API> = Expand<{
+export type ComponentApi<API> = Expand<{
   [mod in keyof API]: API[mod] extends FunctionReference<
     infer FType,
     "public",
     infer FArgs,
-    infer FReturnType,
-    infer FComponentPath
+    infer FReturnType
   >
     ? FunctionReference<
         FType,
         "internal",
-        OpaqueIds<FArgs>,
-        OpaqueIds<FReturnType>,
-        FComponentPath
+        StringifyIds<FArgs>,
+        StringifyIds<FReturnType>
       >
-    : UseApi<API[mod]>;
+    : ComponentApi<API[mod]>;
 }>;
 
-export type OpaqueIds<T> =
-  T extends GenericId<infer _T>
+export type StringifyIds<T> =
+  T extends GenericId<string>
     ? string
-    : T extends WorkId
-      ? string
-      : T extends (infer U)[]
-        ? OpaqueIds<U>[]
-        : T extends object
-          ? { [K in keyof T]: OpaqueIds<T[K]> }
-          : T;
+    : T extends (infer U)[]
+      ? StringifyIds<U>[]
+      : T extends Record<string, Value | undefined>
+        ? { [K in keyof T]: StringifyIds<T[K]> }
+        : T;

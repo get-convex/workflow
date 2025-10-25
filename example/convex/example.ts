@@ -41,8 +41,11 @@ export const exampleWorkflow = workflow.define({
     const celsius = weather.temperature;
     const farenheit = (celsius * 9) / 5 + 32;
     const { temperature, windSpeed, windGust } = weather;
+    // Show celsius 50% of the time
+    const temp =
+      Math.random() > 0.5 ? `${farenheit.toFixed(1)}°F` : `${temperature}°C`;
     console.log(
-      `Weather in ${name}: ${farenheit.toFixed(1)}°F (${temperature}°C), ${windSpeed} km/h, ${windGust} km/h`,
+      `Weather in ${name}: ${temp}, ${windSpeed} km/h, ${windGust} km/h`,
     );
     console.timeLog("weather", temperature);
     await step.runMutation(internal.example.updateFlow, {
@@ -191,7 +194,8 @@ export const updateFlow = internalMutation({
       .withIndex("workflowId", (q) => q.eq("workflowId", args.workflowId))
       .first();
     if (!flow) {
-      throw new Error(`Flow not found: ${args.workflowId}`);
+      console.warn(`Flow not found: ${args.workflowId}`);
+      return;
     }
     await ctx.db.patch(flow._id, {
       out: args.out,

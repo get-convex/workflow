@@ -54,7 +54,7 @@ export const load = query({
           blocked: true,
           workflow,
           logLevel,
-          ok: false,
+          ok: true,
         };
       }
     }

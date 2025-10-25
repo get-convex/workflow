@@ -9,7 +9,7 @@ describe("environment patching units", () => {
   describe("patchMath", () => {
     it("should preserve all Math methods except random", () => {
       const originalMath = Math;
-      const patchedMath = patchMath(originalMath);
+      const patchedMath = patchMath(originalMath, "test-seed");
 
       // Should preserve all other methods
       expect(patchedMath.abs).toBe(originalMath.abs);
@@ -19,20 +19,31 @@ describe("environment patching units", () => {
       expect(patchedMath.E).toBe(originalMath.E);
     });
 
-    it("should replace Math.random with function that throws", () => {
+    it("should replace Math.random with deterministic seeded function", () => {
       const originalMath = Math;
-      const patchedMath = patchMath(originalMath);
+      const patchedMath = patchMath(originalMath, "test-workflow-id");
 
-      expect(() => patchedMath.random()).toThrow(
-        "Math.random() isn't yet supported within workflows",
-      );
+      // Should return a number between 0 and 1
+      const random1 = patchedMath.random();
+      expect(random1).toBeGreaterThanOrEqual(0);
+      expect(random1).toBeLessThan(1);
+
+      // Should be deterministic - same seed produces same sequence
+      const patchedMath2 = patchMath(originalMath, "test-workflow-id");
+      const random2 = patchedMath2.random();
+      expect(random2).toBe(random1);
+
+      // Different seed produces different sequence
+      const patchedMath3 = patchMath(originalMath, "different-workflow-id");
+      const random3 = patchedMath3.random();
+      expect(random3).not.toBe(random1);
     });
 
     it("should not mutate the original Math object", () => {
       const originalMath = Math;
       const originalRandom = Math.random;
 
-      patchMath(originalMath);
+      patchMath(originalMath, "test-seed");
 
       // Original Math should be unchanged
       expect(Math.random).toBe(originalRandom);

@@ -1,7 +1,29 @@
 type GenerationState = { now: number; latest: boolean };
 
-// Testable unit: patches Math object to restrict non-deterministic functions
-export function patchMath(math: typeof Math): typeof Math {
+// Simple hash function to convert a string to a 32-bit seed
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return hash >>> 0; // Ensure unsigned
+}
+
+// Mulberry32 - a simple, fast seeded PRNG
+function createSeededRandom(seed: number): () => number {
+  return function () {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Testable unit: patches Math object to use seeded random
+export function patchMath(math: typeof Math, seed: string): typeof Math {
   const patchedMath = Object.create(Object.getPrototypeOf(math));
 
   // Copy all properties from original Math
@@ -14,10 +36,9 @@ export function patchMath(math: typeof Math): typeof Math {
     }
   }
 
-  // Override random to throw
-  patchedMath.random = () => {
-    throw new Error("Math.random() isn't yet supported within workflows");
-  };
+  // Override random to use seeded PRNG
+  const seededRandom = createSeededRandom(hashString(seed));
+  patchedMath.random = seededRandom;
 
   return patchedMath;
 }
@@ -63,11 +84,12 @@ export function createDeterministicDate(
 
 export function setupEnvironment(
   getGenerationState: () => GenerationState,
+  workflowId: string,
 ): void {
   const global = globalThis as Record<string, unknown>;
 
-  // Patch Math
-  global.Math = patchMath(global.Math as typeof Math);
+  // Patch Math with seeded random based on workflowId
+  global.Math = patchMath(global.Math as typeof Math, workflowId);
 
   // Patch Date
   const originalDate = global.Date as typeof Date;

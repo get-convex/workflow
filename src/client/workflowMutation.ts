@@ -128,7 +128,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         Date.now(),
         workpoolOptions,
       );
-      setupEnvironment(executor.getGenerationState.bind(executor));
+      setupEnvironment(executor.getGenerationState.bind(executor), workflowId);
 
       const handlerWorker = async (): Promise<WorkerResult> => {
         let runResult: RunResult;

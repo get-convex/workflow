@@ -116,8 +116,8 @@ is designed to feel like a Convex action but with a few restrictions:
 1. The workflow runs in the background, so it can't return a value.
 2. The workflow must be _deterministic_, so it should implement most of its logic
    by calling out to other Convex functions. We restrict access to some
-   non-deterministic functions like `Math.random()` and `fetch`. Others we
-   patch, such as `console` for logging and `Date` for time.
+   non-deterministic functions like `fetch` and `crypto`. Others we patch, such
+   as `console` for logging, `Math.random()` (seeded PRNG) and `Date` for time.
 
 Note: To help avoid type cycles, always annotate the return type of the `handler`
 with the return type of the workflow.
@@ -470,8 +470,10 @@ Here are a few limitations to keep in mind:
   (including the workflow state overhead). See more about mutation limits here:
   https://docs.convex.dev/production/state/limits#transactions
 - We currently do not collect backtraces from within function calls from workflows.
-- If you need to use side effects like `fetch` or use randomness,
+- If you need to use side effects like `fetch` or use cryptographic randomness,
   you'll need to do that in a step, not in the workflow definition.
+- `Math.random` is deterministic and not suitable for cryptographic use. It is,
+  however, useful for sharding, jitter, and other pseudo-random applications.
 - If the implementation of the workflow meaningfully changes (steps added,
   removed, or reordered) then it will fail with a determinism violation.
   The implementation should stay stable for the lifetime of active workflows.

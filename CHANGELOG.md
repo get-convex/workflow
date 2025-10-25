@@ -14,6 +14,7 @@
   This helps when you have statically generated types which can't do branded strings.
 - Adds a /test entrypoint to make testing easier
 - Exports the `WorkflowCtx` and `WorkflowStep` types
+- Support for Math.random via seeded PRNG.
 
 ## 0.2.7
 

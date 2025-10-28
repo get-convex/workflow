@@ -11,14 +11,14 @@ function hashString(str: string): number {
   return hash >>> 0; // Ensure unsigned
 }
 
-// Mulberry32 - a simple, fast seeded PRNG
+// A simple, fast seeded PRNG
+// https://gist.github.com/tommyettinger/46a874533244883189143505d203312c?permalink_comment_id=4854318#gistcomment-4854318
 function createSeededRandom(seed: number): () => number {
-  return function () {
-    seed |= 0;
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  return () => {
+    seed = (seed + 0x9e3779b9) | 0;
+    let t = Math.imul(seed ^ (seed >>> 16), 0x21f0aaad);
+    t = Math.imul(t ^ (t >>> 15), 0x735a2d97);
+    return ((t ^ (t >>> 15)) >>> 0) / 4294967296;
   };
 }
 

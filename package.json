@@ -13,14 +13,14 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "dev": "run-p -r 'dev:backend' 'dev:frontend' 'build:watch'",
-    "dev:backend": "convex dev --live-component-sources --typecheck-components",
+    "dev": "run-p -r 'dev:*'",
+    "dev:backend": "convex dev --typecheck-components",
     "dev:frontend": "cd example && vite --clearScreen false",
+    "dev:build": "npx chokidar 'tsconfig*.json' 'src/**/*.ts' -i '**/*.test.ts' -c 'npx convex codegen --component ./src/component && npm run build' --initial",
     "predev": "npm run dev:backend -- --until-success",
     "clean": "rm -rf dist tsconfig.build.tsbuildinfo",
     "build": "tsc --project ./tsconfig.build.json && npm run copy:dts",
     "copy:dts": "rsync -a --include='*/' --include='*.d.ts' --exclude='*' src/ dist/ || cpy 'src/**/*.d.ts' 'dist/' --parents",
-    "build:watch": "npx chokidar 'tsconfig*.json' 'src/**/*.ts' -i '**/*.test.ts' -c 'npm run build' --initial",
     "typecheck": "tsc --noEmit && tsc -p example/convex",
     "lint": "eslint src && eslint example/convex",
     "all": "run-p -r 'dev:backend' 'dev:frontend' 'build:watch' 'test:watch'",
@@ -40,13 +40,11 @@
   "exports": {
     "./package.json": "./package.json",
     ".": {
-      "@convex-dev/component-source": "./src/client/index.ts",
       "types": "./dist/client/index.d.ts",
       "default": "./dist/client/index.js"
     },
     "./test": "./src/test.ts",
     "./convex.config": {
-      "@convex-dev/component-source": "./src/component/convex.config.ts",
       "types": "./dist/component/convex.config.d.ts",
       "default": "./dist/component/convex.config.js"
     }

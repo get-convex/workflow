@@ -1,4 +1,3 @@
-import type { Expand, FunctionReference } from "convex/server";
 import type { ComponentApi } from "../component/_generated/component.js";
 import type { GenericId, Value } from "convex/values";
 

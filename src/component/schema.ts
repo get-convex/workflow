@@ -88,7 +88,7 @@ export const step = v.union(
     ...stepCommonFields,
     eventId: v.optional(v.id("events")),
     args: v.object({ eventId: v.optional(v.id("events")) }),
-  })
+  }),
 );
 export type Step = Infer<typeof step>;
 
@@ -167,7 +167,7 @@ export const event = {
       sentAt: v.number(),
       consumedAt: v.number(),
       stepId: v.id("steps"),
-    })
+    }),
   ),
 };
 
@@ -197,7 +197,7 @@ export default defineSchema({
         generationNumber: v.number(),
         runResult: vResultValidator,
         error: v.string(),
-      })
-    )
+      }),
+    ),
   ),
 });

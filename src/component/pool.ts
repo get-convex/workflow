@@ -42,7 +42,7 @@ export const DEFAULT_RETRY_BEHAVIOR = {
 
 export async function getWorkpool(
   ctx: MutationCtx,
-  opts: WorkpoolOptions | undefined
+  opts: WorkpoolOptions | undefined,
 ) {
   // nit: can fetch config only if necessary
   const config = await ctx.db.query("config").first();
@@ -94,7 +94,7 @@ async function onCompleteHandler(
     workflowId?: WorkflowId;
     result: RunResult;
     context: object;
-  }
+  },
 ) {
   const console = await getDefaultLogger(ctx);
   const stepId =
@@ -130,13 +130,13 @@ async function onCompleteHandler(
   const workflow = await getWorkflow(ctx, workflowId, null);
   if (workflow.generationNumber !== generationNumber) {
     console.error(
-      `Workflow: ${workflowId} already has generation number ${workflow.generationNumber} when completing ${stepId}`
+      `Workflow: ${workflowId} already has generation number ${workflow.generationNumber} when completing ${stepId}`,
     );
     return;
   }
   if (!journalEntry.step.inProgress) {
     console.error(
-      `Step finished but journal entry not in progress: ${stepId} status: ${journalEntry.step.runResult?.kind ?? "pending"}`
+      `Step finished but journal entry not in progress: ${stepId} status: ${journalEntry.step.runResult?.kind ?? "pending"}`,
     );
     return;
   }
@@ -175,7 +175,7 @@ async function onCompleteHandler(
   if (workflow.runResult !== undefined) {
     if (workflow.runResult.kind !== "canceled") {
       console.error(
-        `Workflow: ${workflowId} already ${workflow.runResult.kind} when completing ${stepId} with status ${args.result.kind}`
+        `Workflow: ${workflowId} already ${workflow.runResult.kind} when completing ${stepId} with status ${args.result.kind}`,
       );
     }
     return;
@@ -187,7 +187,7 @@ async function onCompleteHandler(
 export async function enqueueWorkflow(
   ctx: MutationCtx,
   workflow: Doc<"workflows">,
-  workpool: Workpool
+  workpool: Workpool,
 ) {
   const { _id: workflowId, generationNumber, name, workflowHandle } = workflow;
   await workpool.enqueueMutation(
@@ -198,7 +198,7 @@ export async function enqueueWorkflow(
       name,
       onComplete: internal.pool.handlerOnComplete,
       context: { workflowId, generationNumber },
-    }
+    },
   );
 }
 
@@ -233,7 +233,7 @@ export const handlerOnComplete = internalMutation({
       console.error("Invalid handlerOnComplete context", args.context);
       const workflowId = ctx.db.normalizeId(
         "workflows",
-        args.context.workflowId
+        args.context.workflowId,
       );
       await ctx.db.insert("onCompleteFailures", args);
       if (!workflowId) {

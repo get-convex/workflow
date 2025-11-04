@@ -49,7 +49,7 @@ export const create = mutation({
 export async function createHandler(
   ctx: MutationCtx,
   args: Infer<typeof createArgs>,
-  schedulerOptions?: SchedulerOptions
+  schedulerOptions?: SchedulerOptions,
 ) {
   const console = await getDefaultLogger(ctx);
   await updateMaxParallelism(ctx, console, args.maxParallelism);
@@ -63,7 +63,7 @@ export async function createHandler(
   console.debug(
     `Created workflow ${workflowId}:`,
     args.workflowArgs,
-    args.workflowHandle
+    args.workflowHandle,
   );
   if (args.startAsync) {
     const workpool = await getWorkpool(ctx, args);
@@ -76,7 +76,7 @@ export async function createHandler(
         onComplete: internal.pool.handlerOnComplete,
         context: { workflowId, generationNumber: 0 },
         ...schedulerOptions,
-      }
+      },
     );
   } else {
     // If we can't start it, may as well not create it, eh? Fail fast...
@@ -105,7 +105,7 @@ export const getStatus = query({
     const inProgress = await ctx.db
       .query("steps")
       .withIndex("inProgress", (q) =>
-        q.eq("step.inProgress", true).eq("workflowId", args.workflowId)
+        q.eq("step.inProgress", true).eq("workflowId", args.workflowId),
       )
       .collect();
     console.debug(`${args.workflowId} blocked by`, inProgress);
@@ -198,12 +198,12 @@ export const complete = mutation({
 // When the overall workflow completes (successfully or not).
 export async function completeHandler(
   ctx: MutationCtx,
-  args: Infer<typeof completeArgs>
+  args: Infer<typeof completeArgs>,
 ) {
   const workflow = await getWorkflow(
     ctx,
     args.workflowId,
-    args.generationNumber
+    args.generationNumber,
   );
   const console = await getDefaultLogger(ctx);
   if (workflow.runResult) {
@@ -223,7 +223,7 @@ export async function completeHandler(
     const inProgress = await ctx.db
       .query("steps")
       .withIndex("inProgress", (q) =>
-        q.eq("step.inProgress", true).eq("workflowId", args.workflowId)
+        q.eq("step.inProgress", true).eq("workflowId", args.workflowId),
       )
       .collect();
     if (inProgress.length > 0) {
@@ -257,7 +257,7 @@ export async function completeHandler(
           workflowId: workflow._id as unknown as WorkflowId,
           result: workflow.runResult,
           context: workflow.onComplete.context,
-        }
+        },
       );
     } catch (error) {
       const message = formatErrorWithStack(error);
@@ -290,7 +290,7 @@ export const cleanup = mutation({
     // TODO: allow cleaning up a workflow from inside it / in the onComplete hook
     if (!workflow.runResult) {
       logger.debug(
-        `Can't clean up workflow ${workflowId} since it hasn't completed.`
+        `Can't clean up workflow ${workflowId} since it hasn't completed.`,
       );
       return false;
     }
@@ -311,7 +311,7 @@ export const cleanup = mutation({
 async function updateMaxParallelism(
   ctx: MutationCtx,
   console: Logger,
-  maxParallelism: number | undefined
+  maxParallelism: number | undefined,
 ) {
   const config = await ctx.db.query("config").first();
   if (config) {

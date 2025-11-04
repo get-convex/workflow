@@ -36,7 +36,7 @@ export type WorkflowCtx = {
   runQuery<Query extends FunctionReference<"query", "internal">>(
     query: Query,
     args: FunctionArgs<Query>,
-    opts?: RunOptions
+    opts?: RunOptions,
   ): Promise<FunctionReturnType<Query>>;
 
   /**
@@ -49,7 +49,7 @@ export type WorkflowCtx = {
   runMutation<Mutation extends FunctionReference<"mutation", "internal">>(
     mutation: Mutation,
     args: FunctionArgs<Mutation>,
-    opts?: RunOptions
+    opts?: RunOptions,
   ): Promise<FunctionReturnType<Mutation>>;
 
   /**
@@ -62,7 +62,7 @@ export type WorkflowCtx = {
   runAction<Action extends FunctionReference<"action", "internal">>(
     action: Action,
     args: FunctionArgs<Action>,
-    opts?: RunOptions & RetryOption
+    opts?: RunOptions & RetryOption,
   ): Promise<FunctionReturnType<Action>>;
 
   /**
@@ -75,7 +75,7 @@ export type WorkflowCtx = {
   runWorkflow<Workflow extends FunctionReference<"mutation", "internal">>(
     workflow: Workflow,
     args: FunctionArgs<Workflow>["args"],
-    opts?: RunOptions
+    opts?: RunOptions,
   ): Promise<FunctionReturnType<Workflow>>;
 
   /**
@@ -95,13 +95,13 @@ export type WorkflowCtx = {
       | { name?: Name; id: EventId<Name> }
     ) & {
       validator?: Validator<T, any, any>;
-    }
+    },
   ): Promise<T>;
 };
 
 export function createWorkflowCtx(
   workflowId: WorkflowId,
-  sender: BaseChannel<StepRequest>
+  sender: BaseChannel<StepRequest>,
 ) {
   return {
     workflowId,
@@ -156,7 +156,7 @@ async function runFunction<
   functionType: FunctionType,
   f: F,
   args: unknown,
-  opts?: RunOptions & RetryOption
+  opts?: RunOptions & RetryOption,
 ): Promise<unknown> {
   const { name, retry, ...schedulerOptions } = opts ?? {};
   return run(sender, {
@@ -174,7 +174,7 @@ async function runFunction<
 
 async function run(
   sender: BaseChannel<StepRequest>,
-  request: Omit<StepRequest, "resolve" | "reject">
+  request: Omit<StepRequest, "resolve" | "reject">,
 ): Promise<unknown> {
   let send: unknown;
   const p = new Promise<unknown>((resolve, reject) => {

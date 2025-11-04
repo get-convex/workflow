@@ -10,7 +10,7 @@ export const logLevel = v.union(
   v.literal("INFO"),
   v.literal("REPORT"),
   v.literal("WARN"),
-  v.literal("ERROR")
+  v.literal("ERROR"),
 );
 export type LogLevel = Infer<typeof logLevel>;
 
@@ -32,7 +32,7 @@ const logLevelByName = logLevelOrder.reduce(
     acc[l] = i;
     return acc;
   },
-  {} as Record<LogLevel, number>
+  {} as Record<LogLevel, number>,
 );
 export function shouldLog(config: LogLevel, level: LogLevel) {
   return logLevelByName[config] <= logLevelByName[level];

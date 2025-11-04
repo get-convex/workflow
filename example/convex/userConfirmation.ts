@@ -11,7 +11,7 @@ export const approvalEvent = defineEvent({
   name: "approval" as const,
   validator: v.union(
     v.object({ approved: v.literal(true), choice: v.number() }),
-    v.object({ approved: v.literal(false), reason: v.string() })
+    v.object({ approved: v.literal(false), reason: v.string() }),
   ),
 });
 
@@ -25,7 +25,7 @@ export const confirmationWorkflow = workflow.define({
     const proposals = await ctx.runAction(
       internal.userConfirmation.generateProposals,
       { prompt: args.prompt },
-      { retry: true }
+      { retry: true },
     );
     console.log("Proposals generated", proposals);
     const approval = await ctx.awaitEvent(approvalEvent);

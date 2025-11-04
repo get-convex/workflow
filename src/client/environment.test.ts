@@ -70,7 +70,7 @@ describe("environment patching units", () => {
 
       const DeterministicDate = createDeterministicDate(
         Date,
-        mockGetGenerationState
+        mockGetGenerationState,
       );
 
       expect(DeterministicDate.now()).toBe(testTime);
@@ -83,7 +83,7 @@ describe("environment patching units", () => {
 
       const DeterministicDate = createDeterministicDate(
         Date,
-        mockGetGenerationState
+        mockGetGenerationState,
       );
       const date = new DeterministicDate();
 
@@ -93,7 +93,7 @@ describe("environment patching units", () => {
     it("should create Date with provided args", () => {
       const DeterministicDate = createDeterministicDate(
         Date,
-        mockGetGenerationState
+        mockGetGenerationState,
       );
       const date = new DeterministicDate(2023, 0, 1);
 
@@ -105,7 +105,7 @@ describe("environment patching units", () => {
     it("should return string when called without new", () => {
       const DeterministicDate = createDeterministicDate(
         Date,
-        mockGetGenerationState
+        mockGetGenerationState,
       );
 
       const dateString = (DeterministicDate as unknown as () => string)();
@@ -116,7 +116,7 @@ describe("environment patching units", () => {
       const originalDate = Date;
       const DeterministicDate = createDeterministicDate(
         originalDate,
-        mockGetGenerationState
+        mockGetGenerationState,
       );
 
       expect(DeterministicDate.parse).toBe(originalDate.parse);
@@ -140,7 +140,7 @@ describe("environment patching units", () => {
       it("should produce identical outputs for specific dates", () => {
         const DeterministicDate = createDeterministicDate(
           Date,
-          mockGetGenerationState
+          mockGetGenerationState,
         );
 
         // Test with specific timestamps
@@ -169,7 +169,7 @@ describe("environment patching units", () => {
           expect(deterministic.getMinutes()).toBe(original.getMinutes());
           expect(deterministic.getSeconds()).toBe(original.getSeconds());
           expect(deterministic.getMilliseconds()).toBe(
-            original.getMilliseconds()
+            original.getMilliseconds(),
           );
         }
 
@@ -182,7 +182,7 @@ describe("environment patching units", () => {
           10,
           30,
           45,
-          123
+          123,
         );
 
         expect(deterministic.getFullYear()).toBe(original.getFullYear());
@@ -192,14 +192,14 @@ describe("environment patching units", () => {
         expect(deterministic.getMinutes()).toBe(original.getMinutes());
         expect(deterministic.getSeconds()).toBe(original.getSeconds());
         expect(deterministic.getMilliseconds()).toBe(
-          original.getMilliseconds()
+          original.getMilliseconds(),
         );
       });
 
       it("should produce identical string representations for deterministic dates", () => {
         const DeterministicDate = createDeterministicDate(
           Date,
-          mockGetGenerationState
+          mockGetGenerationState,
         );
 
         const timestamp = 1640995200000; // 2022-01-01T00:00:00.000Z
@@ -218,7 +218,7 @@ describe("environment patching units", () => {
       it("should handle UTC methods identically", () => {
         const DeterministicDate = createDeterministicDate(
           Date,
-          mockGetGenerationState
+          mockGetGenerationState,
         );
 
         const timestamp = 1640995200123; // 2022-01-01T00:00:00.123Z
@@ -232,7 +232,7 @@ describe("environment patching units", () => {
         expect(deterministic.getUTCMinutes()).toBe(original.getUTCMinutes());
         expect(deterministic.getUTCSeconds()).toBe(original.getUTCSeconds());
         expect(deterministic.getUTCMilliseconds()).toBe(
-          original.getUTCMilliseconds()
+          original.getUTCMilliseconds(),
         );
         expect(deterministic.getUTCDay()).toBe(original.getUTCDay());
       });
@@ -240,7 +240,7 @@ describe("environment patching units", () => {
       it("should handle static methods identically", () => {
         const DeterministicDate = createDeterministicDate(
           Date,
-          mockGetGenerationState
+          mockGetGenerationState,
         );
 
         const dateString = "2023-01-15T10:30:45.123Z";
@@ -253,17 +253,17 @@ describe("environment patching units", () => {
         const ms = 123;
 
         expect(DeterministicDate.parse(dateString)).toBe(
-          Date.parse(dateString)
+          Date.parse(dateString),
         );
         expect(
-          DeterministicDate.UTC(year, month, day, hour, minute, second, ms)
+          DeterministicDate.UTC(year, month, day, hour, minute, second, ms),
         ).toBe(Date.UTC(year, month, day, hour, minute, second, ms));
       });
 
       it("should maintain Date compatibility", () => {
         const DeterministicDate = createDeterministicDate(
           Date,
-          mockGetGenerationState
+          mockGetGenerationState,
         );
 
         const date = new DeterministicDate(2023, 0, 1);
@@ -282,7 +282,7 @@ describe("environment patching units", () => {
       it("should handle Date modification methods correctly", () => {
         const DeterministicDate = createDeterministicDate(
           Date,
-          mockGetGenerationState
+          mockGetGenerationState,
         );
 
         const timestamp = 1640995200000; // 2022-01-01
@@ -307,7 +307,7 @@ describe("environment patching units", () => {
       it("should have timezone and locale methods available for future patching", () => {
         const DeterministicDate = createDeterministicDate(
           Date,
-          mockGetGenerationState
+          mockGetGenerationState,
         );
         const date = new DeterministicDate(1640995200000); // 2022-01-01T00:00:00.000Z
 
@@ -375,7 +375,7 @@ describe("environment patching units", () => {
 
       const proxiedConsole = createConsole(
         mockConsole as unknown as Console,
-        mockGetGenerationState
+        mockGetGenerationState,
       );
 
       proxiedConsole.log("test");
@@ -394,7 +394,7 @@ describe("environment patching units", () => {
 
       const proxiedConsole = createConsole(
         mockConsole as unknown as Console,
-        mockGetGenerationState
+        mockGetGenerationState,
       );
 
       // Methods should be functions (noop) but not call the original
@@ -413,11 +413,11 @@ describe("environment patching units", () => {
 
       const proxiedConsole = createConsole(
         mockConsole as unknown as Console,
-        mockGetGenerationState
+        mockGetGenerationState,
       );
 
       expect(() => proxiedConsole.Console).toThrow(
-        "console.Console() is not supported within workflows"
+        "console.Console() is not supported within workflows",
       );
     });
 
@@ -426,7 +426,7 @@ describe("environment patching units", () => {
 
       const proxiedConsole = createConsole(
         mockConsole as unknown as Console,
-        mockGetGenerationState
+        mockGetGenerationState,
       );
 
       proxiedConsole.count("test");
@@ -443,7 +443,7 @@ describe("environment patching units", () => {
 
       const proxiedConsole = createConsole(
         mockConsole as unknown as Console,
-        mockGetGenerationState
+        mockGetGenerationState,
       );
 
       proxiedConsole.count("test");
@@ -461,7 +461,7 @@ describe("environment patching units", () => {
 
       const proxiedConsole = createConsole(
         mockConsole as unknown as Console,
-        mockGetGenerationState
+        mockGetGenerationState,
       );
 
       proxiedConsole.groupEnd();
@@ -479,7 +479,7 @@ describe("environment patching units", () => {
 
       const proxiedConsole = createConsole(
         mockConsole as unknown as Console,
-        mockGetGenerationState
+        mockGetGenerationState,
       );
 
       proxiedConsole.time("test");
@@ -493,7 +493,7 @@ describe("environment patching units", () => {
 
       const proxiedConsole = createConsole(
         mockConsole as unknown as Console,
-        mockGetGenerationState
+        mockGetGenerationState,
       );
 
       proxiedConsole.count("test");

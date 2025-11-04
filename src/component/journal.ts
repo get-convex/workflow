@@ -45,7 +45,7 @@ export const load = query({
       const inProgress = await ctx.db
         .query("steps")
         .withIndex("inProgress", (q) =>
-          q.eq("step.inProgress", true).eq("workflowId", workflowId)
+          q.eq("step.inProgress", true).eq("workflowId", workflowId),
         )
         .first();
       if (inProgress) {
@@ -82,10 +82,10 @@ export const startSteps = mutation({
         schedulerOptions: v.optional(
           v.union(
             v.object({ runAt: v.optional(v.number()) }),
-            v.object({ runAfter: v.optional(v.number()) })
-          )
+            v.object({ runAfter: v.optional(v.number()) }),
+          ),
         ),
-      })
+      }),
     ),
     workpoolOptions: v.optional(workpoolOptions),
   },
@@ -147,7 +147,7 @@ export const startSteps = mutation({
             maxParallelism: args.workpoolOptions?.maxParallelism,
             onComplete: {
               fnHandle: await createFunctionHandle(
-                internal.pool.nestedWorkflowOnComplete
+                internal.pool.nestedWorkflowOnComplete,
               ),
               context: {
                 stepId,
@@ -171,7 +171,7 @@ export const startSteps = mutation({
                 ctx,
                 step.handle as FunctionHandle<"query">,
                 step.args,
-                { context, onComplete, name, ...schedulerOptions }
+                { context, onComplete, name, ...schedulerOptions },
               );
               break;
             }
@@ -180,7 +180,7 @@ export const startSteps = mutation({
                 ctx,
                 step.handle as FunctionHandle<"mutation">,
                 step.args,
-                { context, onComplete, name, ...schedulerOptions }
+                { context, onComplete, name, ...schedulerOptions },
               );
               break;
             }
@@ -189,7 +189,7 @@ export const startSteps = mutation({
                 ctx,
                 step.handle as FunctionHandle<"action">,
                 step.args,
-                { context, onComplete, name, retry, ...schedulerOptions }
+                { context, onComplete, name, retry, ...schedulerOptions },
               );
               break;
             }
@@ -205,7 +205,7 @@ export const startSteps = mutation({
           stepNumber,
         });
         return entry;
-      })
+      }),
     );
     return entries;
   },

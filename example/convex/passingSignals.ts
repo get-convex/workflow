@@ -12,7 +12,7 @@ export const signalBasedWorkflow = workflow.define({
     for (let i = 0; i < 3; i++) {
       const signalId = await ctx.runMutation(
         internal.passingSignals.createSignal,
-        { workflowId: ctx.workflowId },
+        { workflowId: ctx.workflowId }
       );
       await ctx.awaitEvent({ id: signalId });
       console.log("Signal received", signalId);

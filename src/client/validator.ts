@@ -7,7 +7,7 @@ import {
 
 export function checkArgs(
   args: Value,
-  validator: PropertyValidators | undefined,
+  validator: PropertyValidators | undefined
 ) {
   if (!validator) {
     return;
@@ -20,7 +20,7 @@ export function checkArgs(
 
 function check(
   value: Value,
-  validator: GenericValidator,
+  validator: GenericValidator
 ): { ok: true } | { ok: false; message: string } {
   switch (validator.kind) {
     case "id": {
@@ -149,7 +149,7 @@ function check(
         };
       }
       for (const [field, fieldValue] of Object.entries(
-        value as Record<string, Value>,
+        value as Record<string, Value>
       )) {
         const keyResult = check(field, validator.key);
         if (!keyResult.ok) {

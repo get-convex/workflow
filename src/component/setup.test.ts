@@ -8,7 +8,7 @@ export const modules = import.meta.glob("./**/*.*s");
 import componentSchema from "../../node_modules/@convex-dev/workpool/src/component/schema.js";
 export { componentSchema };
 export const componentModules = import.meta.glob(
-  "../../node_modules/@convex-dev/workpool/src/component/**/*.ts",
+  "../../node_modules/@convex-dev/workpool/src/component/**/*.ts"
 );
 export function initConvexTest() {
   const t = convexTest(schema, modules);

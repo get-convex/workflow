@@ -7,7 +7,7 @@ import {
 } from "convex/server";
 
 export function safeFunctionName(
-  f: FunctionReference<FunctionType, FunctionVisibility>,
+  f: FunctionReference<FunctionType, FunctionVisibility>
 ) {
   const address = getFunctionAddress(f);
   return (

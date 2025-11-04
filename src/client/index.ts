@@ -81,7 +81,7 @@ export type WorkflowDefinition<
   args?: ArgsValidator;
   handler: (
     step: WorkflowCtx,
-    args: ObjectType<ArgsValidator>,
+    args: ObjectType<ArgsValidator>
   ) => Promise<ReturnValueForOptionalValidator<ReturnsValidator>>;
   returns?: ReturnsValidator;
   workpoolOptions?: WorkpoolRetryOptions;
@@ -98,7 +98,7 @@ export class WorkflowManager {
     public component: WorkflowComponent,
     public options?: {
       workpoolOptions: WorkpoolOptions;
-    },
+    }
   ) {}
 
   /**
@@ -111,7 +111,7 @@ export class WorkflowManager {
     ArgsValidator extends PropertyValidators,
     ReturnsValidator extends Validator<unknown, "required", string> | void,
   >(
-    workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator>,
+    workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator>
   ): RegisteredMutation<
     "internal",
     {
@@ -125,7 +125,7 @@ export class WorkflowManager {
     return workflowMutation(
       this.component,
       workflow,
-      this.options?.workpoolOptions,
+      this.options?.workpoolOptions
     );
   }
 
@@ -156,7 +156,7 @@ export class WorkflowManager {
       startAsync?: boolean;
       /** @deprecated Use `startAsync` instead. */
       validateAsync?: boolean;
-    },
+    }
   ): Promise<WorkflowId> {
     const handle = await createFunctionHandle(workflow);
     const onComplete = options?.onComplete
@@ -185,11 +185,11 @@ export class WorkflowManager {
    */
   async status(
     ctx: RunQueryCtx,
-    workflowId: WorkflowId,
+    workflowId: WorkflowId
   ): Promise<WorkflowStatus> {
     const { workflow, inProgress } = await ctx.runQuery(
       this.component.workflow.getStatus,
-      { workflowId },
+      { workflowId }
     );
     const running = inProgress.map((entry) => entry.step as IdsToStrings<Step>);
     switch (workflow.runResult?.kind) {
@@ -233,7 +233,7 @@ export class WorkflowManager {
     opts?: {
       order?: "asc" | "desc";
       paginationOpts?: PaginationOptions;
-    },
+    }
   ): Promise<PaginationResult<WorkflowStep>> {
     const steps = await ctx.runQuery(this.component.workflow.listSteps, {
       workflowId,
@@ -277,9 +277,9 @@ export class WorkflowManager {
         | { validator?: undefined; value?: T }
         | { validator: Validator<T, any, any>; value: T }
         | { error: string; value?: undefined }
-      ),
+      )
   ): Promise<EventId<Name>> {
-    let result: RunResult =
+    const result: RunResult =
       "error" in args
         ? {
             kind: "failed",
@@ -310,7 +310,7 @@ export class WorkflowManager {
    */
   async createEvent<Name extends string>(
     ctx: RunMutationCtx,
-    args: { name: Name; workflowId: WorkflowId },
+    args: { name: Name; workflowId: WorkflowId }
   ): Promise<EventId<Name>> {
     return (await ctx.runMutation(this.component.event.create, {
       name: args.name,

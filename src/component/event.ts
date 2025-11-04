@@ -10,7 +10,7 @@ import { enqueueWorkflow, getWorkpool, workpoolOptions } from "./pool.js";
 export async function awaitEvent(
   ctx: MutationCtx,
   entry: Doc<"steps">,
-  args: { eventId?: Id<"events">; name: string },
+  args: { eventId?: Id<"events">; name: string }
 ) {
   const event = await getOrCreateEvent(ctx, entry.workflowId, args, [
     "sent",
@@ -19,12 +19,12 @@ export async function awaitEvent(
   switch (event.state.kind) {
     case "consumed": {
       throw new Error(
-        `Event already consumed: ${event._id} (${entry.step.name}) in workflow ${entry.workflowId} step ${entry.stepNumber} (${entry._id})`,
+        `Event already consumed: ${event._id} (${entry.step.name}) in workflow ${entry.workflowId} step ${entry.stepNumber} (${entry._id})`
       );
     }
     case "waiting": {
       throw new Error(
-        `Event already waiting: ${event._id} (${entry.step.name}) in workflow ${entry.workflowId} step ${entry.stepNumber} (${entry._id})`,
+        `Event already waiting: ${event._id} (${entry.step.name}) in workflow ${entry.workflowId} step ${entry.stepNumber} (${entry._id})`
       );
     }
   }
@@ -67,13 +67,13 @@ async function getOrCreateEvent(
   ctx: MutationCtx,
   workflowId: Id<"workflows"> | undefined,
   args: { eventId?: Id<"events">; name?: string },
-  statuses: Doc<"events">["state"]["kind"][],
+  statuses: Doc<"events">["state"]["kind"][]
 ): Promise<Doc<"events">> {
   if (args.eventId) {
     const event = await ctx.db.get(args.eventId);
     if (!event) {
       throw new Error(
-        `Event not found: ${args.eventId} (${args.name}) in workflow ${workflowId}`,
+        `Event not found: ${args.eventId} (${args.name}) in workflow ${workflowId}`
       );
     }
     return event;
@@ -84,7 +84,7 @@ async function getOrCreateEvent(
     const event = await ctx.db
       .query("events")
       .withIndex("workflowId_state", (q) =>
-        q.eq("workflowId", workflowId).eq("state.kind", status),
+        q.eq("workflowId", workflowId).eq("state.kind", status)
       )
       .filter((q) => q.eq(q.field("name"), args.name))
       .first();
@@ -117,19 +117,19 @@ export const send = mutation({
         eventId: args.eventId,
         name: args.name,
       },
-      ["waiting", "created"],
+      ["waiting", "created"]
     );
     const { workflowId } = event;
     const name = args.name ?? event.name;
     switch (event.state.kind) {
       case "sent": {
         throw new Error(
-          `Event already sent: ${event._id} (${name}) in workflow ${workflowId}`,
+          `Event already sent: ${event._id} (${name}) in workflow ${workflowId}`
         );
       }
       case "consumed": {
         throw new Error(
-          `Event already consumed: ${event._id} (${name}) in workflow ${workflowId}`,
+          `Event already consumed: ${event._id} (${name}) in workflow ${workflowId}`
         );
       }
       case "created": {
@@ -142,7 +142,7 @@ export const send = mutation({
         const step = await ctx.db.get(event.state.stepId);
         assert(
           step,
-          `Entry ${event.state.stepId} not found when sending event ${event._id} (${name}) in workflow ${workflowId}`,
+          `Entry ${event.state.stepId} not found when sending event ${event._id} (${name}) in workflow ${workflowId}`
         );
         assert(step.step.kind === "event", "Step is not an event");
         step.step.eventId = event._id;
@@ -162,7 +162,7 @@ export const send = mutation({
         const anyMoreEvents = await ctx.db
           .query("events")
           .withIndex("workflowId_state", (q) =>
-            q.eq("workflowId", workflowId).eq("state.kind", "waiting"),
+            q.eq("workflowId", workflowId).eq("state.kind", "waiting")
           )
           .order("desc")
           .first();

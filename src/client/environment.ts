@@ -46,7 +46,7 @@ export function patchMath(math: typeof Math, seed: string): typeof Math {
 // Testable unit: creates deterministic Date constructor
 export function createDeterministicDate(
   originalDate: typeof Date,
-  getGenerationState: () => GenerationState,
+  getGenerationState: () => GenerationState
 ): typeof Date {
   function DeterministicDate(this: unknown, ...args: unknown[]) {
     // `Date()` was called directly, not as a constructor.
@@ -59,7 +59,7 @@ export function createDeterministicDate(
       return new originalDate(now) as unknown as Date;
     }
     return new (originalDate as typeof Date)(
-      ...(args as ConstructorParameters<typeof Date>),
+      ...(args as ConstructorParameters<typeof Date>)
     ) as unknown as Date;
   }
 
@@ -84,7 +84,7 @@ export function createDeterministicDate(
 
 export function setupEnvironment(
   getGenerationState: () => GenerationState,
-  workflowId: string,
+  workflowId: string
 ): void {
   const global = globalThis as Record<string, unknown>;
 
@@ -101,7 +101,7 @@ export function setupEnvironment(
   // Patch fetch
   global.fetch = (_input: RequestInfo | URL, _init?: RequestInit) => {
     throw new Error(
-      `Fetch isn't currently supported within workflows. Perform the fetch within an action and call it with step.runAction().`,
+      `Fetch isn't currently supported within workflows. Perform the fetch within an action and call it with step.runAction().`
     );
   };
 
@@ -124,7 +124,7 @@ function noop() {}
 // exported for testing
 export function createConsole(
   console: Console,
-  getGenerationState: () => GenerationState,
+  getGenerationState: () => GenerationState
 ): Console {
   const counts: Record<string, number> = {};
   const times: Record<string, number> = {};
@@ -152,7 +152,7 @@ export function createConsole(
           return target[prop];
         case "Console":
           throw new Error(
-            "console.Console() is not supported within workflows",
+            "console.Console() is not supported within workflows"
           );
         case "count":
           return (label?: string) => {

@@ -61,11 +61,11 @@ export class StepExecutor {
     private journalEntries: Array<JournalEntry>,
     private receiver: BaseChannel<StepRequest>,
     private now: number,
-    private workpoolOptions: WorkpoolOptions | undefined,
+    private workpoolOptions: WorkpoolOptions | undefined
   ) {
     this.journalEntrySize = journalEntries.reduce(
       (size, entry) => size + journalEntrySize(entry),
-      0,
+      0
     );
 
     if (this.journalEntrySize > MAX_JOURNAL_SIZE) {
@@ -121,21 +121,21 @@ export class StepExecutor {
   completeMessage(message: StepRequest, entry: JournalEntry) {
     if (entry.step.inProgress) {
       throw new Error(
-        `Assertion failed: not blocked but have in-progress journal entry`,
+        `Assertion failed: not blocked but have in-progress journal entry`
       );
     }
     const stepArgsJson = JSON.stringify(convexToJson(entry.step.args));
     const messageArgsJson = JSON.stringify(
-      convexToJson(message.target.args as Value),
+      convexToJson(message.target.args as Value)
     );
     if (stepArgsJson !== messageArgsJson) {
       throw new Error(
-        `Journal entry mismatch: ${entry.step.args} !== ${message.target.args}`,
+        `Journal entry mismatch: ${entry.step.args} !== ${message.target.args}`
       );
     }
     if (entry.step.runResult === undefined) {
       throw new Error(
-        `Assertion failed: no outcome for completed function call`,
+        `Assertion failed: no outcome for completed function call`
       );
     }
     switch (entry.step.runResult.kind) {
@@ -189,7 +189,7 @@ export class StepExecutor {
           schedulerOptions: message.schedulerOptions,
           step,
         };
-      }),
+      })
     );
     const entries = (await this.ctx.runMutation(
       this.component.journal.startSteps,
@@ -198,14 +198,14 @@ export class StepExecutor {
         generationNumber: this.generationNumber,
         steps,
         workpoolOptions: this.workpoolOptions,
-      },
+      }
     )) as JournalEntry[];
     for (const entry of entries) {
       this.journalEntrySize += journalEntrySize(entry);
       if (this.journalEntrySize > MAX_JOURNAL_SIZE) {
         throw new Error(
           journalSizeError(this.journalEntrySize, this.workflowId) +
-            ` The failing step was ${entry.step.name} (${entry._id})`,
+            ` The failing step was ${entry.step.name} (${entry._id})`
         );
       }
     }

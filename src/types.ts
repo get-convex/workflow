@@ -55,7 +55,7 @@ export const vWorkflowStep = v.object({
   kind: v.union(
     v.literal("function"),
     v.literal("workflow"),
-    v.literal("event"),
+    v.literal("event")
   ),
   workId: v.optional(vWorkIdValidator),
   nestedWorkflowId: v.optional(vWorkflowId),
@@ -110,8 +110,8 @@ export function vPaginationResult<
       v.union(
         v.literal("SplitRecommended"),
         v.literal("SplitRequired"),
-        v.null(),
-      ),
+        v.null()
+      )
     ),
   });
 }

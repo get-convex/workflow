@@ -14,7 +14,7 @@ export const exampleWorkflow = workflow.define({
   },
   handler: async (
     step,
-    args,
+    args
     // When returning things from other functions, you need to break the type
     // inference cycle by specifying the return type explicitly.
   ): Promise<{
@@ -45,7 +45,7 @@ export const exampleWorkflow = workflow.define({
     const temp =
       Math.random() > 0.5 ? `${farenheit.toFixed(1)}°F` : `${temperature}°C`;
     console.log(
-      `Weather in ${name}: ${temp}, ${windSpeed} km/h, ${windGust} km/h`,
+      `Weather in ${name}: ${temp}, ${windSpeed} km/h, ${windGust} km/h`
     );
     console.timeLog("weather", temperature);
     await step.runMutation(internal.example.updateFlow, {
@@ -83,7 +83,7 @@ export const startWorkflow = internalMutation({
         onComplete: internal.example.flowCompleted,
         context: { location },
         startAsync: true,
-      },
+      }
     );
     await ctx.db.insert("flows", { workflowId: id, in: location, out: null });
     return id;

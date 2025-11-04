@@ -34,7 +34,7 @@ const workflowArgs = v.union(
   v.object({
     fn: v.string(),
     args: v.any(),
-  }),
+  })
 );
 const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke the workflow with ctx.runMutation() instead of workflow.start()? Pro tip: to start a workflow directly from the CLI or dashboard, you can use args '{ fn: "path/to/file:workflowName", args: { ...your workflow args } }'`;
 
@@ -45,7 +45,7 @@ const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke
 export function workflowMutation<ArgsValidator extends PropertyValidators>(
   component: WorkflowComponent,
   registered: WorkflowDefinition<ArgsValidator>,
-  defaultWorkpoolOptions?: WorkpoolOptions,
+  defaultWorkpoolOptions?: WorkpoolOptions
 ): RegisteredMutation<
   "internal",
   {
@@ -76,7 +76,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
       const { workflowId, generationNumber } = args;
       const { workflow, logLevel, journalEntries, ok } = await ctx.runQuery(
         component.journal.load,
-        { workflowId, shortCircuit: true },
+        { workflowId, shortCircuit: true }
       );
       const inProgress = journalEntries.filter(({ step }) => step.inProgress);
       const console = createLogger(logLevel);
@@ -91,7 +91,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
       }
       if (workflow.generationNumber !== generationNumber) {
         console.error(
-          `Invalid generation number: ${generationNumber} running workflow ${workflow.name} (${workflowId})`,
+          `Invalid generation number: ${generationNumber} running workflow ${workflow.name} (${workflowId})`
         );
         return;
       }
@@ -104,18 +104,18 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
           `Workflow ${workflowId} blocked by ` +
             inProgress
               .map((entry) => `${entry.step.name} (${entry._id})`)
-              .join(", "),
+              .join(", ")
         );
         return;
       }
       for (const journalEntry of journalEntries) {
         assert(
           !journalEntry.step.inProgress,
-          `Assertion failed: not blocked but have in-progress journal entry`,
+          `Assertion failed: not blocked but have in-progress journal entry`
         );
       }
       const channel = new BaseChannel<StepRequest>(
-        workpoolOptions.maxParallelism ?? 10,
+        workpoolOptions.maxParallelism ?? 10
       );
       const step = createWorkflowCtx(workflowId, channel);
       const executor = new StepExecutor(
@@ -126,7 +126,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         journalEntries as JournalEntry[],
         channel,
         Date.now(),
-        workpoolOptions,
+        workpoolOptions
       );
       setupEnvironment(executor.getGenerationState.bind(executor), workflowId);
 
@@ -149,7 +149,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
                   : formatErrorWithStack(error);
               console.error(
                 "Workflow handler returned invalid return value: ",
-                message,
+                message
               );
               runResult = {
                 kind: "failed",

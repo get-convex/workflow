@@ -10,7 +10,7 @@ function getOpenAI() {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error(
       "OPENAI_API_KEY is not configured.\n" +
-        "npx convex env set OPENAI_API_KEY sk-****",
+        "npx convex env set OPENAI_API_KEY sk-****"
     );
   }
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -29,7 +29,7 @@ export const startTranscription = internalMutation({
     const id: string = await workflow.start(
       ctx,
       internal.transcription.transcriptionWorkflow,
-      { storageId: args.storageId },
+      { storageId: args.storageId }
     );
     return id;
   },
@@ -44,13 +44,13 @@ export const transcriptionWorkflow = workflow.define({
       internal.transcription.computeTranscription,
       {
         storageId: args.storageId,
-      },
+      }
     );
     console.log(transcription);
     const embedding = await step.runAction(
       internal.transcription.computeEmbedding,
       { transcription },
-      { retry: false },
+      { retry: false }
     );
     console.log(embedding.slice(0, 20));
   },

@@ -9,7 +9,7 @@ export const parentWorkflow = workflow.define({
     console.log("Starting confirmation workflow");
     const length = await ctx.runWorkflow(
       internal.nestedWorkflow.childWorkflow,
-      { foo: args.prompt },
+      { foo: args.prompt }
     );
     console.log("Length:", length);
     const stepResult = await ctx.runMutation(internal.nestedWorkflow.step, {

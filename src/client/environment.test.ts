@@ -138,14 +138,23 @@ describe("environment patching units", () => {
 
     describe("behavior validation vs original Date", () => {
       it("should produce identical outputs for specific dates", () => {
-        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+        const DeterministicDate = createDeterministicDate(
+          Date,
+          mockGetGenerationState,
+        );
 
         // Test with specific timestamps
         const timestamps = [
           0, // Unix epoch
           946684800000, // Y2K
           1640995200000, // 2022-01-01
-          2023, 0, 15, 10, 30, 45, 123 // Feb 15, 2023 10:30:45.123
+          2023,
+          0,
+          15,
+          10,
+          30,
+          45,
+          123, // Feb 15, 2023 10:30:45.123
         ];
 
         for (const ts of [timestamps[0], timestamps[1], timestamps[2]]) {
@@ -159,12 +168,22 @@ describe("environment patching units", () => {
           expect(deterministic.getHours()).toBe(original.getHours());
           expect(deterministic.getMinutes()).toBe(original.getMinutes());
           expect(deterministic.getSeconds()).toBe(original.getSeconds());
-          expect(deterministic.getMilliseconds()).toBe(original.getMilliseconds());
+          expect(deterministic.getMilliseconds()).toBe(
+            original.getMilliseconds(),
+          );
         }
 
         // Test with constructor args
         const original = new Date(2023, 0, 15, 10, 30, 45, 123);
-        const deterministic = new DeterministicDate(2023, 0, 15, 10, 30, 45, 123);
+        const deterministic = new DeterministicDate(
+          2023,
+          0,
+          15,
+          10,
+          30,
+          45,
+          123,
+        );
 
         expect(deterministic.getFullYear()).toBe(original.getFullYear());
         expect(deterministic.getMonth()).toBe(original.getMonth());
@@ -172,11 +191,16 @@ describe("environment patching units", () => {
         expect(deterministic.getHours()).toBe(original.getHours());
         expect(deterministic.getMinutes()).toBe(original.getMinutes());
         expect(deterministic.getSeconds()).toBe(original.getSeconds());
-        expect(deterministic.getMilliseconds()).toBe(original.getMilliseconds());
+        expect(deterministic.getMilliseconds()).toBe(
+          original.getMilliseconds(),
+        );
       });
 
       it("should produce identical string representations for deterministic dates", () => {
-        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+        const DeterministicDate = createDeterministicDate(
+          Date,
+          mockGetGenerationState,
+        );
 
         const timestamp = 1640995200000; // 2022-01-01T00:00:00.000Z
         const original = new Date(timestamp);
@@ -192,7 +216,10 @@ describe("environment patching units", () => {
       });
 
       it("should handle UTC methods identically", () => {
-        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+        const DeterministicDate = createDeterministicDate(
+          Date,
+          mockGetGenerationState,
+        );
 
         const timestamp = 1640995200123; // 2022-01-01T00:00:00.123Z
         const original = new Date(timestamp);
@@ -204,12 +231,17 @@ describe("environment patching units", () => {
         expect(deterministic.getUTCHours()).toBe(original.getUTCHours());
         expect(deterministic.getUTCMinutes()).toBe(original.getUTCMinutes());
         expect(deterministic.getUTCSeconds()).toBe(original.getUTCSeconds());
-        expect(deterministic.getUTCMilliseconds()).toBe(original.getUTCMilliseconds());
+        expect(deterministic.getUTCMilliseconds()).toBe(
+          original.getUTCMilliseconds(),
+        );
         expect(deterministic.getUTCDay()).toBe(original.getUTCDay());
       });
 
       it("should handle static methods identically", () => {
-        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+        const DeterministicDate = createDeterministicDate(
+          Date,
+          mockGetGenerationState,
+        );
 
         const dateString = "2023-01-15T10:30:45.123Z";
         const year = 2023;
@@ -220,13 +252,19 @@ describe("environment patching units", () => {
         const second = 45;
         const ms = 123;
 
-        expect(DeterministicDate.parse(dateString)).toBe(Date.parse(dateString));
-        expect(DeterministicDate.UTC(year, month, day, hour, minute, second, ms))
-          .toBe(Date.UTC(year, month, day, hour, minute, second, ms));
+        expect(DeterministicDate.parse(dateString)).toBe(
+          Date.parse(dateString),
+        );
+        expect(
+          DeterministicDate.UTC(year, month, day, hour, minute, second, ms),
+        ).toBe(Date.UTC(year, month, day, hour, minute, second, ms));
       });
 
       it("should maintain Date compatibility", () => {
-        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+        const DeterministicDate = createDeterministicDate(
+          Date,
+          mockGetGenerationState,
+        );
 
         const date = new DeterministicDate(2023, 0, 1);
 
@@ -242,7 +280,10 @@ describe("environment patching units", () => {
       });
 
       it("should handle Date modification methods correctly", () => {
-        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+        const DeterministicDate = createDeterministicDate(
+          Date,
+          mockGetGenerationState,
+        );
 
         const timestamp = 1640995200000; // 2022-01-01
         const original = new Date(timestamp);
@@ -264,7 +305,10 @@ describe("environment patching units", () => {
       });
 
       it("should have timezone and locale methods available for future patching", () => {
-        const DeterministicDate = createDeterministicDate(Date, mockGetGenerationState);
+        const DeterministicDate = createDeterministicDate(
+          Date,
+          mockGetGenerationState,
+        );
         const date = new DeterministicDate(1640995200000); // 2022-01-01T00:00:00.000Z
 
         // These methods exist but are not yet fully patched for determinism

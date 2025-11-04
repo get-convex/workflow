@@ -1,19 +1,17 @@
 {
   "compilerOptions": {
-    "allowJs": true,
-    "strict": true,
-    "skipLibCheck": true,
     "target": "ESNext",
-    "lib": ["ES2021", "dom", "DOM.Iterable", "ESNext.Array"],
-    "forceConsistentCasingInFileNames": true,
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "skipLibCheck": false,
     "allowSyntheticDefaultImports": true,
-    "verbatimModuleSyntax": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "isolatedModules": true,
-    "noEmit": true,
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "noEmit": true
   },
-  "include": [".*"],
-  "exclude": ["./_generated"]
+  "include": ["."],
+  "exclude": ["_generated"]
 }

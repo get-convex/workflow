@@ -18,19 +18,19 @@
     "dev:frontend": "cd example && vite --clearScreen false",
     "dev:build": "npx chokidar 'tsconfig*.json' 'src/**/*.ts' -i '**/*.test.ts' -c 'npx convex codegen --component ./src/component && npm run build' --initial",
     "predev": "npm run dev:backend -- --until-success",
-    "clean": "rm -rf dist tsconfig.build.tsbuildinfo",
-    "build": "tsc --project ./tsconfig.build.json && npm run copy:dts",
-    "copy:dts": "rsync -a --include='*/' --include='*.d.ts' --exclude='*' src/ dist/ || cpy 'src/**/*.d.ts' 'dist/' --parents",
-    "typecheck": "tsc --noEmit && tsc -p example/convex",
-    "lint": "eslint src && eslint example/convex",
-    "all": "run-p -r 'dev:backend' 'dev:frontend' 'build:watch' 'test:watch'",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "build": "tsc --project ./tsconfig.build.json",
+    "typecheck": "tsc --noEmit && tsc -p example && tsc -p example/convex",
+    "lint": "eslint src && eslint example",
+    "all": "run-p -r 'dev:*' 'test:watch'",
     "test": "vitest run --typecheck",
     "test:watch": "vitest --typecheck --clearScreen false",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:coverage": "vitest run --coverage --coverage.reporter=text",
+    "attw": "attw $(npm pack -s) --exclude-entrypoints ./convex.config --profile esm-only",
     "prepare": "npm run build",
-    "alpha": "npm run clean && npm ci && run-p test lint typecheck && npm version prerelease --preid alpha && npm publish --tag alpha && git push --tags",
-    "release": "npm run clean && npm ci && run-p test lint typecheck && npm version patch && npm publish && git push --tags",
+    "alpha": "npm run clean && npm ci && run-p test lint typecheck attw && npm version prerelease --preid alpha && npm publish --tag alpha && git push --tags",
+    "release": "npm run clean && npm ci && run-p test lint typecheck attw && npm version patch && npm publish && git push --tags",
     "version": "pbcopy <<<$npm_package_version; vim CHANGELOG.md && prettier -w CHANGELOG.md && git add CHANGELOG.md"
   },
   "files": [
@@ -44,6 +44,9 @@
       "default": "./dist/client/index.js"
     },
     "./test": "./src/test.ts",
+    "./_generated/component.js": {
+      "types": "./dist/component/_generated/component.d.ts"
+    },
     "./convex.config": {
       "types": "./dist/component/convex.config.d.ts",
       "default": "./dist/component/convex.config.js"
@@ -51,7 +54,7 @@
   },
   "peerDependencies": {
     "@convex-dev/workpool": "^0.2.19",
-    "convex": ">=1.25.0 <1.35.0",
+    "convex": "^1.24.8",
     "convex-helpers": "^0.1.99"
   },
   "dependencies": {
@@ -62,7 +65,7 @@
     "@edge-runtime/vm": "5.0.0",
     "@eslint/eslintrc": "3.3.1",
     "@eslint/js": "9.38.0",
-    "@types/node": "22.18.12",
+    "@types/node": "20.19.24",
     "@typescript-eslint/eslint-plugin": "8.40.0",
     "@typescript-eslint/parser": "8.40.0",
     "chokidar-cli": "3.0.0",
@@ -80,7 +83,6 @@
     "typescript-eslint": "8.40.0",
     "vitest": "3.2.4"
   },
-  "main": "./dist/client/index.js",
   "types": "./dist/client/index.d.ts",
   "module": "./dist/client/index.js"
 }

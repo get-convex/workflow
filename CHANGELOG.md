@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0
+## 0.2.8-alpha.NaN
 
 - Adds /test and /_generated/component.js entrypoints
 - Drops commonjs support

@@ -90,7 +90,7 @@ Then, install the component within your `convex/convex.config.ts` file:
 
 ```ts
 // convex/convex.config.ts
-import workflow from "@convex-dev/workflow/convex.config";
+import workflow from "@convex-dev/workflow/convex.config.js";
 import { defineApp } from "convex/server";
 
 const app = defineApp();

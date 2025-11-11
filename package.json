@@ -72,7 +72,7 @@
     "@typescript-eslint/eslint-plugin": "8.46.3",
     "@typescript-eslint/parser": "8.46.3",
     "chokidar-cli": "3.0.0",
-    "convex": "1.28.2",
+    "convex": "1.29.0",
     "convex-helpers": "0.1.104",
     "convex-test": "0.0.38",
     "cpy-cli": "6.0.0",

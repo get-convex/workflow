@@ -31,7 +31,7 @@ import type {
   WorkflowStep,
 } from "../types.js";
 import { safeFunctionName } from "./safeFunctionName.js";
-import type { OpaqueIds, WorkflowComponent } from "./types.js";
+import type { IdsToStrings, WorkflowComponent } from "./types.js";
 import type { WorkflowCtx } from "./workflowContext.js";
 import { workflowMutation } from "./workflowMutation.js";
 
@@ -88,7 +88,7 @@ export type WorkflowDefinition<
 };
 
 export type WorkflowStatus =
-  | { type: "inProgress"; running: OpaqueIds<Step>[] }
+  | { type: "inProgress"; running: IdsToStrings<Step>[] }
   | { type: "completed"; result: unknown }
   | { type: "canceled" }
   | { type: "failed"; error: string };
@@ -191,7 +191,7 @@ export class WorkflowManager {
       this.component.workflow.getStatus,
       { workflowId },
     );
-    const running = inProgress.map((entry) => entry.step);
+    const running = inProgress.map((entry) => entry.step as IdsToStrings<Step>);
     switch (workflow.runResult?.kind) {
       case undefined:
         return { type: "inProgress", running };
@@ -279,7 +279,7 @@ export class WorkflowManager {
         | { error: string; value?: undefined }
       ),
   ): Promise<EventId<Name>> {
-    let result: RunResult =
+    const result: RunResult =
       "error" in args
         ? {
             kind: "failed",

@@ -23,7 +23,7 @@ npm run test
 
 ```sh
 npm run clean
-npm run build
+npm ci
 npm pack
 ```
 
@@ -33,7 +33,7 @@ npm pack
 npm run release
 ```
 
-#### Alpha release
+or for alpha release:
 
 ```sh
 npm run alpha

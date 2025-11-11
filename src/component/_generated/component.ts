@@ -1,6 +1,6 @@
 /* eslint-disable */
 /**
- * Generated `api` utility.
+ * Generated `ComponentApi` utility.
  *
  * THIS CODE IS AUTOMATICALLY GENERATED.
  *
@@ -8,62 +8,28 @@
  * @module
  */
 
-import type * as admin from "../admin.js";
-import type * as example from "../example.js";
-import type * as nestedWorkflow from "../nestedWorkflow.js";
-import type * as passingSignals from "../passingSignals.js";
-import type * as transcription from "../transcription.js";
-import type * as userConfirmation from "../userConfirmation.js";
-
-import type {
-  ApiFromModules,
-  FilterApi,
-  FunctionReference,
-} from "convex/server";
-
-declare const fullApi: ApiFromModules<{
-  admin: typeof admin;
-  example: typeof example;
-  nestedWorkflow: typeof nestedWorkflow;
-  passingSignals: typeof passingSignals;
-  transcription: typeof transcription;
-  userConfirmation: typeof userConfirmation;
-}>;
+import type { FunctionReference } from "convex/server";
 
 /**
- * A utility for referencing Convex functions in your app's public API.
+ * A utility for referencing a Convex component's exposed API.
  *
+ * Useful when expecting a parameter like `components.myComponent`.
  * Usage:
- * ```js
- * const myFunctionReference = api.myModule.myFunction;
+ * ```ts
+ * async function myFunction(ctx: QueryCtx, component: ComponentApi) {
+ *   return ctx.runQuery(component.someFile.someQuery, { ...args });
+ * }
  * ```
  */
-export declare const api: FilterApi<
-  typeof fullApi,
-  FunctionReference<any, "public">
->;
-
-/**
- * A utility for referencing Convex functions in your app's internal API.
- *
- * Usage:
- * ```js
- * const myFunctionReference = internal.myModule.myFunction;
- * ```
- */
-export declare const internal: FilterApi<
-  typeof fullApi,
-  FunctionReference<any, "internal">
->;
-
-export declare const components: {
-  workflow: {
+export type ComponentApi<Name extends string | undefined = string | undefined> =
+  {
     event: {
       create: FunctionReference<
         "mutation",
         "internal",
         { name: string; workflowId: string },
-        string
+        string,
+        Name
       >;
       send: FunctionReference<
         "mutation",
@@ -87,7 +53,8 @@ export declare const components: {
             retryActionsByDefault?: boolean;
           };
         },
-        string
+        string,
+        Name
       >;
     };
     journal: {
@@ -167,7 +134,8 @@ export declare const components: {
             state?: any;
             workflowHandle: string;
           };
-        }
+        },
+        Name
       >;
       startSteps: FunctionReference<
         "mutation",
@@ -289,7 +257,8 @@ export declare const components: {
               };
           stepNumber: number;
           workflowId: string;
-        }>
+        }>,
+        Name
       >;
     };
     workflow: {
@@ -297,13 +266,15 @@ export declare const components: {
         "mutation",
         "internal",
         { workflowId: string },
-        null
+        null,
+        Name
       >;
       cleanup: FunctionReference<
         "mutation",
         "internal",
         { workflowId: string },
-        boolean
+        boolean,
+        Name
       >;
       complete: FunctionReference<
         "mutation",
@@ -316,7 +287,8 @@ export declare const components: {
             | { kind: "canceled" };
           workflowId: string;
         },
-        null
+        null,
+        Name
       >;
       create: FunctionReference<
         "mutation",
@@ -329,7 +301,8 @@ export declare const components: {
           workflowHandle: string;
           workflowName: string;
         },
-        string
+        string,
+        Name
       >;
       getStatus: FunctionReference<
         "query",
@@ -405,7 +378,8 @@ export declare const components: {
             state?: any;
             workflowHandle: string;
           };
-        }
+        },
+        Name
       >;
       listSteps: FunctionReference<
         "query",
@@ -444,8 +418,8 @@ export declare const components: {
           }>;
           pageStatus?: "SplitRecommended" | "SplitRequired" | null;
           splitCursor?: string | null;
-        }
+        },
+        Name
       >;
     };
   };
-};

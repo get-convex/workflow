@@ -8,7 +8,7 @@ export const modules = import.meta.glob("./**/*.*s");
 
 export function initConvexTest() {
   const t = convexTest(schema, modules);
-  t.registerComponent("workflow", workflow.schema, workflow.modules);
+  workflow.register(t);
   return t;
 }
 

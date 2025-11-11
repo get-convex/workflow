@@ -71,11 +71,12 @@ export const userOnboarding = workflow.define({
 });
 ```
 
-This component adds durably executed _workflows_ to Convex. Combine Convex queries, mutations,
-and actions into long-lived workflows, and the system will always fully execute a workflow
-to completion.
+This component adds durably executed _workflows_ to Convex. Combine Convex
+queries, mutations, and actions into long-lived workflows, and the system will
+always fully execute a workflow to completion.
 
-Open a [GitHub issue](https://github.com/get-convex/workflow/issues) with any feedback or bugs you find.
+Open a [GitHub issue](https://github.com/get-convex/workflow/issues) with any
+feedback or bugs you find.
 
 ## Installation
 
@@ -89,7 +90,7 @@ Then, install the component within your `convex/convex.config.ts` file:
 
 ```ts
 // convex/convex.config.ts
-import workflow from "@convex-dev/workflow/convex.config";
+import workflow from "@convex-dev/workflow/convex.config.js";
 import { defineApp } from "convex/server";
 
 const app = defineApp();
@@ -97,8 +98,8 @@ app.use(workflow);
 export default app;
 ```
 
-Finally, create a workflow manager within your `convex/` folder, and point it
-to the installed component:
+Finally, create a workflow manager within your `convex/` folder, and point it to
+the installed component:
 
 ```ts
 // convex/index.ts
@@ -114,13 +115,13 @@ The first step is to define a workflow using `workflow.define()`. This function
 is designed to feel like a Convex action but with a few restrictions:
 
 1. The workflow runs in the background, so it can't return a value.
-2. The workflow must be _deterministic_, so it should implement most of its logic
-   by calling out to other Convex functions. We restrict access to some
+2. The workflow must be _deterministic_, so it should implement most of its
+   logic by calling out to other Convex functions. We restrict access to some
    non-deterministic functions like `fetch` and `crypto`. Others we patch, such
    as `console` for logging, `Math.random()` (seeded PRNG) and `Date` for time.
 
-Note: To help avoid type cycles, always annotate the return type of the `handler`
-with the return type of the workflow.
+Note: To help avoid type cycles, always annotate the return type of the
+`handler` with the return type of the workflow.
 
 ```ts
 export const exampleWorkflow = workflow.define({
@@ -157,8 +158,8 @@ export const exampleAction = internalAction({
 
 ### Starting a workflow
 
-Once you've defined a workflow, you can start it from a mutation or action
-using `workflow.start()`.
+Once you've defined a workflow, you can start it from a mutation or action using
+`workflow.start()`.
 
 ```ts
 export const kickoffWorkflow = mutation({
@@ -228,8 +229,8 @@ export const handleOnComplete = mutation({
 
 ### Running steps in parallel
 
-You can run steps in parallel by calling `step.runAction()` multiple times in
-a `Promise.all()` call.
+You can run steps in parallel by calling `step.runAction()` multiple times in a
+`Promise.all()` call.
 
 ```ts
 export const exampleWorkflow = workflow.define({
@@ -243,20 +244,21 @@ export const exampleWorkflow = workflow.define({
 });
 ```
 
-Note: The workflow will not proceed until all steps fired off at once have completed.
+Note: The workflow will not proceed until all steps fired off at once have
+completed.
 
 ### Specifying retry behavior
 
 Sometimes actions fail due to transient errors, whether it was an unreliable
 third-party API or a server restart. You can have the workflow automatically
-retry actions using best practices (exponential backoff & jitter).
-By default there are no retries, and the workflow will fail.
+retry actions using best practices (exponential backoff & jitter). By default
+there are no retries, and the workflow will fail.
 
 You can specify default retry behavior for all workflows on the WorkflowManager,
 or override it on a per-workflow basis.
 
-You can also specify a custom retry behavior per-step, to opt-out of retries
-for actions that may want at-most-once semantics.
+You can also specify a custom retry behavior per-step, to opt-out of retries for
+actions that may want at-most-once semantics.
 
 Workpool options:
 
@@ -270,8 +272,8 @@ If you specify any of these, it will override the
 - `retryActionsByDefault`: Whether to retry actions, by default is false.
   - If you specify a retry behavior at the step level, it will always retry.
 
-At the step level, you can also specify `true` or `false` to disable or use
-the default policy.
+At the step level, you can also specify `true` or `false` to disable or use the
+default policy.
 
 ```ts
 const workflow = new WorkflowManager(components.workflow, {
@@ -306,11 +308,10 @@ export const exampleWorkflow = workflow.define({
 ### Specifying step parallelism
 
 You can specify how many steps can run in parallel by setting the
-`maxParallelism` workpool option. It has a reasonable default.
-On the free tier, you should not exceed 20, otherwise your other scheduled
-functions may become delayed while competing for available functions with your
-workflow steps.
-On a Pro account, you should not exceed 100 across all your workflows and workpools.
+`maxParallelism` workpool option. It has a reasonable default. On the free tier,
+you should not exceed 20, otherwise your other scheduled functions may become
+delayed while competing for available functions with your workflow steps. On a
+Pro account, you should not exceed 100 across all your workflows and workpools.
 If you want to do a lot of work in parallel, you should employ batching, where
 each workflow operates on a batch of work, e.g. scraping a list of links instead
 of one link per workflow.
@@ -328,8 +329,8 @@ const workflow = new WorkflowManager(components.workflow, {
 
 ### Checking a workflow's status
 
-The `workflow.start()` method returns a `WorkflowId`, which can then be used for querying
-a workflow's status.
+The `workflow.start()` method returns a `WorkflowId`, which can then be used for
+querying a workflow's status.
 
 ```ts
 export const kickoffWorkflow = action({
@@ -349,8 +350,9 @@ export const kickoffWorkflow = action({
 
 ### Canceling a workflow
 
-You can cancel a workflow with `workflow.cancel()`, halting the workflow's execution immmediately.
-In-progress calls to `step.runAction()`, however, will finish executing.
+You can cancel a workflow with `workflow.cancel()`, halting the workflow's
+execution immmediately. In-progress calls to `step.runAction()`, however, will
+finish executing.
 
 ```ts
 export const kickoffWorkflow = action({
@@ -370,8 +372,9 @@ export const kickoffWorkflow = action({
 
 ### Cleaning up a workflow
 
-After a workflow has completed, you can clean up its storage with `workflow.cleanup()`.
-Completed workflows are not automatically cleaned up by the system.
+After a workflow has completed, you can clean up its storage with
+`workflow.cleanup()`. Completed workflows are not automatically cleaned up by
+the system.
 
 ```ts
 export const kickoffWorkflow = action({
@@ -402,8 +405,8 @@ export const kickoffWorkflow = action({
 
 You can specify a custom name for a step by passing a `name` option to the step.
 
-This allows the events emitted to your logs to be more descriptive.
-By default it uses the `file/folder:function` name.
+This allows the events emitted to your logs to be more descriptive. By default
+it uses the `file/folder:function` name.
 
 ```ts
 export const exampleWorkflow = workflow.define({
@@ -418,9 +421,11 @@ export const exampleWorkflow = workflow.define({
 
 ### Circular dependencies
 
-Having the return value of workflows depend on other Convex functions can lead to circular dependencies due to the
-`internal.foo.bar` way of specifying functions. The way to fix this is to explicitly type the return value of the
-workflow. When in doubt, add return types to more `handler` functions, like this:
+Having the return value of workflows depend on other Convex functions can lead
+to circular dependencies due to the `internal.foo.bar` way of specifying
+functions. The way to fix this is to explicitly type the return value of the
+workflow. When in doubt, add return types to more `handler` functions, like
+this:
 
 ```diff
  export const supportAgentWorkflow = workflow.define({
@@ -441,8 +446,8 @@ workflow. When in doubt, add return types to more `handler` functions, like this
 
 ### More concise workflows
 
-To avoid the noise of `internal.foo.*` syntax, you can use a variable.
-For instance, if you define all your steps in `convex/steps.ts`, you can do this:
+To avoid the noise of `internal.foo.*` syntax, you can use a variable. For
+instance, if you define all your steps in `convex/steps.ts`, you can do this:
 
 ```diff
  const s = internal.steps;
@@ -469,15 +474,16 @@ Here are a few limitations to keep in mind:
   mutation apply and limit the number and size of steps you can perform to 16MiB
   (including the workflow state overhead). See more about mutation limits here:
   https://docs.convex.dev/production/state/limits#transactions
-- We currently do not collect backtraces from within function calls from workflows.
+- We currently do not collect backtraces from within function calls from
+  workflows.
 - If you need to use side effects like `fetch` or use cryptographic randomness,
   you'll need to do that in a step, not in the workflow definition.
 - `Math.random` is deterministic and not suitable for cryptographic use. It is,
   however, useful for sharding, jitter, and other pseudo-random applications.
 - If the implementation of the workflow meaningfully changes (steps added,
-  removed, or reordered) then it will fail with a determinism violation.
-  The implementation should stay stable for the lifetime of active workflows.
-  See [this issue](https://github.com/get-convex/workflow/issues/35) for ideas
-  on how to make this better.
+  removed, or reordered) then it will fail with a determinism violation. The
+  implementation should stay stable for the lifetime of active workflows. See
+  [this issue](https://github.com/get-convex/workflow/issues/35) for ideas on
+  how to make this better.
 
 <!-- END: Include on https://convex.dev/components -->

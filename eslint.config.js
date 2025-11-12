@@ -11,7 +11,6 @@ export default [
       "eslint.config.js",
       "vitest.config.ts",
       "**/_generated/",
-      "node10stubs.mjs",
     ],
   },
   {

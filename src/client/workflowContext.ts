@@ -6,6 +6,7 @@ import type {
   FunctionReference,
   FunctionReturnType,
   FunctionType,
+  FunctionVisibility,
 } from "convex/server";
 import type { Validator } from "convex/values";
 import type { EventId, SchedulerOptions, WorkflowId } from "../types.js";
@@ -33,10 +34,9 @@ export type WorkflowCtx = {
    * @param args - The arguments to the query function.
    * @param opts - Options for scheduling and naming the query.
    */
-  runQuery<Query extends FunctionReference<"query", "internal">>(
+  runQuery<Query extends FunctionReference<"query", FunctionVisibility>>(
     query: Query,
-    args: FunctionArgs<Query>,
-    opts?: RunOptions,
+    ...args: OptionalRestArgs<RunOptions, Query>
   ): Promise<FunctionReturnType<Query>>;
 
   /**
@@ -46,10 +46,11 @@ export type WorkflowCtx = {
    * @param args - The arguments to the mutation function.
    * @param opts - Options for scheduling and naming the mutation.
    */
-  runMutation<Mutation extends FunctionReference<"mutation", "internal">>(
+  runMutation<
+    Mutation extends FunctionReference<"mutation", FunctionVisibility>,
+  >(
     mutation: Mutation,
-    args: FunctionArgs<Mutation>,
-    opts?: RunOptions,
+    ...args: OptionalRestArgs<RunOptions, Mutation>
   ): Promise<FunctionReturnType<Mutation>>;
 
   /**
@@ -59,10 +60,9 @@ export type WorkflowCtx = {
    * @param args - The arguments to the action function.
    * @param opts - Options for retrying, scheduling and naming the action.
    */
-  runAction<Action extends FunctionReference<"action", "internal">>(
+  runAction<Action extends FunctionReference<"action", FunctionVisibility>>(
     action: Action,
-    args: FunctionArgs<Action>,
-    opts?: RunOptions & RetryOption,
+    ...args: OptionalRestArgs<RunOptions & RetryOption, Action>
   ): Promise<FunctionReturnType<Action>>;
 
   /**
@@ -98,6 +98,14 @@ export type WorkflowCtx = {
     },
   ): Promise<T>;
 };
+
+export type OptionalRestArgs<
+  Opts,
+  FuncRef extends FunctionReference<FunctionType, FunctionVisibility>,
+> =
+  FuncRef["_args"] extends Record<string, never>
+    ? [args?: Record<string, never>, opts?: Opts]
+    : [args: FuncRef["_args"], opts?: Opts];
 
 export function createWorkflowCtx(
   workflowId: WorkflowId,
@@ -150,7 +158,7 @@ export function createWorkflowCtx(
 }
 
 async function runFunction<
-  F extends FunctionReference<FunctionType, "internal">,
+  F extends FunctionReference<FunctionType, FunctionVisibility>,
 >(
   sender: BaseChannel<StepRequest>,
   functionType: FunctionType,

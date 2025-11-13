@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1
+
+- Bumps the workpool version dependency and automatically registers it in tests.
+
 ## 0.3.0
 
 - Adds /test and /\_generated/component.js entrypoints

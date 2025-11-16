@@ -4,8 +4,6 @@
 
 <!-- START: Include on https://convex.dev/components -->
 
-The Workflow component enables you
-
 Have you ever wanted to run a series of functions reliably and durably, where
 each can have its own retry behavior, the overall workflow will survive server
 restarts, and you can have long-running workflows spanning months that can be

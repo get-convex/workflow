@@ -8,6 +8,7 @@ import {
   createFunctionHandle,
   type FunctionReference,
   type FunctionType,
+  type FunctionVisibility,
   type GenericDataModel,
   type GenericMutationCtx,
 } from "convex/server";
@@ -31,7 +32,7 @@ export type StepRequest = {
     | {
         kind: "function";
         functionType: FunctionType;
-        function: FunctionReference<FunctionType, "internal">;
+        function: FunctionReference<FunctionType, FunctionVisibility>;
         args: unknown;
       }
     | {

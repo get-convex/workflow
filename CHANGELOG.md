@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2
+
+- The WorkflowCtx (`ctx`) now matches the type of GenericActionCtx for basic
+  functionality like `ctx.runMutation` / etc. so it's easier to use with things
+  like components that only need that API. e.g. calling `resend.sendEmail(ctx,`
+  with the Workflow's ctx.
+
 ## 0.3.1
 
 - Bumps the workpool version dependency and automatically registers it in tests.

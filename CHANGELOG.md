@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.3
+
+- Export EventId type and vEventId validator from @convex-dev/workflow
+
 ## 0.3.2
 
 - The WorkflowCtx (`ctx`) now matches the type of GenericActionCtx for basic

@@ -1,7 +1,11 @@
-import { vWorkflowId, WorkflowManager } from "@convex-dev/workflow";
+import {
+  type EventId,
+  vEventId,
+  vWorkflowId,
+  WorkflowManager,
+} from "@convex-dev/workflow";
 import { components, internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
-import { vEventId } from "../../src/types";
 
 const workflow = new WorkflowManager(components.workflow);
 
@@ -23,7 +27,7 @@ export const signalBasedWorkflow = workflow.define({
 
 export const createSignal = internalMutation({
   args: { workflowId: vWorkflowId },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<EventId> => {
     const eventId = await workflow.createEvent(ctx, {
       name: "signal",
       workflowId: args.workflowId,

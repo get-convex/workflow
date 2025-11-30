@@ -36,8 +36,10 @@ import type { WorkflowCtx } from "./workflowContext.js";
 import { workflowMutation } from "./workflowMutation.js";
 
 export {
+  vEventId,
   vWorkflowId,
   vWorkflowStep,
+  type EventId,
   type WorkflowId,
   type WorkflowStep,
 } from "../types.js";

@@ -415,6 +415,62 @@ export const exampleWorkflow = workflow.define({
 });
 ```
 
+### Awaiting events with `ctx.awaitEvent`
+
+Use `ctx.awaitEvent` inside a workflow handler to pause until an external event
+is delivered. This is useful for human-in-the-loop flows or coordinating with
+other systems.
+
+At its simplest, you can wait for an event **by name**:
+
+```ts
+await ctx.awaitEvent({ name: "approval" });
+```
+
+or for a **specific event by ID**:
+
+```ts
+await ctx.awaitEvent({ id: signalId });
+```
+
+To unblock a waiting workflow, call `workflow.sendEvent` from a mutation or
+action. You can send a value with the event, or send an error that will cause
+`ctx.awaitEvent` to throw. See
+[`example/convex/passingSignals.ts`](./example/convex/passingSignals.ts) for a
+complete example of creating events, passing their IDs around, and sending
+signals.
+
+#### Sharing event definitions with `defineEvent`
+
+Use `defineEvent` to define an event's name and validator in one place, then
+share it between the workflow and the sender:
+
+```ts
+const approvalEvent = defineEvent({
+  name: "approval" as const,
+  validator: v.object({ approved: v.boolean() }),
+});
+
+// In the workflow:
+const approval = await ctx.awaitEvent(approvalEvent);
+
+// From a mutation:
+await workflow.sendEvent(ctx, { ...approvalEvent, workflowId, value: { approved: true } });
+```
+
+See [`example/convex/userConfirmation.ts`](./example/convex/userConfirmation.ts)
+for a full approval flow built this way.
+
+### Running nested workflows with `ctx.runWorkflow`
+
+Use `ctx.runWorkflow` to run another workflow as a single step in the current
+one. The parent workflow waits for the nested workflow to finish and receives
+its return value: `const result = await ctx.runWorkflow(internal.example.childWorkflow, { args });`
+
+You can also specify scheduling options like `{ runAfter: 5000 }` to delay the
+nested workflow. See [`example/convex/nestedWorkflow.ts`](./example/convex/nestedWorkflow.ts)
+for a complete parent/child workflow example.
+
 ## Tips and troubleshooting
 
 ### Circular dependencies

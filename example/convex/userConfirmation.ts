@@ -8,7 +8,7 @@ import { components, internal } from "./_generated/api";
 import { internalAction, internalMutation } from "./_generated/server";
 
 export const approvalEvent = defineEvent({
-  name: "approval" as const,
+  name: "approval",
   validator: v.union(
     v.object({ approved: v.literal(true), choice: v.number() }),
     v.object({ approved: v.literal(false), reason: v.string() }),

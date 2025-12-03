@@ -432,6 +432,9 @@ until an event with that name is sent to it.
 ```ts
 import { defineEvent, WorkflowManager } from "@convex-dev/workflow";
 import { v } from "convex/values";
+import { components, internal } from "./_generated/api";
+
+const workflow = new WorkflowManager(components.workflow);
 
 // Define an event specification with a name and validator
 export const approvalEvent = defineEvent({
@@ -463,8 +466,11 @@ export const confirmationWorkflow = workflow.define({
 To send the event from elsewhere (e.g., after a user clicks a button):
 
 ```ts
-import { vWorkflowId, WorkflowManager } from "@convex-dev/workflow";
+import { vWorkflowId } from "@convex-dev/workflow";
 import { v } from "convex/values";
+import { mutation } from "./_generated/server";
+
+// assuming workflow and approvalEvent are defined as above
 
 export const approveWorkflow = mutation({
   args: { workflowId: vWorkflowId, choice: v.number() },
@@ -486,6 +492,10 @@ later signal completion.
 
 ```ts
 import { type EventId, vEventId, vWorkflowId, WorkflowManager } from "@convex-dev/workflow";
+import { components, internal } from "./_generated/api";
+import { internalMutation } from "./_generated/server";
+
+const workflow = new WorkflowManager(components.workflow);
 
 export const signalWorkflow = workflow.define({
   args: {},

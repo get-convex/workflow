@@ -417,180 +417,35 @@ export const exampleWorkflow = workflow.define({
 
 ### Awaiting events with `ctx.awaitEvent`
 
-Workflows can pause and wait for external events using `ctx.awaitEvent`. This is
-useful for human-in-the-loop workflows, waiting for user confirmation, or
-coordinating between different parts of your system.
+Use `ctx.awaitEvent` inside a workflow handler to pause until an external event
+is delivered. This is useful for human-in-the-loop flows or coordinating with
+other systems.
 
-There are two ways to await events: by name (waits for the first available event
-with that name) or by ID (waits for a specific pre-created event).
+You can wait for events **by name** using `defineEvent` to create a typed event
+specification: `const approval = await ctx.awaitEvent(approvalEvent);` where
+`approvalEvent` is defined with `defineEvent({ name: "approval", validator })`.
+From elsewhere, send the event with `workflow.sendEvent(ctx, { ...approvalEvent, workflowId, value })`.
+See [`example/convex/userConfirmation.ts`](./example/convex/userConfirmation.ts)
+for a complete example including the event validator and the mutation that sends
+the approval.
 
-#### Awaiting events by name
+You can also wait for a **specific event by ID**: `await ctx.awaitEvent({ id: signalId });`
+after creating an event with `workflow.createEvent(ctx, { name, workflowId })`.
+See [`example/convex/passingSignals.ts`](./example/convex/passingSignals.ts) for
+the complete pattern of creating, scheduling, and sending signals.
 
-The simplest approach is to await an event by name. The workflow will block
-until an event with that name is sent to it.
-
-```ts
-import { defineEvent, WorkflowManager } from "@convex-dev/workflow";
-import { v } from "convex/values";
-import { components, internal } from "./_generated/api";
-
-const workflow = new WorkflowManager(components.workflow);
-
-// Define an event specification with a name and validator
-export const approvalEvent = defineEvent({
-  name: "approval" as const,
-  validator: v.union(
-    v.object({ approved: v.literal(true), choice: v.number() }),
-    v.object({ approved: v.literal(false), reason: v.string() }),
-  ),
-});
-
-export const confirmationWorkflow = workflow.define({
-  args: { prompt: v.string() },
-  returns: v.string(),
-  handler: async (ctx, args): Promise<string> => {
-    const proposals = await ctx.runAction(
-      internal.example.generateProposals,
-      { prompt: args.prompt },
-    );
-    // Wait for user approval - blocks until the event is sent
-    const approval = await ctx.awaitEvent(approvalEvent);
-    if (!approval.approved) {
-      return "rejected: " + approval.reason;
-    }
-    return proposals[approval.choice];
-  },
-});
-```
-
-To send the event from elsewhere (e.g., after a user clicks a button):
-
-```ts
-import { vWorkflowId } from "@convex-dev/workflow";
-import { v } from "convex/values";
-import { mutation } from "./_generated/server";
-
-// assuming workflow and approvalEvent are defined as above
-
-export const approveWorkflow = mutation({
-  args: { workflowId: vWorkflowId, choice: v.number() },
-  handler: async (ctx, args) => {
-    await workflow.sendEvent(ctx, {
-      ...approvalEvent,
-      workflowId: args.workflowId,
-      value: { approved: true, choice: args.choice },
-    });
-  },
-});
-```
-
-#### Awaiting events by ID
-
-For more control, you can create an event ahead of time and await it by ID.
-This is useful when you need to pass the event ID to another system that will
-later signal completion.
-
-```ts
-import { type EventId, vEventId, vWorkflowId, WorkflowManager } from "@convex-dev/workflow";
-import { components, internal } from "./_generated/api";
-import { internalMutation } from "./_generated/server";
-
-const workflow = new WorkflowManager(components.workflow);
-
-export const signalWorkflow = workflow.define({
-  args: {},
-  handler: async (ctx) => {
-    for (let i = 0; i < 3; i++) {
-      // Create an event and get its ID
-      const signalId = await ctx.runMutation(
-        internal.example.createSignal,
-        { workflowId: ctx.workflowId },
-      );
-      // Wait for that specific event by ID
-      await ctx.awaitEvent({ id: signalId });
-      console.log("Signal received", signalId);
-    }
-  },
-});
-
-export const createSignal = internalMutation({
-  args: { workflowId: vWorkflowId },
-  handler: async (ctx, args): Promise<EventId> => {
-    const eventId = await workflow.createEvent(ctx, {
-      name: "signal",
-      workflowId: args.workflowId,
-    });
-    // Store or pass this eventId to another system
-    return eventId;
-  },
-});
-
-export const sendSignal = internalMutation({
-  args: { eventId: vEventId("signal") },
-  handler: async (ctx, args) => {
-    await workflow.sendEvent(ctx, { id: args.eventId });
-  },
-});
-```
-
-#### Sending events with errors
-
-You can also send an event with an error, which will cause `ctx.awaitEvent` to
-throw:
-
-```ts
-await workflow.sendEvent(ctx, {
-  ...approvalEvent,
-  workflowId: args.workflowId,
-  error: "Request timed out",
-});
-```
+To send an event that causes `ctx.awaitEvent` to throw an error, use
+`workflow.sendEvent(ctx, { id, error: "error message" })`.
 
 ### Running nested workflows with `ctx.runWorkflow`
 
-You can run a workflow as a step within another workflow using `ctx.runWorkflow`.
-The parent workflow will wait for the nested workflow to complete and receive
-its return value.
+Use `ctx.runWorkflow` to run another workflow as a single step in the current
+one. The parent workflow waits for the nested workflow to finish and receives
+its return value: `const result = await ctx.runWorkflow(internal.example.childWorkflow, { args });`
 
-This is useful for composing complex workflows from simpler building blocks,
-or for reusing workflow logic across different contexts.
-
-```ts
-export const parentWorkflow = workflow.define({
-  args: { prompt: v.string() },
-  handler: async (ctx, args) => {
-    // Run a nested workflow and wait for its result
-    const length = await ctx.runWorkflow(
-      internal.example.childWorkflow,
-      { text: args.prompt },
-    );
-    console.log("Child workflow returned:", length);
-
-    // Continue with more steps
-    await ctx.runMutation(internal.example.saveResult, { length });
-  },
-});
-
-export const childWorkflow = workflow.define({
-  args: { text: v.string() },
-  returns: v.number(),
-  handler: async (_ctx, args): Promise<number> => {
-    return args.text.length;
-  },
-});
-```
-
-The nested workflow runs as a single step in the parent workflow. If the nested
-workflow fails, the parent workflow will also fail (unless you handle the error).
-You can also specify scheduling options like `runAfter` or `runAt`:
-
-```ts
-const result = await ctx.runWorkflow(
-  internal.example.childWorkflow,
-  { text: args.prompt },
-  { runAfter: 5000 }, // Run after 5 seconds
-);
-```
+You can also specify scheduling options like `{ runAfter: 5000 }` to delay the
+nested workflow. See [`example/convex/nestedWorkflow.ts`](./example/convex/nestedWorkflow.ts)
+for a complete parent/child workflow example.
 
 ## Tips and troubleshooting
 

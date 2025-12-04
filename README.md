@@ -415,39 +415,63 @@ export const exampleWorkflow = workflow.define({
 });
 ```
 
-### Awaiting events with `ctx.awaitEvent`
+### Waiting for external events
 
 Use `ctx.awaitEvent` inside a workflow handler to pause until an external event
-is delivered. This is useful for human-in-the-loop flows or coordinating with
-other systems.
+is triggered. This is useful for human-in-the-loop flows or coordinating with
+other asynchronous flows. Wait for an indefinite amount of time and continue
+when the event is triggered.
 
 At its simplest, you can wait for an event **by name**:
 
 ```ts
-await ctx.awaitEvent({ name: "approval" });
+await ctx.awaitEvent({ name: "eventName" });
 ```
 
-or for a **specific event by ID**:
+This will wait for the first un-consumed event with the name "eventName", and
+will continue immediately if one was already sent. Events are sent by calling
+`workflow.sendEvent` from a mutation or action:
 
 ```ts
-await ctx.awaitEvent({ id: signalId });
+await workflow.sendEvent(ctx, {
+  name: "eventName",
+  workflowId,
+});
 ```
 
-To unblock a waiting workflow, call `workflow.sendEvent` from a mutation or
-action. You can send a value with the event, or send an error that will cause
-`ctx.awaitEvent` to throw. See
-[`example/convex/passingSignals.ts`](./example/convex/passingSignals.ts) for a
-complete example of creating events, passing their IDs around, and sending
-signals.
+Note: You must send the event on the same workflow component that is waiting for
+it, and the workflowId must match the ID of the workflow that is waiting for it.
 
-#### Sharing event definitions with `defineEvent`
+#### Sending values or errors with the event
+
+You can send a value with the event using the `value` property. For type safety
+and runtime validation, provide a validator on the sending and receiving sides.
+
+```ts
+const sharedValidator = v.number();
+
+// In the workflow:
+const event = await ctx.awaitEvent({ name, validator: sharedValidator });
+
+// From elsewhere:
+await workflow.sendEvent(ctx, { name, workflowId, value: 42 });
+```
+
+To send an error, use the `error` property. This will cause `ctx.awaitEvent` to
+throw an error.
+
+```ts
+await workflow.sendEvent(ctx, { name, workflowId, error: "An error occurred" });
+```
+
+#### Sharing event definitions
 
 Use `defineEvent` to define an event's name and validator in one place, then
 share it between the workflow and the sender:
 
 ```ts
 const approvalEvent = defineEvent({
-  name: "approval" as const,
+  name: "approval",
   validator: v.object({ approved: v.boolean() }),
 });
 
@@ -455,21 +479,63 @@ const approvalEvent = defineEvent({
 const approval = await ctx.awaitEvent(approvalEvent);
 
 // From a mutation:
-await workflow.sendEvent(ctx, { ...approvalEvent, workflowId, value: { approved: true } });
+const value = { approved: true };
+await workflow.sendEvent(ctx, { ...approvalEvent, workflowId, value });
 ```
 
 See [`example/convex/userConfirmation.ts`](./example/convex/userConfirmation.ts)
 for a full approval flow built this way.
 
+Note: this is just a convenience to create a typed { event, validator } pair.
+
+#### Waiting for dynamically created events by ID
+
+You can also dynamically create an event with `createEvent`:
+
+```ts
+const eventId = await workflow.createEvent(ctx, {
+  name: "userResponse",
+  workflowId,
+});
+```
+
+Then wait for it by ID in the workflow:
+
+```ts
+await ctx.awaitEvent({ id: eventId });
+```
+
+This works well when there are dynamically defined events, for instance a tool
+that is waiting for a response from a user. You would save the eventId somewhere
+to be able to send the event later with `workflow.sendEvent`:
+
+```ts
+await workflow.sendEvent(ctx, { id: eventId });
+```
+
+Similar to named events, you can also send a value or error with the event.
+
+See [`example/convex/passingSignals.ts`](./example/convex/passingSignals.ts) for
+a complete example of creating events, passing their IDs around, and sending
+signals.
+
 ### Running nested workflows with `ctx.runWorkflow`
 
 Use `ctx.runWorkflow` to run another workflow as a single step in the current
 one. The parent workflow waits for the nested workflow to finish and receives
-its return value: `const result = await ctx.runWorkflow(internal.example.childWorkflow, { args });`
+its return value:
+`const result = await ctx.runWorkflow(internal.example.childWorkflow, { args });`
 
 You can also specify scheduling options like `{ runAfter: 5000 }` to delay the
-nested workflow. See [`example/convex/nestedWorkflow.ts`](./example/convex/nestedWorkflow.ts)
-for a complete parent/child workflow example.
+nested workflow. See
+[`example/convex/nestedWorkflow.ts`](./example/convex/nestedWorkflow.ts) for a
+complete parent/child workflow example.
+
+To associate the child workflow with the parent in your own tables, you can pass
+the `ctx.workflowId` to the child workflow as an argument, and/or return the
+child's workflowId to the parent.
+
+The status of the parent workflow will include any active child workflowIds.
 
 ## Tips and troubleshooting
 

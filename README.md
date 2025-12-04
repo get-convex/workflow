@@ -455,7 +455,7 @@ const approvalEvent = defineEvent({
 const approval = await ctx.awaitEvent(approvalEvent);
 
 // From a mutation:
-await workflow.sendEvent(ctx, { ...approvalEvent, workflowId, value });
+await workflow.sendEvent(ctx, { ...approvalEvent, workflowId, value: { approved: true } });
 ```
 
 See [`example/convex/userConfirmation.ts`](./example/convex/userConfirmation.ts)

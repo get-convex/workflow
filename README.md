@@ -447,7 +447,7 @@ share it between the workflow and the sender:
 
 ```ts
 const approvalEvent = defineEvent({
-  name: "approval",
+  name: "approval" as const,
   validator: v.object({ approved: v.boolean() }),
 });
 

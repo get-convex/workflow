@@ -275,13 +275,14 @@ default policy.
 
 ```ts
 const workflow = new WorkflowManager(components.workflow, {
-  defaultRetryBehavior: {
-    maxAttempts: 3,
-    initialBackoffMs: 100,
-    base: 2,
-  },
-  // If specified, this sets the defaults, overridden per-workflow or per-step.
-  workpoolOptions: { ... }
+  workpoolOptions: {
+    defaultRetryBehavior: {
+      maxAttempts: 3,
+      initialBackoffMs: 100,
+      base: 2,
+    },
+    retryActionsByDefault: true, // default is false
+   }
 });
 
 export const exampleWorkflow = workflow.define({

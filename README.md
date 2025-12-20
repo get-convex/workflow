@@ -592,8 +592,10 @@ Here are a few limitations to keep in mind:
   around within the the workflow.
 - The workflow body is internally a mutation, with each step's return value read
   from the database on each subsequent step. As a result, the limits for a
-  mutation apply and limit the number and size of steps you can perform to 16MiB
-  (including the workflow state overhead). See more about mutation limits here:
+  mutation apply and limit the number and size of steps you can perform
+  (including the workflow state overhead). There is currently an 8MiB limit
+  imposed on the journal size, to stay well within the mutation bounds. See more
+  about mutation limits here:
   https://docs.convex.dev/production/state/limits#transactions
 - We currently do not collect backtraces from within function calls from
   workflows.

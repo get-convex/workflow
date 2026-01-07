@@ -16,6 +16,7 @@ import { convexToJson, type Value } from "convex/values";
 import {
   type JournalEntry,
   journalEntrySize,
+  type Step,
   valueSize,
 } from "../component/schema.js";
 import type { WorkflowComponent } from "./types.js";
@@ -160,10 +161,10 @@ export class StepExecutor {
           name: message.name,
           args: message.target.args,
           argsSize: valueSize(message.target.args as Value),
-          outcome: undefined,
+          runResult: undefined,
           startedAt: this.now,
           completedAt: undefined,
-        };
+        } satisfies Omit<Step, "kind">;
         const target = message.target;
         const step =
           target.kind === "function"

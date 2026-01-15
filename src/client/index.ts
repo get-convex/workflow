@@ -247,6 +247,36 @@ export class WorkflowManager {
   }
 
   /**
+   * List workflows matching a specific name, including their args, return value etc.
+   *
+   * @param ctx - The Convex context from a query, mutation, or action.
+   * @param name - The workflow name to filter by.
+   * @param opts - How many workflows to fetch and in what order.
+   *   e.g. `{ order: "desc", paginationOpts: { cursor: null, numItems: 10 } }`
+   *   will get the last 10 workflows in descending order.
+   *   Defaults to 100 workflows in ascending order.
+   * @returns The pagination result with per-workflow data.
+   */
+  async listByName(
+    ctx: RunQueryCtx,
+    name: string,
+    opts?: {
+      order?: "asc" | "desc";
+      paginationOpts?: PaginationOptions;
+    },
+  ): Promise<PaginationResult<PublicWorkflow>> {
+    const workflows = await ctx.runQuery(this.component.workflow.listByName, {
+      name,
+      order: opts?.order ?? "asc",
+      paginationOpts: opts?.paginationOpts ?? {
+        cursor: null,
+        numItems: 100,
+      },
+    });
+    return workflows as PaginationResult<PublicWorkflow>;
+  }
+
+  /**
    * List the steps in a workflow, including their name, args, return value etc.
    *
    * @param ctx - The Convex context from a query, mutation, or action.

@@ -177,6 +177,26 @@ export const list = query({
   },
 });
 
+export const listByName = query({
+  args: {
+    name: v.string(),
+    order: v.union(v.literal("asc"), v.literal("desc")),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: vPaginationResult(vPublicWorkflow),
+  handler: async (ctx, args) => {
+    const result = await paginator(ctx.db, schema)
+      .query("workflows")
+      .withIndex("name", (q) => q.eq("name", args.name))
+      .order(args.order)
+      .paginate(args.paginationOpts);
+    return {
+      ...result,
+      page: result.page.map(publicWorkflow),
+    } as PaginationResult<Infer<typeof vPublicWorkflow>>;
+  },
+});
+
 export const listSteps = query({
   args: {
     workflowId: v.id("workflows"),

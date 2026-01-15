@@ -538,6 +538,27 @@ child's workflowId to the parent.
 
 The status of the parent workflow will include any active child workflowIds.
 
+### Listing workflows and steps
+
+Use `list` to get a paginated list of all workflows.
+
+```ts
+await workflow.list(ctx, { order: "asc" });
+```
+
+Use `listByName` to get a paginated list of workflows matching a specific name.
+
+```ts
+await workflow.listByName(ctx, "file/folder:function", { order: "desc" });
+```
+
+Use `listSteps` with a workflow's ID to get a paginated list of the steps in
+that workflow run.
+
+```ts
+await workflow.listSteps(ctx, workflowId);
+```
+
 ## Tips and troubleshooting
 
 ### Circular dependencies

@@ -402,6 +402,10 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             args: any;
             context?: any;
             name?: string;
+            runResult?:
+              | { kind: "success"; returnValue: any }
+              | { error: string; kind: "failed" }
+              | { kind: "canceled" };
             workflowId: string;
           }>;
           pageStatus?: "SplitRecommended" | "SplitRequired" | null;
@@ -431,6 +435,10 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             args: any;
             context?: any;
             name?: string;
+            runResult?:
+              | { kind: "success"; returnValue: any }
+              | { error: string; kind: "failed" }
+              | { kind: "canceled" };
             workflowId: string;
           }>;
           pageStatus?: "SplitRecommended" | "SplitRequired" | null;

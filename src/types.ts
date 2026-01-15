@@ -36,6 +36,7 @@ export const vPublicWorkflow = v.object({
   name: v.optional(v.string()),
   args: v.any(),
   context: v.optional(v.any()),
+  runResult: v.optional(vResultValidator),
 });
 export type VPublicWorkflow = Infer<typeof vPublicWorkflow>;
 // type assertion to keep us in check

@@ -23,6 +23,25 @@ export type VEventId<Name extends string> = VString<EventId<Name>>;
 export const vEventId = <Name extends string = string>(_name?: Name) =>
   v.string() as VString<EventId<Name>>;
 
+export type PublicWorkflow = {
+  workflowId: WorkflowId;
+  name?: string;
+  args: any;
+  context?: any;
+  runResult?: RunResult;
+};
+
+export const vPublicWorkflow = v.object({
+  workflowId: vWorkflowId,
+  name: v.optional(v.string()),
+  args: v.any(),
+  context: v.optional(v.any()),
+  runResult: v.optional(vResultValidator),
+});
+export type VPublicWorkflow = Infer<typeof vPublicWorkflow>;
+// type assertion to keep us in check
+const _publicWorkflow: VPublicWorkflow = {} as PublicWorkflow;
+
 export type WorkflowStep = {
   workflowId: WorkflowId;
   name: string;
@@ -62,7 +81,7 @@ export const vWorkflowStep = v.object({
   eventId: v.optional(vEventId()),
 });
 // type assertion to keep us in check
-const _: Infer<typeof vWorkflowStep> = {} as WorkflowStep;
+const _workflowStep: Infer<typeof vWorkflowStep> = {} as WorkflowStep;
 
 export type SchedulerOptions =
   | {

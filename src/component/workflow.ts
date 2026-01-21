@@ -25,10 +25,12 @@ import {
   vPaginationResult,
   vWorkflowStep,
   type SchedulerOptions,
+  type PublicWorkflow,
+  vPublicWorkflow,
 } from "../types.js";
 import { api, internal } from "./_generated/api.js";
 import { formatErrorWithStack } from "../shared.js";
-import type { Id } from "./_generated/dataModel.js";
+import type { Doc, Id } from "./_generated/dataModel.js";
 import { paginator } from "convex-helpers/server/pagination";
 
 const createArgs = v.object({
@@ -117,6 +119,16 @@ function publicWorkflowId(workflowId: Id<"workflows">): WorkflowId {
   return workflowId as any;
 }
 
+function publicWorkflow(workflow: Doc<"workflows">): PublicWorkflow {
+  return {
+    workflowId: publicWorkflowId(workflow._id),
+    name: workflow.name,
+    args: workflow.args,
+    context: workflow.onComplete?.context,
+    runResult: workflow.runResult,
+  } satisfies PublicWorkflow;
+}
+
 function publicStep(step: JournalEntry): WorkflowStep {
   return {
     workflowId: publicWorkflowId(step.workflowId),
@@ -146,6 +158,44 @@ function publicStep(step: JournalEntry): WorkflowStep {
           }),
   } satisfies WorkflowStep;
 }
+
+export const list = query({
+  args: {
+    order: v.union(v.literal("asc"), v.literal("desc")),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: vPaginationResult(vPublicWorkflow),
+  handler: async (ctx, args) => {
+    const result = await paginator(ctx.db, schema)
+      .query("workflows")
+      .order(args.order)
+      .paginate(args.paginationOpts);
+    return {
+      ...result,
+      page: result.page.map(publicWorkflow),
+    } as PaginationResult<Infer<typeof vPublicWorkflow>>;
+  },
+});
+
+export const listByName = query({
+  args: {
+    name: v.string(),
+    order: v.union(v.literal("asc"), v.literal("desc")),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: vPaginationResult(vPublicWorkflow),
+  handler: async (ctx, args) => {
+    const result = await paginator(ctx.db, schema)
+      .query("workflows")
+      .withIndex("name", (q) => q.eq("name", args.name))
+      .order(args.order)
+      .paginate(args.paginationOpts);
+    return {
+      ...result,
+      page: result.page.map(publicWorkflow),
+    } as PaginationResult<Infer<typeof vPublicWorkflow>>;
+  },
+});
 
 export const listSteps = query({
   args: {

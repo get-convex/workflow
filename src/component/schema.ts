@@ -176,7 +176,7 @@ export default defineSchema({
     logLevel: v.optional(logLevel),
     maxParallelism: v.optional(v.number()),
   }),
-  workflows: defineTable(workflowObject),
+  workflows: defineTable(workflowObject).index("name", ["name"]),
   steps: defineTable(journalObject)
     .index("workflow", ["workflowId", "stepNumber"])
     .index("inProgress", ["step.inProgress", "workflowId"]),

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.4
+
+- Adds `list` and `listByName` APIs (credit: dantman) to list workflows with
+  pagination options
+
 ## 0.3.3
 
 - Export EventId type and vEventId validator from @convex-dev/workflow

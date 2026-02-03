@@ -120,15 +120,20 @@ export const childWorkflowWithReturns = workflow.define({
  * be typed as `ChildResult` (from the child's `returns` validator), but
  * instead it resolves to `unknown` or `any` due to the issues described above.
  *
- * TypeScript errors you may see:
+ * TypeScript errors you would see without @ts-expect-error:
  * - TS7022: 'parentWorkflowRepro' implicitly has type 'any' (circular reference)
  * - TS7023: 'handler' implicitly has return type 'any'
  * - TS18046: 'result' is of type 'unknown'
+ *
+ * We use @ts-expect-error to document these expected failures while allowing CI to pass.
  */
+// @ts-expect-error TS7022: Demonstrates issue #193 - circular type inference causes 'any'
 export const parentWorkflowRepro = workflow.define({
   args: { message: v.string() },
+  // @ts-expect-error TS7023: handler has implicit 'any' return due to circular refs
   handler: async (step, args) => {
     // Call child workflow that has a `returns` validator
+    // @ts-expect-error TS7022: result is 'any' due to circular type inference (should be ChildResult)
     const result = await step.runWorkflow(
       internal.runWorkflowTypeRepro.childWorkflowWithReturns,
       { input: args.message },

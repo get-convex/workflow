@@ -110,19 +110,22 @@ export type OptionalRestArgs<
 export function createWorkflowCtx(
   workflowId: WorkflowId,
   sender: BaseChannel<StepRequest>,
-) {
+): WorkflowCtx {
   return {
     workflowId,
-    runQuery: async (query, args, opts?) => {
-      return runFunction(sender, "query", query, args, opts);
+    runQuery: async (query, ...args) => {
+      const [funcArgs, opts] = args;
+      return runFunction(sender, "query", query, funcArgs, opts) as any;
     },
 
-    runMutation: async (mutation, args, opts?) => {
-      return runFunction(sender, "mutation", mutation, args, opts);
+    runMutation: async (mutation, ...args) => {
+      const [funcArgs, opts] = args;
+      return runFunction(sender, "mutation", mutation, funcArgs, opts) as any;
     },
 
-    runAction: async (action, args, opts?) => {
-      return runFunction(sender, "action", action, args, opts);
+    runAction: async (action, ...args) => {
+      const [funcArgs, opts] = args;
+      return runFunction(sender, "action", action, funcArgs, opts) as any;
     },
 
     runWorkflow: async (workflow, args, opts?) => {
@@ -136,7 +139,7 @@ export function createWorkflowCtx(
         },
         retry: undefined,
         schedulerOptions,
-      });
+      }) as any;
     },
 
     awaitEvent: async (event) => {
@@ -154,7 +157,7 @@ export function createWorkflowCtx(
       }
       return result as any;
     },
-  } satisfies WorkflowCtx;
+  };
 }
 
 async function runFunction<

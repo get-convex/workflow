@@ -9,6 +9,7 @@
  */
 
 import type * as admin from "../admin.js";
+import type * as childWorkflows from "../childWorkflows.js";
 import type * as example from "../example.js";
 import type * as nestedWorkflow from "../nestedWorkflow.js";
 import type * as passingSignals from "../passingSignals.js";
@@ -23,6 +24,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
+  childWorkflows: typeof childWorkflows;
   example: typeof example;
   nestedWorkflow: typeof nestedWorkflow;
   passingSignals: typeof passingSignals;

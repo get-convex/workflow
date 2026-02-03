@@ -12,6 +12,7 @@ import type * as admin from "../admin.js";
 import type * as example from "../example.js";
 import type * as nestedWorkflow from "../nestedWorkflow.js";
 import type * as passingSignals from "../passingSignals.js";
+import type * as runWorkflowTypeRepro from "../runWorkflowTypeRepro.js";
 import type * as transcription from "../transcription.js";
 import type * as userConfirmation from "../userConfirmation.js";
 
@@ -26,6 +27,7 @@ declare const fullApi: ApiFromModules<{
   example: typeof example;
   nestedWorkflow: typeof nestedWorkflow;
   passingSignals: typeof passingSignals;
+  runWorkflowTypeRepro: typeof runWorkflowTypeRepro;
   transcription: typeof transcription;
   userConfirmation: typeof userConfirmation;
 }>;

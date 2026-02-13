@@ -161,52 +161,39 @@ export class StepExecutor {
       return this._startStepsRegular(messages);
     }
 
-    // Split messages into batch-eligible and regular
-    const batchIndices: number[] = [];
-    const regularIndices: number[] = [];
-    for (let i = 0; i < messages.length; i++) {
-      const target = messages[i].target;
-      if (
+    // Classify each message as batch-eligible or regular.
+    const isBatch = messages.map((message) => {
+      const target = message.target;
+      return (
         target.kind === "function" &&
         target.functionType === "action" &&
-        this.batch.isRegistered(safeFunctionName(target.function))
-      ) {
-        batchIndices.push(i);
-      } else {
-        regularIndices.push(i);
-      }
-    }
+        this.batch!.isRegistered(safeFunctionName(target.function))
+      );
+    });
 
-    if (batchIndices.length === 0) {
+    if (isBatch.every((b) => !b)) {
       return this._startStepsRegular(messages);
     }
 
-    // Process sequentially to avoid step number collisions.
-    // Batch messages first, then regular.
-    const allEntries: Array<{ index: number; entry: JournalEntry }> = [];
-
-    if (batchIndices.length > 0) {
-      const batchMessages = batchIndices.map((i) => messages[i]);
-      const batchEntries = await this._startStepsBatch(batchMessages);
-      for (let i = 0; i < batchIndices.length; i++) {
-        allEntries.push({ index: batchIndices[i], entry: batchEntries[i] });
+    // Process contiguous groups in original order so step numbers are assigned
+    // sequentially matching message order. This is critical for correctness on
+    // resume: journal entries are loaded by stepNumber, and the handler replays
+    // messages in original order, so the two must match.
+    const allEntries: JournalEntry[] = [];
+    let i = 0;
+    while (i < messages.length) {
+      const groupIsBatch = isBatch[i];
+      const groupStart = i;
+      while (i < messages.length && isBatch[i] === groupIsBatch) {
+        i++;
       }
+      const groupMessages = messages.slice(groupStart, i);
+      const groupEntries = groupIsBatch
+        ? await this._startStepsBatch(groupMessages)
+        : await this._startStepsRegular(groupMessages);
+      allEntries.push(...groupEntries);
     }
-
-    if (regularIndices.length > 0) {
-      const regularMessages = regularIndices.map((i) => messages[i]);
-      const regularEntries = await this._startStepsRegular(regularMessages);
-      for (let i = 0; i < regularIndices.length; i++) {
-        allEntries.push({
-          index: regularIndices[i],
-          entry: regularEntries[i],
-        });
-      }
-    }
-
-    // Merge back in original message order
-    allEntries.sort((a, b) => a.index - b.index);
-    return allEntries.map((e) => e.entry);
+    return allEntries;
   }
 
   private async _startStepsRegular(
@@ -263,11 +250,19 @@ export class StepExecutor {
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i];
       const target = messages[i].target;
-      if (target.kind !== "function") continue;
+      if (target.kind !== "function") {
+        throw new Error(
+          `Assertion failed: batch step ${entry._id} has unexpected target kind "${target.kind}"`,
+        );
+      }
       const handlerName = this.batch!.resolveHandlerName(
         safeFunctionName(target.function),
       );
-      if (!handlerName) continue;
+      if (!handlerName) {
+        throw new Error(
+          `Assertion failed: batch step ${entry._id} has no handler for "${safeFunctionName(target.function)}" despite passing isRegistered`,
+        );
+      }
       await this.batch!.enqueueByHandle(
         this.ctx,
         handlerName,

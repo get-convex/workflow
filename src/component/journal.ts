@@ -210,3 +210,78 @@ export const startSteps = mutation({
     return entries;
   },
 });
+
+/**
+ * Like startSteps but does NOT enqueue to the workpool. Instead returns the
+ * journal entries plus an onComplete function handle string. The client uses
+ * this to enqueue batch tasks with the correct onComplete callback.
+ */
+export const startBatchSteps = mutation({
+  args: {
+    workflowId: v.string(),
+    generationNumber: v.number(),
+    steps: v.array(
+      v.object({
+        step,
+        retry: v.optional(v.union(v.boolean(), vRetryBehavior)),
+        schedulerOptions: v.optional(
+          v.union(
+            v.object({ runAt: v.optional(v.number()) }),
+            v.object({ runAfter: v.optional(v.number()) }),
+          ),
+        ),
+      }),
+    ),
+    workpoolOptions: v.optional(workpoolOptions),
+  },
+  returns: v.object({
+    entries: v.array(journalDocument),
+    onCompleteHandle: v.string(),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ entries: JournalEntry[]; onCompleteHandle: string }> => {
+    if (!args.steps.every((step) => step.step.inProgress)) {
+      throw new Error(`Assertion failed: not in progress`);
+    }
+    const { generationNumber } = args;
+    const workflow = await getWorkflow(ctx, args.workflowId, generationNumber);
+    const console = await getDefaultLogger(ctx);
+
+    if (workflow.runResult !== undefined) {
+      throw new Error(`Workflow not running: ${args.workflowId}`);
+    }
+    const maxEntry = await ctx.db
+      .query("steps")
+      .withIndex("workflow", (q) => q.eq("workflowId", workflow._id))
+      .order("desc")
+      .first();
+    const stepNumberBase = maxEntry ? maxEntry.stepNumber + 1 : 0;
+    const onCompleteHandle = await createFunctionHandle(
+      internal.pool.onComplete,
+    );
+
+    const entries = await Promise.all(
+      args.steps.map(async (stepArgs, index) => {
+        const stepNumber = stepNumberBase + index;
+        const stepId = await ctx.db.insert("steps", {
+          workflowId: workflow._id,
+          stepNumber,
+          step: stepArgs.step,
+        });
+        const entry = await ctx.db.get(stepId);
+        assert(entry, "Step not found");
+
+        console.event("started", {
+          workflowId: workflow._id,
+          workflowName: workflow.name,
+          stepName: entry.step.name,
+          stepNumber,
+        });
+        return entry;
+      }),
+    );
+    return { entries, onCompleteHandle };
+  },
+});

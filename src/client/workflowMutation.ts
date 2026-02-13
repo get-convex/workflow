@@ -20,7 +20,11 @@ import type { WorkflowDefinition } from "./index.js";
 import { StepExecutor, type StepRequest, type WorkerResult } from "./step.js";
 import { createWorkflowCtx } from "./workflowContext.js";
 import { checkArgs } from "./validator.js";
-import { type RunResult, type WorkpoolOptions } from "@convex-dev/workpool";
+import {
+  type BatchWorkpool,
+  type RunResult,
+  type WorkpoolOptions,
+} from "@convex-dev/workpool";
 import { type WorkflowComponent } from "./types.js";
 import { vWorkflowId } from "../types.js";
 import { formatErrorWithStack } from "../shared.js";
@@ -46,6 +50,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
   component: WorkflowComponent,
   registered: WorkflowDefinition<ArgsValidator>,
   defaultWorkpoolOptions?: WorkpoolOptions,
+  batch?: BatchWorkpool,
 ): RegisteredMutation<
   "internal",
   {
@@ -127,6 +132,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         channel,
         Date.now(),
         workpoolOptions,
+        batch,
       );
       setupEnvironment(executor.getGenerationState.bind(executor), workflowId);
 

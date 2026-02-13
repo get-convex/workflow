@@ -1,4 +1,5 @@
 import type {
+  BatchWorkpool,
   RetryBehavior,
   RunResult,
   WorkpoolOptions,
@@ -22,6 +23,7 @@ import {
 import type { WorkflowComponent } from "./types.js";
 import { MAX_JOURNAL_SIZE } from "../shared.js";
 import type { EventId, SchedulerOptions } from "../types.js";
+import { safeFunctionName } from "./safeFunctionName.js";
 
 export type WorkerResult =
   | { type: "handlerDone"; runResult: RunResult }
@@ -64,6 +66,7 @@ export class StepExecutor {
     private receiver: BaseChannel<StepRequest>,
     private now: number,
     private workpoolOptions: WorkpoolOptions | undefined,
+    private batch?: BatchWorkpool,
   ) {
     this.journalEntrySize = journalEntries.reduce(
       (size, entry) => size + journalEntrySize(entry),
@@ -154,38 +157,64 @@ export class StepExecutor {
   }
 
   async startSteps(messages: StepRequest[]): Promise<JournalEntry[]> {
+    if (!this.batch) {
+      return this._startStepsRegular(messages);
+    }
+
+    // Split messages into batch-eligible and regular
+    const batchIndices: number[] = [];
+    const regularIndices: number[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      const target = messages[i].target;
+      if (
+        target.kind === "function" &&
+        target.functionType === "action" &&
+        this.batch.isRegistered(safeFunctionName(target.function))
+      ) {
+        batchIndices.push(i);
+      } else {
+        regularIndices.push(i);
+      }
+    }
+
+    if (batchIndices.length === 0) {
+      return this._startStepsRegular(messages);
+    }
+
+    // Process sequentially to avoid step number collisions.
+    // Batch messages first, then regular.
+    const allEntries: Array<{ index: number; entry: JournalEntry }> = [];
+
+    if (batchIndices.length > 0) {
+      const batchMessages = batchIndices.map((i) => messages[i]);
+      const batchEntries = await this._startStepsBatch(batchMessages);
+      for (let i = 0; i < batchIndices.length; i++) {
+        allEntries.push({ index: batchIndices[i], entry: batchEntries[i] });
+      }
+    }
+
+    if (regularIndices.length > 0) {
+      const regularMessages = regularIndices.map((i) => messages[i]);
+      const regularEntries = await this._startStepsRegular(regularMessages);
+      for (let i = 0; i < regularIndices.length; i++) {
+        allEntries.push({
+          index: regularIndices[i],
+          entry: regularEntries[i],
+        });
+      }
+    }
+
+    // Merge back in original message order
+    allEntries.sort((a, b) => a.index - b.index);
+    return allEntries.map((e) => e.entry);
+  }
+
+  private async _startStepsRegular(
+    messages: StepRequest[],
+  ): Promise<JournalEntry[]> {
     const steps = await Promise.all(
       messages.map(async (message) => {
-        const commonFields = {
-          inProgress: true,
-          name: message.name,
-          args: message.target.args,
-          argsSize: valueSize(message.target.args as Value),
-          runResult: undefined,
-          startedAt: this.now,
-          completedAt: undefined,
-        } satisfies Omit<Step, "kind">;
-        const target = message.target;
-        const step =
-          target.kind === "function"
-            ? {
-                kind: "function" as const,
-                functionType: target.functionType,
-                handle: await createFunctionHandle(target.function),
-                ...commonFields,
-              }
-            : target.kind === "workflow"
-              ? {
-                  kind: "workflow" as const,
-                  handle: await createFunctionHandle(target.function),
-                  ...commonFields,
-                }
-              : {
-                  kind: "event" as const,
-                  eventId: target.args.eventId,
-                  ...commonFields,
-                  args: target.args,
-                };
+        const step = await this._buildStep(message);
         return {
           retry: message.retry,
           schedulerOptions: message.schedulerOptions,
@@ -202,6 +231,95 @@ export class StepExecutor {
         workpoolOptions: this.workpoolOptions,
       },
     )) as JournalEntry[];
+    this._checkJournalSize(entries);
+    return entries;
+  }
+
+  private async _startStepsBatch(
+    messages: StepRequest[],
+  ): Promise<JournalEntry[]> {
+    const steps = await Promise.all(
+      messages.map(async (message) => {
+        const step = await this._buildStep(message);
+        return {
+          retry: message.retry,
+          schedulerOptions: message.schedulerOptions,
+          step,
+        };
+      }),
+    );
+    const { entries, onCompleteHandle } = (await this.ctx.runMutation(
+      this.component.journal.startBatchSteps,
+      {
+        workflowId: this.workflowId,
+        generationNumber: this.generationNumber,
+        steps,
+        workpoolOptions: this.workpoolOptions,
+      },
+    )) as { entries: JournalEntry[]; onCompleteHandle: string };
+    this._checkJournalSize(entries);
+
+    // Enqueue each batch task with the onComplete handle
+    for (const entry of entries) {
+      const target = messages[entries.indexOf(entry)].target;
+      if (target.kind !== "function") continue;
+      const handlerName = this.batch!.resolveHandlerName(
+        safeFunctionName(target.function),
+      );
+      if (!handlerName) continue;
+      await this.batch!.enqueueByHandle(
+        this.ctx,
+        handlerName,
+        entry.step.args as Record<string, unknown>,
+        {
+          onComplete: {
+            fnHandle: onCompleteHandle,
+            context: {
+              stepId: entry._id,
+              generationNumber: this.generationNumber,
+              workpoolOptions: this.workpoolOptions,
+            },
+          },
+          retry: messages[entries.indexOf(entry)].retry,
+        },
+      );
+    }
+    return entries;
+  }
+
+  private async _buildStep(message: StepRequest) {
+    const commonFields = {
+      inProgress: true,
+      name: message.name,
+      args: message.target.args,
+      argsSize: valueSize(message.target.args as Value),
+      runResult: undefined,
+      startedAt: this.now,
+      completedAt: undefined,
+    } satisfies Omit<Step, "kind">;
+    const target = message.target;
+    return target.kind === "function"
+      ? {
+          kind: "function" as const,
+          functionType: target.functionType,
+          handle: await createFunctionHandle(target.function),
+          ...commonFields,
+        }
+      : target.kind === "workflow"
+        ? {
+            kind: "workflow" as const,
+            handle: await createFunctionHandle(target.function),
+            ...commonFields,
+          }
+        : {
+            kind: "event" as const,
+            eventId: target.args.eventId,
+            ...commonFields,
+            args: target.args,
+          };
+  }
+
+  private _checkJournalSize(entries: JournalEntry[]) {
     for (const entry of entries) {
       this.journalEntrySize += journalEntrySize(entry);
       if (this.journalEntrySize > MAX_JOURNAL_SIZE) {
@@ -211,7 +329,6 @@ export class StepExecutor {
         );
       }
     }
-    return entries;
   }
 }
 

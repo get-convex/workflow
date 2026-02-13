@@ -1,7 +1,6 @@
 import { v } from "convex/values";
 import { WorkflowId, WorkflowManager, vWorkflowId } from "@convex-dev/workflow";
-import { BatchWorkpool } from "@convex-dev/workpool";
-import { vResultValidator } from "@convex-dev/workpool";
+import { BatchWorkpool, type RunResult } from "@convex-dev/workpool";
 import { internal } from "./_generated/api.js";
 import { components } from "./_generated/api.js";
 import { internalMutation, mutation } from "./_generated/server.js";
@@ -15,7 +14,7 @@ const batch = new BatchWorkpool(components.workpool, {
 });
 
 export const executor = batch.executor();
-batch.setExecutorRef(internal.llmSimulation.executor);
+batch.setExecutorRef(executor as any);
 
 // --- Simulated IO actions ---
 
@@ -82,10 +81,9 @@ function defineContentPipeline(manager: WorkflowManager) {
     returns: v.string(),
     handler: async (step, args): Promise<string> => {
       // Step 1: Generate outline (~20s)
-      const outline = await step.runAction(
-        internal.llmSimulation.generateOutline,
-        { topic: args.topic },
-      );
+      const outline = await step.runAction(generateOutline as any, {
+        topic: args.topic,
+      });
       await step.runMutation(internal.llmSimulation.saveProgress, {
         simulationId: args.simulationId,
         outline: outline as string[],
@@ -94,7 +92,7 @@ function defineContentPipeline(manager: WorkflowManager) {
       // Step 2: Generate 200 sections in parallel (~20s with batch, much longer with regular)
       const sectionResults = await Promise.all(
         (outline as string[]).map((title: string, index: number) =>
-          step.runAction(internal.llmSimulation.generateSection, {
+          step.runAction(generateSection as any, {
             title,
             index,
           }),
@@ -106,13 +104,10 @@ function defineContentPipeline(manager: WorkflowManager) {
       });
 
       // Step 3: Generate summary (~20s)
-      const summary = await step.runAction(
-        internal.llmSimulation.generateSummary,
-        {
-          sectionCount: sectionResults.length,
-          topic: args.topic,
-        },
-      );
+      const summary = await step.runAction(generateSummary as any, {
+        sectionCount: sectionResults.length,
+        topic: args.topic,
+      });
       await step.runMutation(internal.llmSimulation.saveSummary, {
         simulationId: args.simulationId,
         summary: summary as string,
@@ -164,7 +159,7 @@ export const saveSummary = internalMutation({
 export const pipelineCompleted = internalMutation({
   args: {
     workflowId: vWorkflowId,
-    result: vResultValidator,
+    result: v.any(),
     context: v.any(),
   },
   handler: async (ctx, args) => {
@@ -175,11 +170,12 @@ export const pipelineCompleted = internalMutation({
       return;
     }
     const completedAt = Date.now();
+    const runResult = args.result as RunResult;
     const result =
-      args.result.kind === "success"
-        ? String(args.result.returnValue)
-        : args.result.kind === "failed"
-          ? `FAILED: ${args.result.error}`
+      runResult.kind === "success"
+        ? String(runResult.returnValue)
+        : runResult.kind === "failed"
+          ? `FAILED: ${runResult.error}`
           : "CANCELED";
     await ctx.db.patch(simulation._id, { completedAt, result });
     const elapsed = ((completedAt - simulation.startedAt) / 1000).toFixed(1);
@@ -208,7 +204,7 @@ export const startRegularPipeline = mutation({
       internal.llmSimulation.regularPipeline,
       { topic, simulationId },
       {
-        onComplete: internal.llmSimulation.pipelineCompleted,
+        onComplete: internal.llmSimulation.pipelineCompleted as any,
         context: simulationId,
         startAsync: true,
       },
@@ -235,7 +231,7 @@ export const startBatchedPipeline = mutation({
       internal.llmSimulation.batchedPipeline,
       { topic, simulationId },
       {
-        onComplete: internal.llmSimulation.pipelineCompleted,
+        onComplete: internal.llmSimulation.pipelineCompleted as any,
         context: simulationId,
         startAsync: true,
       },

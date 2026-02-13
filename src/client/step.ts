@@ -230,7 +230,7 @@ export class StepExecutor {
         steps,
         workpoolOptions: this.workpoolOptions,
       },
-    )) as JournalEntry[];
+    )) as unknown as JournalEntry[];
     this._checkJournalSize(entries);
     return entries;
   }
@@ -256,12 +256,13 @@ export class StepExecutor {
         steps,
         workpoolOptions: this.workpoolOptions,
       },
-    )) as { entries: JournalEntry[]; onCompleteHandle: string };
+    )) as unknown as { entries: JournalEntry[]; onCompleteHandle: string };
     this._checkJournalSize(entries);
 
     // Enqueue each batch task with the onComplete handle
-    for (const entry of entries) {
-      const target = messages[entries.indexOf(entry)].target;
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      const target = messages[i].target;
       if (target.kind !== "function") continue;
       const handlerName = this.batch!.resolveHandlerName(
         safeFunctionName(target.function),
@@ -280,7 +281,7 @@ export class StepExecutor {
               workpoolOptions: this.workpoolOptions,
             },
           },
-          retry: messages[entries.indexOf(entry)].retry,
+          retry: messages[i].retry,
         },
       );
     }

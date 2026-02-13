@@ -128,7 +128,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         generationNumber,
         ctx,
         component,
-        journalEntries as JournalEntry[],
+        journalEntries as unknown as JournalEntry[],
         channel,
         Date.now(),
         workpoolOptions,

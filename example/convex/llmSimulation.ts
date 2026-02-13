@@ -69,6 +69,9 @@ const regularWorkflow = new WorkflowManager(components.workflow);
 
 const batchedWorkflow = new WorkflowManager(components.workflow, {
   batch,
+  workpoolOptions: {
+    maxParallelism: 200,
+  },
 });
 
 // --- Shared workflow definition factory ---
@@ -79,20 +82,28 @@ function defineContentPipeline(manager: WorkflowManager) {
     returns: v.string(),
     handler: async (step, args): Promise<string> => {
       // Step 1: Generate outline (~20s)
-      const sections = await step.runAction(
+      const outline = await step.runAction(
         internal.llmSimulation.generateOutline,
         { topic: args.topic },
       );
+      await step.runMutation(internal.llmSimulation.saveProgress, {
+        simulationId: args.simulationId,
+        outline: outline as string[],
+      });
 
       // Step 2: Generate 200 sections in parallel (~20s with batch, much longer with regular)
       const sectionResults = await Promise.all(
-        (sections as string[]).map((title: string, index: number) =>
+        (outline as string[]).map((title: string, index: number) =>
           step.runAction(internal.llmSimulation.generateSection, {
             title,
             index,
           }),
         ),
       );
+      await step.runMutation(internal.llmSimulation.saveSections, {
+        simulationId: args.simulationId,
+        sections: sectionResults as string[],
+      });
 
       // Step 3: Generate summary (~20s)
       const summary = await step.runAction(
@@ -102,11 +113,9 @@ function defineContentPipeline(manager: WorkflowManager) {
           topic: args.topic,
         },
       );
-
-      // Step 4: Save result
-      await step.runMutation(internal.llmSimulation.saveResult, {
+      await step.runMutation(internal.llmSimulation.saveSummary, {
         simulationId: args.simulationId,
-        result: summary as string,
+        summary: summary as string,
       });
 
       return summary as string;
@@ -119,14 +128,36 @@ export const batchedPipeline = defineContentPipeline(batchedWorkflow);
 
 // --- Internal mutations ---
 
-export const saveResult = internalMutation({
+export const saveProgress = internalMutation({
   args: {
     simulationId: v.id("llmSimulations"),
-    result: v.string(),
+    outline: v.array(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.simulationId, { result: args.result });
+    await ctx.db.patch(args.simulationId, { outline: args.outline });
+  },
+});
+
+export const saveSections = internalMutation({
+  args: {
+    simulationId: v.id("llmSimulations"),
+    sections: v.array(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.simulationId, { sections: args.sections });
+  },
+});
+
+export const saveSummary = internalMutation({
+  args: {
+    simulationId: v.id("llmSimulations"),
+    summary: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.simulationId, { summary: args.summary });
   },
 });
 
@@ -144,7 +175,13 @@ export const pipelineCompleted = internalMutation({
       return;
     }
     const completedAt = Date.now();
-    await ctx.db.patch(simulation._id, { completedAt });
+    const result =
+      args.result.kind === "success"
+        ? String(args.result.returnValue)
+        : args.result.kind === "failed"
+          ? `FAILED: ${args.result.error}`
+          : "CANCELED";
+    await ctx.db.patch(simulation._id, { completedAt, result });
     const elapsed = ((completedAt - simulation.startedAt) / 1000).toFixed(1);
     console.log(
       `Pipeline completed [${simulation.mode}]: ${elapsed}s elapsed`,

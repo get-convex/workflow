@@ -8,4 +8,14 @@ export default defineSchema({
     workflowId: vWorkflowId,
     out: v.any(),
   }).index("workflowId", ["workflowId"]),
+  llmSimulations: defineTable({
+    mode: v.union(v.literal("regular"), v.literal("batched")),
+    topic: v.string(),
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    outline: v.optional(v.array(v.string())),
+    sections: v.optional(v.array(v.string())),
+    summary: v.optional(v.string()),
+    result: v.optional(v.string()),
+  }),
 });

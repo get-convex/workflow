@@ -1,4 +1,5 @@
 import type {
+  BatchWorkpool,
   RunResult,
   WorkpoolOptions,
   WorkpoolRetryOptions,
@@ -100,7 +101,8 @@ export class WorkflowManager {
   constructor(
     public component: WorkflowComponent,
     public options?: {
-      workpoolOptions: WorkpoolOptions;
+      workpoolOptions?: WorkpoolOptions;
+      batch?: BatchWorkpool;
     },
   ) {}
 
@@ -129,6 +131,7 @@ export class WorkflowManager {
       this.component,
       workflow,
       this.options?.workpoolOptions,
+      this.options?.batch,
     );
   }
 

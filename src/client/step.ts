@@ -1,4 +1,5 @@
 import type {
+  BatchWorkpool,
   RetryBehavior,
   RunResult,
   WorkpoolOptions,
@@ -22,6 +23,7 @@ import {
 import type { WorkflowComponent } from "./types.js";
 import { MAX_JOURNAL_SIZE } from "../shared.js";
 import type { EventId, SchedulerOptions } from "../types.js";
+import { safeFunctionName } from "./safeFunctionName.js";
 
 export type WorkerResult =
   | { type: "handlerDone"; runResult: RunResult }
@@ -54,6 +56,7 @@ export type StepRequest = {
 
 export class StepExecutor {
   private journalEntrySize: number;
+  private remainingMessageCount: number;
 
   constructor(
     private workflowId: string,
@@ -64,9 +67,17 @@ export class StepExecutor {
     private receiver: BaseChannel<StepRequest>,
     private now: number,
     private workpoolOptions: WorkpoolOptions | undefined,
+    private batch?: BatchWorkpool,
   ) {
     this.journalEntrySize = journalEntries.reduce(
       (size, entry) => size + journalEntrySize(entry),
+      0,
+    );
+    // Cache the total message count for getGenerationState (called on every
+    // Date.now()). A batchGroup entry covers `count` messages; others cover 1.
+    this.remainingMessageCount = journalEntries.reduce(
+      (count, entry) =>
+        count + (entry.step.kind === "batchGroup" ? entry.step.count : 1),
       0,
     );
 
@@ -80,9 +91,58 @@ export class StepExecutor {
       const message = await this.receiver.get();
       // In the future we can correlate the calls to entries by handle, args,
       // etc. instead of just ordering. As is, the fn order can't change.
-      const entry = this.journalEntries.shift();
-      // why not to run queries inline: they fetch too much data internally
+      const entry = this.journalEntries[0];
+
+      // Handle batchGroup replay: one entry covers N messages.
+      if (entry && entry.step.kind === "batchGroup") {
+        this.journalEntries.shift();
+        this.remainingMessageCount -= entry.step.count;
+        if (entry.step.inProgress) {
+          throw new Error(
+            `Assertion failed: batchGroup entry still in progress`,
+          );
+        }
+        // Load all individual results from the batchResults table.
+        const results = (await this.ctx.runQuery(
+          this.component.journal.loadBatchResults,
+          { batchStepId: entry._id },
+        )) as unknown as Array<{
+          index: number;
+          result: { kind: string; returnValue?: unknown; error?: string };
+        }>;
+        results.sort((a, b) => a.index - b.index);
+
+        // Validate results count and index integrity.
+        if (results.length !== entry.step.count) {
+          throw new Error(
+            `Batch result count mismatch for ${entry._id}: ` +
+              `expected ${entry.step.count} results but got ${results.length}`,
+          );
+        }
+        for (let i = 0; i < results.length; i++) {
+          if (results[i].index !== i) {
+            throw new Error(
+              `Batch result index mismatch for ${entry._id}: ` +
+                `expected index ${i} at position ${i} but got index ${results[i].index}`,
+            );
+          }
+        }
+
+        // Resolve the first message (already dequeued).
+        this._completeBatchItem(message, results[0]);
+
+        // Dequeue and resolve the remaining count - 1 messages.
+        for (let i = 1; i < entry.step.count; i++) {
+          const msg = await this.receiver.get();
+          this._completeBatchItem(msg, results[i]);
+        }
+        continue;
+      }
+
+      // Regular replay: one entry per message.
       if (entry) {
+        this.journalEntries.shift();
+        this.remainingMessageCount--;
         this.completeMessage(message, entry);
         continue;
       }
@@ -107,17 +167,21 @@ export class StepExecutor {
   }
 
   getGenerationState() {
-    if (this.journalEntries.length <= this.receiver.bufferSize) {
+    // Use cached message count (decremented as entries are consumed in run()).
+    if (this.remainingMessageCount <= this.receiver.bufferSize) {
       return { now: this.now, latest: true };
     }
-    return {
-      // We use the next entry's startedAt, since we're in code just before that
-      // step is invoked. We use the bufferSize, since multiple steps may be
-      // currently enqueued in one generation, but the code after it has already
-      // started executing.
-      now: this.journalEntries[this.receiver.bufferSize].step.startedAt,
-      latest: false,
-    };
+    // Find the entry that corresponds to the buffer boundary.
+    let accumulated = 0;
+    for (const entry of this.journalEntries) {
+      const entryMessages =
+        entry.step.kind === "batchGroup" ? entry.step.count : 1;
+      if (accumulated + entryMessages > this.receiver.bufferSize) {
+        return { now: entry.step.startedAt, latest: false };
+      }
+      accumulated += entryMessages;
+    }
+    return { now: this.now, latest: true };
   }
 
   completeMessage(message: StepRequest, entry: JournalEntry) {
@@ -153,39 +217,69 @@ export class StepExecutor {
     }
   }
 
+  private _completeBatchItem(
+    message: StepRequest,
+    result: { index: number; result: { kind: string; returnValue?: unknown; error?: string } },
+  ) {
+    switch (result.result.kind) {
+      case "success":
+        message.resolve(result.result.returnValue);
+        break;
+      case "failed":
+        message.reject(new Error(result.result.error));
+        break;
+      case "canceled":
+        message.reject(new Error("Canceled"));
+        break;
+    }
+  }
+
   async startSteps(messages: StepRequest[]): Promise<JournalEntry[]> {
+    if (!this.batch) {
+      return this._startStepsRegular(messages);
+    }
+
+    // Classify each message as batch-eligible or regular.
+    const isBatch = messages.map((message) => {
+      const target = message.target;
+      return (
+        target.kind === "function" &&
+        target.functionType === "action" &&
+        this.batch!.isRegistered(safeFunctionName(target.function))
+      );
+    });
+
+    if (isBatch.every((b) => !b)) {
+      return this._startStepsRegular(messages);
+    }
+
+    // Process contiguous groups in original order so step numbers are assigned
+    // sequentially matching message order. This is critical for correctness on
+    // resume: journal entries are loaded by stepNumber, and the handler replays
+    // messages in original order, so the two must match.
+    const allEntries: JournalEntry[] = [];
+    let i = 0;
+    while (i < messages.length) {
+      const groupIsBatch = isBatch[i];
+      const groupStart = i;
+      while (i < messages.length && isBatch[i] === groupIsBatch) {
+        i++;
+      }
+      const groupMessages = messages.slice(groupStart, i);
+      const groupEntries = groupIsBatch
+        ? await this._startStepsBatch(groupMessages)
+        : await this._startStepsRegular(groupMessages);
+      allEntries.push(...groupEntries);
+    }
+    return allEntries;
+  }
+
+  private async _startStepsRegular(
+    messages: StepRequest[],
+  ): Promise<JournalEntry[]> {
     const steps = await Promise.all(
       messages.map(async (message) => {
-        const commonFields = {
-          inProgress: true,
-          name: message.name,
-          args: message.target.args,
-          argsSize: valueSize(message.target.args as Value),
-          runResult: undefined,
-          startedAt: this.now,
-          completedAt: undefined,
-        } satisfies Omit<Step, "kind">;
-        const target = message.target;
-        const step =
-          target.kind === "function"
-            ? {
-                kind: "function" as const,
-                functionType: target.functionType,
-                handle: await createFunctionHandle(target.function),
-                ...commonFields,
-              }
-            : target.kind === "workflow"
-              ? {
-                  kind: "workflow" as const,
-                  handle: await createFunctionHandle(target.function),
-                  ...commonFields,
-                }
-              : {
-                  kind: "event" as const,
-                  eventId: target.args.eventId,
-                  ...commonFields,
-                  args: target.args,
-                };
+        const step = await this._buildStep(message);
         return {
           retry: message.retry,
           schedulerOptions: message.schedulerOptions,
@@ -201,7 +295,117 @@ export class StepExecutor {
         steps,
         workpoolOptions: this.workpoolOptions,
       },
-    )) as JournalEntry[];
+    )) as unknown as JournalEntry[];
+    this._checkJournalSize(entries);
+    return entries;
+  }
+
+  private async _startStepsBatch(
+    messages: StepRequest[],
+  ): Promise<JournalEntry[]> {
+    // Create a single batchGroup step doc for all N messages.
+    const { entry, onCompleteHandle } =
+      (await this.ctx.runMutation(
+        this.component.journal.startBatchGroupStep,
+        {
+          workflowId: this.workflowId,
+          generationNumber: this.generationNumber,
+          count: messages.length,
+          workpoolOptions: this.workpoolOptions,
+        },
+      )) as unknown as {
+        entry: JournalEntry;
+        onCompleteHandle: string;
+      };
+    this._checkJournalSize([entry]);
+
+    // Build all batch tasks upfront.
+    const maxWorkers = (this.batch as any).options?.maxWorkers ?? 10;
+    const tasks = messages.map((message, i) => {
+      const target = message.target;
+      if (target.kind !== "function") {
+        throw new Error(
+          `Assertion failed: batch step has unexpected target kind "${target.kind}"`,
+        );
+      }
+      const handlerName = this.batch!.resolveHandlerName(
+        safeFunctionName(target.function),
+      );
+      if (!handlerName) {
+        throw new Error(
+          `Assertion failed: batch step has no handler for "${safeFunctionName(target.function)}" despite passing isRegistered`,
+        );
+      }
+      return {
+        name: handlerName,
+        args: target.args as Record<string, unknown>,
+        slot: Math.floor(Math.random() * maxWorkers),
+        onComplete: {
+          fnHandle: onCompleteHandle,
+          context: {
+            batchStepId: entry._id,
+            index: i,
+          },
+        },
+        retryBehavior: undefined,
+      };
+    });
+
+    // First enqueue triggers batchConfig setup (executor start).
+    await this.batch!.enqueueByHandle(
+      this.ctx,
+      tasks[0].name,
+      tasks[0].args,
+      { onComplete: tasks[0].onComplete, retry: messages[0].retry },
+    );
+
+    // Batch-enqueue the rest directly via the component mutation.
+    const remaining = tasks.slice(1);
+    const BATCH_SIZE = 500;
+    for (let i = 0; i < remaining.length; i += BATCH_SIZE) {
+      const chunk = remaining.slice(i, i + BATCH_SIZE);
+      await this.ctx.runMutation(this.batch!.component.batch.enqueueBatch, {
+        tasks: chunk,
+        batchConfig: undefined,
+      });
+    }
+    // Return single entry — always inProgress, triggers executorBlocked.
+    return [entry];
+  }
+
+  private async _buildStep(message: StepRequest) {
+    const commonFields = {
+      inProgress: true,
+      name: message.name,
+      args: message.target.args,
+      argsSize: valueSize(message.target.args as Value),
+      runResult: undefined,
+      startedAt: this.now,
+      completedAt: undefined,
+    } satisfies Omit<Step, "kind">;
+    const target = message.target;
+    return target.kind === "function"
+      ? {
+          kind: "function" as const,
+          functionType: target.functionType,
+          handle: await createFunctionHandle(target.function),
+          ...commonFields,
+        }
+      : target.kind === "workflow"
+        ? {
+            kind: "workflow" as const,
+            handle: await createFunctionHandle(target.function),
+            ...commonFields,
+          }
+        : {
+            kind: "event" as const,
+            eventId: target.args.eventId,
+            ...commonFields,
+            args: target.args,
+          };
+  }
+
+  private _checkJournalSize(entries: JournalEntry[]) {
     for (const entry of entries) {
       this.journalEntrySize += journalEntrySize(entry);
       if (this.journalEntrySize > MAX_JOURNAL_SIZE) {
@@ -211,7 +415,6 @@ export class StepExecutor {
         );
       }
     }
-    return entries;
   }
 }
 

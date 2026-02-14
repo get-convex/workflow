@@ -152,10 +152,15 @@ function publicStep(step: JournalEntry): WorkflowStep {
             kind: "workflow",
             nestedWorkflowId: publicWorkflowId(step.step.workflowId!),
           }
-        : {
-            kind: "function",
-            workId: step.step.workId!,
-          }),
+        : step.step.kind === "batchGroup"
+          ? {
+              kind: "function" as const,
+              workId: undefined!,
+            }
+          : {
+              kind: "function",
+              workId: step.step.workId!,
+            }),
   } satisfies WorkflowStep;
 }
 
@@ -289,6 +294,9 @@ export async function completeHandler(
               workflowId: step.workflowId,
             });
           }
+        } else if (step.kind === "batchGroup") {
+          // Batch items don't have individual workIds — the generationNumber
+          // bump prevents the poller from re-enqueuing the workflow.
         }
       }
     }
@@ -352,6 +360,17 @@ export const cleanup = mutation({
       .collect();
     for (const journalEntry of journalEntries) {
       logger.debug("Deleting journal entry", journalEntry);
+      if (journalEntry.step.kind === "batchGroup") {
+        const results = await ctx.db
+          .query("batchResults")
+          .withIndex("batchStep", (q) =>
+            q.eq("batchStepId", journalEntry._id),
+          )
+          .collect();
+        for (const r of results) {
+          await ctx.db.delete(r._id);
+        }
+      }
       await ctx.db.delete(journalEntry._id);
     }
     return true;

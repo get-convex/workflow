@@ -20,7 +20,11 @@ import type { WorkflowDefinition } from "./index.js";
 import { StepExecutor, type StepRequest, type WorkerResult } from "./step.js";
 import { createWorkflowCtx } from "./workflowContext.js";
 import { checkArgs } from "./validator.js";
-import { type RunResult, type WorkpoolOptions } from "@convex-dev/workpool";
+import {
+  type BatchWorkpool,
+  type RunResult,
+  type WorkpoolOptions,
+} from "@convex-dev/workpool";
 import { type WorkflowComponent } from "./types.js";
 import { vWorkflowId } from "../types.js";
 import { formatErrorWithStack } from "../shared.js";
@@ -46,6 +50,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
   component: WorkflowComponent,
   registered: WorkflowDefinition<ArgsValidator>,
   defaultWorkpoolOptions?: WorkpoolOptions,
+  batch?: BatchWorkpool,
 ): RegisteredMutation<
   "internal",
   {
@@ -114,19 +119,24 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
           `Assertion failed: not blocked but have in-progress journal entry`,
         );
       }
-      const channel = new BaseChannel<StepRequest>(
-        workpoolOptions.maxParallelism ?? 10,
-      );
+      // When batch is configured, use a large channel so the handler can push
+      // all batch messages (e.g. 1000 Promise.all items) in a single run,
+      // creating one batchGroup instead of many smaller ones across re-runs.
+      const channelCapacity = batch
+        ? Math.max(workpoolOptions.maxParallelism ?? 10, 10000)
+        : workpoolOptions.maxParallelism ?? 10;
+      const channel = new BaseChannel<StepRequest>(channelCapacity);
       const step = createWorkflowCtx(workflowId, channel);
       const executor = new StepExecutor(
         workflowId,
         generationNumber,
         ctx,
         component,
-        journalEntries as JournalEntry[],
+        journalEntries as unknown as JournalEntry[],
         channel,
         Date.now(),
         workpoolOptions,
+        batch,
       );
       setupEnvironment(executor.getGenerationState.bind(executor), workflowId);
 

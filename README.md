@@ -326,6 +326,98 @@ const workflow = new WorkflowManager(components.workflow, {
 });
 ```
 
+### High-throughput steps with BatchWorkpool
+
+For workflows that need to run many actions in parallel (e.g., calling an LLM for
+each section of a document), the standard workpool is limited by Convex's action
+concurrency. Each step consumes a separate action slot, so 200 parallel steps
+would require 200 concurrent actions.
+
+`BatchWorkpool` from `@convex-dev/workpool` solves this by running many tasks
+inside a small number of executor actions. A single executor can handle hundreds
+of concurrent async tasks, so 200 parallel steps only need 2-3 action slots.
+
+#### Setup
+
+First, install the workpool component at the app level in your `convex.config.ts`:
+
+```ts
+// convex/convex.config.ts
+import workflow from "@convex-dev/workflow/convex.config.js";
+import workpool from "@convex-dev/workpool/convex.config";
+import { defineApp } from "convex/server";
+
+const app = defineApp();
+app.use(workflow);
+app.use(workpool);
+export default app;
+```
+
+Then create a `BatchWorkpool`, register your actions with `batch.action()`, and
+pass it to `WorkflowManager`:
+
+```ts
+import { BatchWorkpool } from "@convex-dev/workpool";
+import { WorkflowManager } from "@convex-dev/workflow";
+import { components } from "./_generated/api";
+
+// Create batch workpool with the app-level workpool component
+const batch = new BatchWorkpool(components.workpool, {
+  maxWorkers: 2, // number of executor actions
+  maxConcurrencyPerWorker: 200, // async tasks per executor
+});
+
+// Export the executor and wire it up
+export const executor = batch.executor();
+batch.setExecutorRef(executor as any);
+
+// Register actions with batch.action() instead of internalAction()
+export const myAction = batch.action("myAction", {
+  args: { input: v.string() },
+  handler: async (_ctx, args): Promise<string> => {
+    // Your async work here (LLM calls, API requests, etc.)
+    return `Result for ${args.input}`;
+  },
+});
+
+// Pass batch to WorkflowManager
+const workflow = new WorkflowManager(components.workflow, {
+  batch,
+  workpoolOptions: {
+    maxParallelism: 200, // allow many steps per workflow tick
+  },
+});
+```
+
+#### Using batch actions in workflows
+
+Use batch-registered actions in `step.runAction()` exactly like regular actions.
+The workflow automatically routes them through `BatchWorkpool` instead of the
+standard workpool:
+
+```ts
+export const myWorkflow = workflow.define({
+  args: { items: v.array(v.string()) },
+  handler: async (step, args): Promise<string[]> => {
+    // All 200 items run concurrently inside ~2 executor actions
+    const results = await Promise.all(
+      args.items.map((item) =>
+        step.runAction(myAction as any, { input: item }),
+      ),
+    );
+    return results as string[];
+  },
+});
+```
+
+Actions registered with `batch.action()` are automatically detected and routed
+through `BatchWorkpool`. Non-batch actions in the same workflow still go through
+the standard workpool.
+
+See [`example/convex/llmSimulation.ts`](./example/convex/llmSimulation.ts) for a
+complete example comparing regular vs. batched workflow performance with 200
+parallel steps.
+
 ### Checking a workflow's status
 
 The `workflow.start()` method returns a `WorkflowId`, which can then be used for

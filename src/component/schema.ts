@@ -89,6 +89,11 @@ export const step = v.union(
     eventId: v.optional(v.id("events")),
     args: v.object({ eventId: v.optional(v.id("events")) }),
   }),
+  v.object({
+    kind: v.literal("batchGroup"),
+    count: v.number(),
+    ...stepCommonFields,
+  }),
 );
 export type Step = Infer<typeof step>;
 
@@ -110,6 +115,9 @@ function stepSize(step: Step): number {
       break;
     case "event":
       size += step.eventId?.length ?? 0;
+      break;
+    case "batchGroup":
+      size += 8; // count field
       break;
   }
   size += 8 + step.argsSize;
@@ -184,6 +192,11 @@ export default defineSchema({
     "workflowId",
     "state.kind",
   ]),
+  batchResults: defineTable({
+    batchStepId: v.id("steps"),
+    index: v.number(),
+    result: vResultValidator,
+  }).index("batchStep", ["batchStepId", "index"]),
   onCompleteFailures: defineTable(
     v.union(
       v.object({

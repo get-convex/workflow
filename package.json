@@ -66,7 +66,7 @@
     "async-channel": "^0.2.0"
   },
   "devDependencies": {
-    "@convex-dev/workpool": "0.3.1",
+    "@convex-dev/workpool": "https://pkg.pr.new/get-convex/workpool/@convex-dev/workpool@167",
     "@edge-runtime/vm": "5.0.0",
     "@eslint/eslintrc": "3.3.3",
     "@eslint/js": "9.39.2",

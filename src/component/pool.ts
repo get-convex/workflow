@@ -180,6 +180,21 @@ async function onCompleteHandler(
     }
     return;
   }
+  // Only re-enqueue the workflow when no in-progress steps remain.
+  // This avoids flooding the standard workpool with redundant re-runs
+  // (e.g. 1000 batch completions each triggering a workflow re-enqueue).
+  const remainingInProgress = await ctx.db
+    .query("steps")
+    .withIndex("inProgress", (q) =>
+      q.eq("step.inProgress", true).eq("workflowId", workflowId),
+    )
+    .first();
+  if (remainingInProgress) {
+    console.debug(
+      `Skipping workflow re-enqueue: ${workflowId} still has in-progress steps`,
+    );
+    return;
+  }
   const workpool = await getWorkpool(ctx, args.context.workpoolOptions);
   await enqueueWorkflow(ctx, workflow, workpool);
 }
@@ -201,6 +216,136 @@ export async function enqueueWorkflow(
     },
   );
 }
+
+// Lightweight onComplete for batch steps. Only patches the step doc with the
+// result — no shared counter, no index check, no workflow re-enqueue.
+// Re-enqueue is handled by _checkBatchCompletion (polling).
+export const onCompleteBatchStep = internalMutation({
+  args: {
+    workId: vWorkIdValidator,
+    result: vResultValidator,
+    context: v.any(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { stepId } = args.context;
+    const normalizedStepId = ctx.db.normalizeId("steps", stepId);
+    if (!normalizedStepId) return;
+
+    // Patch step result directly — read step to spread, then patch.
+    const entry = await ctx.db.get(normalizedStepId);
+    if (!entry) return;
+    await ctx.db.patch(normalizedStepId, {
+      step: {
+        ...entry.step,
+        inProgress: false,
+        completedAt: Date.now(),
+        runResult: args.result,
+      },
+    });
+  },
+});
+
+// Lightweight onComplete for batchGroup items. Write-only: inserts a result doc
+// into batchResults — no read-modify-write, no OCC contention.
+export const onCompleteBatchGroupItem = internalMutation({
+  args: {
+    workId: vWorkIdValidator,
+    result: vResultValidator,
+    context: v.any(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { batchStepId, index } = args.context;
+    const normalizedId = ctx.db.normalizeId("steps", batchStepId);
+    if (!normalizedId) return;
+    await ctx.db.insert("batchResults", {
+      batchStepId: normalizedId,
+      index,
+      result: args.result,
+    });
+  },
+});
+
+// Polling completion checker for batch steps. Scheduled from startBatchSteps
+// and startBatchGroupStep. For batchGroup steps, counts batchResults docs.
+// For legacy batch steps, checks the inProgress index.
+export const _checkBatchCompletion = internalMutation({
+  args: {
+    workflowId: v.id("workflows"),
+    generationNumber: v.number(),
+    workpoolOptions: v.optional(workpoolOptions),
+    _pollCount: v.optional(v.number()),
+    _firstPollAt: v.optional(v.number()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const pollCount = (args._pollCount ?? 0) + 1;
+    const firstPollAt = args._firstPollAt ?? Date.now();
+
+    // Find all in-progress steps for this workflow.
+    const inProgressSteps = await ctx.db
+      .query("steps")
+      .withIndex("inProgress", (q) =>
+        q.eq("step.inProgress", true).eq("workflowId", args.workflowId),
+      )
+      .collect();
+
+    let anyRemaining = false;
+    for (const step of inProgressSteps) {
+      if (step.step.kind === "batchGroup") {
+        // Count batchResults for this batchGroup step.
+        // Use take(count) to stop reading early when not all results are in.
+        const results = await ctx.db
+          .query("batchResults")
+          .withIndex("batchStep", (q) => q.eq("batchStepId", step._id))
+          .take(step.step.count);
+        if (results.length >= step.step.count) {
+          // All items complete — mark the batchGroup step as done.
+          await ctx.db.patch(step._id, {
+            step: {
+              ...step.step,
+              inProgress: false,
+              completedAt: Date.now(),
+              runResult: { kind: "success", returnValue: null },
+            },
+          });
+          // There may be other in-progress steps; continue checking.
+        } else {
+          anyRemaining = true;
+        }
+      } else {
+        // Legacy batch step or other in-progress step — still waiting.
+        anyRemaining = true;
+      }
+    }
+
+    if (anyRemaining) {
+      // Not done yet — poll again in 200ms.
+      await ctx.scheduler.runAfter(
+        200,
+        internal.pool._checkBatchCompletion,
+        {
+          ...args,
+          _pollCount: pollCount,
+          _firstPollAt: firstPollAt,
+        },
+      );
+      return;
+    }
+    // All batch steps done — re-enqueue the workflow.
+    const elapsed = ((Date.now() - firstPollAt) / 1000).toFixed(1);
+    const console = await getDefaultLogger(ctx);
+    console.info(
+      `[PERF] Batch completion detected after ${pollCount} polls (${elapsed}s)`,
+    );
+    const workflow = await getWorkflow(ctx, args.workflowId, null);
+    if (workflow.runResult !== undefined) return;
+    if (workflow.generationNumber !== args.generationNumber) return;
+    const workpool = await getWorkpool(ctx, args.workpoolOptions);
+    await enqueueWorkflow(ctx, workflow, workpool);
+  },
+});
 
 export type OnComplete =
   typeof onComplete extends RegisteredAction<

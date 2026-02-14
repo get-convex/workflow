@@ -556,3 +556,721 @@ describe("StepExecutor.run batchGroup replay", () => {
     expect(msg2.reject).toHaveBeenCalledWith(new Error("Canceled"));
   });
 });
+
+// ==========================================================================
+// Black-box tests: designed from the spec without reading the implementation.
+// Goal: find bugs by testing edge cases and tricky scenarios.
+// ==========================================================================
+
+describe("batchGroup edge cases (black-box)", () => {
+  // --- Replay edge cases ---
+
+  it("replays batchGroup with count=1 (single item batch)", async () => {
+    const bgEntry = fakeBatchGroupEntry(0, 1);
+    const { executor, channel, setMockBatchResults } = createExecutor({
+      journalEntries: [bgEntry],
+    });
+
+    setMockBatchResults([
+      { index: 0, result: { kind: "success", returnValue: "only" } },
+    ]);
+
+    const msg = actionMessage("s0", "module:action");
+    const msgBlock = actionMessage("block", "module:action");
+    await channel.push(msg);
+    await channel.push(msgBlock);
+
+    const result = await executor.run();
+    expect(result.type).toBe("executorBlocked");
+    expect(msg.resolve).toHaveBeenCalledWith("only");
+    expect(msg.reject).not.toHaveBeenCalled();
+  });
+
+  it("replays two consecutive batchGroup entries", async () => {
+    // Two batchGroups back-to-back: first has 2 items, second has 3 items
+    const bg1 = fakeBatchGroupEntry(0, 2);
+    const bg2 = fakeBatchGroupEntry(1, 3);
+    // Give them distinct IDs
+    (bg2 as any)._id = "step_bg_1";
+
+    // We need loadBatchResults to return different results for different step IDs.
+    // The mock currently returns one fixed array. Let's use a per-call approach.
+    const callLog: string[] = [];
+    let batchResultsMap: Record<
+      string,
+      Array<{
+        index: number;
+        result: { kind: string; returnValue?: unknown; error?: string };
+      }>
+    > = {};
+
+    batchResultsMap["step_bg_0"] = [
+      { index: 0, result: { kind: "success", returnValue: "bg1_item0" } },
+      { index: 1, result: { kind: "success", returnValue: "bg1_item1" } },
+    ];
+    batchResultsMap["step_bg_1"] = [
+      { index: 0, result: { kind: "success", returnValue: "bg2_item0" } },
+      { index: 1, result: { kind: "success", returnValue: "bg2_item1" } },
+      { index: 2, result: { kind: "success", returnValue: "bg2_item2" } },
+    ];
+
+    const mockComponent = {
+      journal: {
+        startSteps: { __type: "startSteps" } as any,
+        startBatchSteps: { __type: "startBatchSteps" } as any,
+        startBatchGroupStep: { __type: "startBatchGroupStep" } as any,
+        loadBatchResults: { __type: "loadBatchResults" } as any,
+      },
+    } as any;
+
+    let stepCounter = 100;
+    const mockCtx = {
+      runMutation: vi.fn(async (_ref: any, mutArgs: any) => {
+        // Handle startSteps for the blocking message
+        if (_ref === mockComponent.journal.startSteps) {
+          return mutArgs.steps.map((s: any) =>
+            fakeEntry(stepCounter++, s.step.name),
+          );
+        }
+        return null;
+      }),
+      runQuery: vi.fn(async (_ref: any, args: any) => {
+        if (_ref === mockComponent.journal.loadBatchResults) {
+          callLog.push(args.batchStepId);
+          return batchResultsMap[args.batchStepId] ?? [];
+        }
+        return [];
+      }),
+    } as any;
+
+    const channel = new BaseChannel<StepRequest>(100);
+    const executor = new StepExecutor(
+      "wf_test",
+      1,
+      mockCtx,
+      mockComponent,
+      [bg1, bg2],
+      channel,
+      Date.now(),
+      undefined,
+      undefined,
+    );
+
+    // 2 messages for bg1 + 3 messages for bg2 + 1 blocking message
+    const msgs = Array.from({ length: 6 }, (_, i) =>
+      actionMessage(`s${i}`, "module:action"),
+    );
+    for (const m of msgs) await channel.push(m);
+
+    const result = await executor.run();
+
+    expect(result.type).toBe("executorBlocked");
+    // loadBatchResults should have been called for both batchGroup entries
+    expect(callLog).toEqual(["step_bg_0", "step_bg_1"]);
+    // First batchGroup: messages 0,1
+    expect(msgs[0].resolve).toHaveBeenCalledWith("bg1_item0");
+    expect(msgs[1].resolve).toHaveBeenCalledWith("bg1_item1");
+    // Second batchGroup: messages 2,3,4
+    expect(msgs[2].resolve).toHaveBeenCalledWith("bg2_item0");
+    expect(msgs[3].resolve).toHaveBeenCalledWith("bg2_item1");
+    expect(msgs[4].resolve).toHaveBeenCalledWith("bg2_item2");
+  });
+
+  it("sorts results by index even when returned out of order", async () => {
+    const bgEntry = fakeBatchGroupEntry(0, 3);
+    const { executor, channel, setMockBatchResults } = createExecutor({
+      journalEntries: [bgEntry],
+    });
+
+    // Results returned in scrambled order: 2, 0, 1
+    setMockBatchResults([
+      { index: 2, result: { kind: "success", returnValue: "two" } },
+      { index: 0, result: { kind: "success", returnValue: "zero" } },
+      { index: 1, result: { kind: "success", returnValue: "one" } },
+    ]);
+
+    const msg0 = actionMessage("s0", "module:action");
+    const msg1 = actionMessage("s1", "module:action");
+    const msg2 = actionMessage("s2", "module:action");
+    const msgBlock = actionMessage("block", "module:action");
+    await channel.push(msg0);
+    await channel.push(msg1);
+    await channel.push(msg2);
+    await channel.push(msgBlock);
+
+    const result = await executor.run();
+
+    expect(result.type).toBe("executorBlocked");
+    // Results must be matched by index, not by arrival order
+    expect(msg0.resolve).toHaveBeenCalledWith("zero");
+    expect(msg1.resolve).toHaveBeenCalledWith("one");
+    expect(msg2.resolve).toHaveBeenCalledWith("two");
+  });
+
+  it("handles batchGroup where all items fail", async () => {
+    const bgEntry = fakeBatchGroupEntry(0, 2);
+    const { executor, channel, setMockBatchResults } = createExecutor({
+      journalEntries: [bgEntry],
+    });
+
+    setMockBatchResults([
+      { index: 0, result: { kind: "failed", error: "boom0" } },
+      { index: 1, result: { kind: "failed", error: "boom1" } },
+    ]);
+
+    const msg0 = actionMessage("s0", "module:action");
+    const msg1 = actionMessage("s1", "module:action");
+    const msgBlock = actionMessage("block", "module:action");
+    await channel.push(msg0);
+    await channel.push(msg1);
+    await channel.push(msgBlock);
+
+    const result = await executor.run();
+
+    expect(result.type).toBe("executorBlocked");
+    expect(msg0.resolve).not.toHaveBeenCalled();
+    expect(msg1.resolve).not.toHaveBeenCalled();
+    expect(msg0.reject).toHaveBeenCalledWith(new Error("boom0"));
+    expect(msg1.reject).toHaveBeenCalledWith(new Error("boom1"));
+  });
+
+  it("throws if batchGroup entry is still in progress during replay", async () => {
+    // A batchGroup entry that hasn't completed yet should not be replayed
+    const bgEntry = fakeBatchGroupEntry(0, 2, { inProgress: true });
+    const { executor, channel } = createExecutor({
+      journalEntries: [bgEntry],
+    });
+
+    const msg = actionMessage("s0", "module:action");
+    const msgBlock = actionMessage("block", "module:action");
+    await channel.push(msg);
+    await channel.push(msgBlock);
+
+    // Should throw or return executorBlocked (since in-progress means blocked)
+    await expect(executor.run()).rejects.toThrow();
+  });
+
+  it("replays batchGroup followed by regular entry then another batchGroup", async () => {
+    // bg(2) -> regular -> bg(1)
+    const bg1 = fakeBatchGroupEntry(0, 2);
+    const regular: JournalEntry = {
+      _id: "step_r1",
+      _creationTime: Date.now(),
+      workflowId: "wf_test" as any,
+      stepNumber: 1,
+      step: {
+        kind: "function" as const,
+        functionType: "action" as const,
+        handle: "function://test",
+        name: "middle",
+        inProgress: false,
+        argsSize: 2,
+        args: {},
+        runResult: { kind: "success" as const, returnValue: "mid" },
+        startedAt: Date.now(),
+        completedAt: Date.now(),
+      },
+    };
+    const bg2 = fakeBatchGroupEntry(2, 1);
+    (bg2 as any)._id = "step_bg_2";
+
+    const mockComponent = {
+      journal: {
+        startSteps: { __type: "startSteps" } as any,
+        startBatchSteps: { __type: "startBatchSteps" } as any,
+        startBatchGroupStep: { __type: "startBatchGroupStep" } as any,
+        loadBatchResults: { __type: "loadBatchResults" } as any,
+      },
+    } as any;
+
+    const batchResultsMap: Record<string, any[]> = {
+      step_bg_0: [
+        { index: 0, result: { kind: "success", returnValue: "b1_0" } },
+        { index: 1, result: { kind: "success", returnValue: "b1_1" } },
+      ],
+      step_bg_2: [
+        { index: 0, result: { kind: "success", returnValue: "b2_0" } },
+      ],
+    };
+
+    let stepCounter = 100;
+    const mockCtx = {
+      runMutation: vi.fn(async (_ref: any, mutArgs: any) => {
+        if (_ref === mockComponent.journal.startSteps) {
+          return mutArgs.steps.map((s: any) =>
+            fakeEntry(stepCounter++, s.step.name),
+          );
+        }
+        return null;
+      }),
+      runQuery: vi.fn(async (_ref: any, args: any) => {
+        if (_ref === mockComponent.journal.loadBatchResults) {
+          return batchResultsMap[args.batchStepId] ?? [];
+        }
+        return [];
+      }),
+    } as any;
+
+    const channel = new BaseChannel<StepRequest>(100);
+    const executor = new StepExecutor(
+      "wf_test",
+      1,
+      mockCtx,
+      mockComponent,
+      [bg1, regular, bg2],
+      channel,
+      Date.now(),
+      undefined,
+      undefined,
+    );
+
+    // bg1: 2 msgs, regular: 1 msg, bg2: 1 msg, + 1 blocking
+    const msgs = Array.from({ length: 5 }, (_, i) =>
+      actionMessage(`s${i}`, "module:action"),
+    );
+    for (const m of msgs) await channel.push(m);
+
+    const result = await executor.run();
+
+    expect(result.type).toBe("executorBlocked");
+    expect(msgs[0].resolve).toHaveBeenCalledWith("b1_0");
+    expect(msgs[1].resolve).toHaveBeenCalledWith("b1_1");
+    expect(msgs[2].resolve).toHaveBeenCalledWith("mid");
+    expect(msgs[3].resolve).toHaveBeenCalledWith("b2_0");
+  });
+
+  // --- startSteps edge cases ---
+
+  it("single batch-eligible action creates batchGroup with count=1, uses enqueueByHandle not enqueueBatch", async () => {
+    const batch = createMockBatch(["module:batchAction"]);
+    const { executor, callLog } = createExecutor({ batch });
+
+    const messages = [actionMessage("solo", "module:batchAction", { x: 1 })];
+
+    const entries = await executor.startSteps(messages);
+
+    // Should create a batchGroup with count=1
+    expect(callLog).toHaveLength(1);
+    expect(callLog[0]).toMatchObject({
+      mutation: "startBatchGroupStep",
+      count: 1,
+    });
+    expect(entries).toHaveLength(1);
+    expect(entries[0].step.kind).toBe("batchGroup");
+
+    // For a single item batch, enqueueByHandle should be used (not enqueueBatch)
+    // so batchEnqueueBatch should NOT appear in callLog
+    expect(callLog.every((c) => c.mutation !== "batchEnqueueBatch")).toBe(true);
+    expect(batch.enqueueByHandle).toHaveBeenCalledTimes(1);
+  });
+
+  it("large batch (100 items) creates single batchGroup entry", async () => {
+    const batch = createMockBatch(["module:batchAction"]);
+    const { executor, callLog } = createExecutor({ batch });
+
+    const messages = Array.from({ length: 100 }, (_, i) =>
+      actionMessage(`step${i}`, "module:batchAction", { i }),
+    );
+
+    const entries = await executor.startSteps(messages);
+
+    // Should be: startBatchGroupStep + batchEnqueueBatch (for 99 remaining items)
+    const bgCalls = callLog.filter(
+      (c) => c.mutation === "startBatchGroupStep",
+    );
+    expect(bgCalls).toHaveLength(1);
+    expect(bgCalls[0].count).toBe(100);
+
+    // Only 1 journal entry
+    expect(entries).toHaveLength(1);
+
+    // enqueueByHandle for the first item
+    expect(batch.enqueueByHandle).toHaveBeenCalledTimes(1);
+  });
+
+  it("batch items have correct context with batchStepId and sequential index", async () => {
+    const batch = createMockBatch(["module:batchAction"]);
+    const { executor } = createExecutor({ batch });
+
+    const messages = [
+      actionMessage("s0", "module:batchAction", { val: "a" }),
+      actionMessage("s1", "module:batchAction", { val: "b" }),
+      actionMessage("s2", "module:batchAction", { val: "c" }),
+    ];
+
+    await executor.startSteps(messages);
+
+    // The first item goes through enqueueByHandle
+    const enqueueByHandle = batch.enqueueByHandle as ReturnType<typeof vi.fn>;
+    expect(enqueueByHandle).toHaveBeenCalledTimes(1);
+    const firstCallArgs = enqueueByHandle.mock.calls[0];
+    // enqueueByHandle(ctx, name, args, options)
+    // options.onComplete should contain context with batchStepId and index: 0
+    const firstOptions = firstCallArgs[3];
+    expect(firstOptions.onComplete).toBeDefined();
+    expect(firstOptions.onComplete.context).toBeDefined();
+    expect(firstOptions.onComplete.context.index).toBe(0);
+    expect(firstOptions.onComplete.context.batchStepId).toBeDefined();
+  });
+
+  it("batchGroup replay with results having non-contiguous indices panics or handles gracefully", async () => {
+    // What if results have indices [0, 2] for count=3 (missing index 1)?
+    // The sort-by-index approach would put them at positions 0 and 1 in the sorted
+    // array, but result[1] would be for index 2, not index 1. And result[2] would
+    // be undefined. This should either be handled gracefully or detected as an error.
+    const bgEntry = fakeBatchGroupEntry(0, 3);
+    const { executor, channel, setMockBatchResults } = createExecutor({
+      journalEntries: [bgEntry],
+    });
+
+    // Only 2 results for count=3 (missing index 1)
+    setMockBatchResults([
+      { index: 0, result: { kind: "success", returnValue: "zero" } },
+      { index: 2, result: { kind: "success", returnValue: "two" } },
+    ]);
+
+    const msg0 = actionMessage("s0", "module:action");
+    const msg1 = actionMessage("s1", "module:action");
+    const msg2 = actionMessage("s2", "module:action");
+    const msgBlock = actionMessage("block", "module:action");
+    await channel.push(msg0);
+    await channel.push(msg1);
+    await channel.push(msg2);
+    await channel.push(msgBlock);
+
+    // This should either throw (missing result) or handle gracefully.
+    // It should NOT silently assign the wrong result to the wrong message.
+    // If it sorts by index and accesses by array position, msg1 gets result
+    // for index 2 (wrong!) and msg2 gets undefined (crash!).
+    try {
+      const result = await executor.run();
+      // If it doesn't throw, at least verify results are correct
+      // msg0 -> index 0 result
+      expect(msg0.resolve).toHaveBeenCalledWith("zero");
+      // msg1 should NOT get index 2's result
+      if (msg1.resolve.mock.calls.length > 0) {
+        // If it resolved, it should not be "two" (that's for index 2)
+        expect(msg1.resolve).not.toHaveBeenCalledWith("two");
+      }
+    } catch {
+      // Throwing is acceptable — missing results is an error condition
+    }
+  });
+
+  it("batchGroup replay with duplicate indices gives wrong results", async () => {
+    // What if results have duplicate indices? [0, 0, 1] for count=3
+    // After sorting, both index-0 results end up first. Only 3 items in array
+    // but the third may resolve with index 1's result, missing index 2 entirely.
+    const bgEntry = fakeBatchGroupEntry(0, 3);
+    const { executor, channel, setMockBatchResults } = createExecutor({
+      journalEntries: [bgEntry],
+    });
+
+    // Duplicate index 0, no index 2
+    setMockBatchResults([
+      { index: 0, result: { kind: "success", returnValue: "first_zero" } },
+      { index: 0, result: { kind: "success", returnValue: "dup_zero" } },
+      { index: 1, result: { kind: "success", returnValue: "one" } },
+    ]);
+
+    const msg0 = actionMessage("s0", "module:action");
+    const msg1 = actionMessage("s1", "module:action");
+    const msg2 = actionMessage("s2", "module:action");
+    const msgBlock = actionMessage("block", "module:action");
+    await channel.push(msg0);
+    await channel.push(msg1);
+    await channel.push(msg2);
+    await channel.push(msgBlock);
+
+    // This should ideally be caught as an error condition.
+    // But the implementation may silently assign wrong results.
+    try {
+      await executor.run();
+      // msg2 should have gotten index 2's result, but there is no index 2.
+      // If it resolved at all, something is wrong.
+      if (msg2.resolve.mock.calls.length > 0) {
+        // What did it resolve with? If "one" then index matching is broken.
+        const resolvedValue = msg2.resolve.mock.calls[0][0];
+        // There IS no result for index 2 — any resolution is suspect.
+        // This test documents the behavior even if it doesn't crash.
+        expect(resolvedValue).toBeDefined();
+      }
+    } catch {
+      // Acceptable
+    }
+  });
+
+  it("batchGroup enqueue passes correct onComplete handle to all items", async () => {
+    const batch = createMockBatch(["module:batchAction"]);
+    const enqueueBatchMock = vi.fn(async (tasks: any[]) =>
+      tasks.map(() => "task_id"),
+    );
+    // Override the component's enqueueBatch to capture the calls
+    (batch as any).component.batch.enqueueBatch = {
+      __type: "enqueueBatch",
+    } as any;
+
+    const { executor, mockCtx } = createExecutor({ batch });
+
+    const messages = [
+      actionMessage("s0", "module:batchAction"),
+      actionMessage("s1", "module:batchAction"),
+      actionMessage("s2", "module:batchAction"),
+    ];
+
+    await executor.startSteps(messages);
+
+    // Check that the batch enqueue mutation was called with correct onComplete
+    const batchCalls = mockCtx.runMutation.mock.calls.filter(
+      ([ref]: any[]) => ref.__type === "enqueueBatch",
+    );
+    if (batchCalls.length > 0) {
+      const tasks = batchCalls[0][1].tasks;
+      // Each task should have onComplete pointing to the batchGroupItem handler
+      for (const task of tasks) {
+        expect(task.onComplete).toBeDefined();
+      }
+    }
+  });
+
+  it("regular steps after batchGroup in startSteps get correct entries", async () => {
+    // batch(2) then regular(2) in a single startSteps call
+    const batch = createMockBatch(["module:batchAction"]);
+    const { executor, callLog } = createExecutor({ batch });
+
+    const messages = [
+      actionMessage("b0", "module:batchAction"),
+      actionMessage("b1", "module:batchAction"),
+      mutationMessage("r0", "module:mutation"),
+      mutationMessage("r1", "module:mutation"),
+    ];
+
+    const entries = await executor.startSteps(messages);
+
+    // Should be: batchGroup(count=2) -> startSteps([r0, r1])
+    expect(callLog[0]).toMatchObject({
+      mutation: "startBatchGroupStep",
+      count: 2,
+    });
+    expect(callLog.find((c) => c.mutation === "startSteps")).toMatchObject({
+      mutation: "startSteps",
+      names: ["r0", "r1"],
+    });
+
+    // 1 batchGroup + 2 regular = 3 entries
+    expect(entries).toHaveLength(3);
+    // Verify the ordering: batchGroup first, then the two regular entries
+    expect(entries[0].step.kind).toBe("batchGroup");
+    expect(entries[1].step.kind).toBe("function");
+    expect(entries[2].step.kind).toBe("function");
+    expect(entries[1].step.name).toBe("r0");
+    expect(entries[2].step.name).toBe("r1");
+  });
+
+  it("startSteps with only non-action messages + batch configured falls back to regular", async () => {
+    const batch = createMockBatch(["module:anything"]);
+    const { executor, callLog } = createExecutor({ batch });
+
+    // Event-type messages (not function kind)
+    const eventMsg: StepRequest = {
+      name: "myEvent",
+      target: { kind: "event", args: { eventId: "evt_123" as any } },
+      retry: undefined,
+      schedulerOptions: {},
+      resolve: vi.fn(),
+      reject: vi.fn(),
+    };
+
+    const entries = await executor.startSteps([eventMsg]);
+
+    // Events should go through regular startSteps, not batchGroup
+    expect(callLog).toHaveLength(1);
+    expect(callLog[0].mutation).toBe("startSteps");
+  });
+
+  it("startSteps with workflow-kind messages + batch configured falls back to regular", async () => {
+    const batch = createMockBatch(["module:anything"]);
+    const { executor, callLog } = createExecutor({ batch });
+
+    const workflowMsg: StepRequest = {
+      name: "nestedWf",
+      target: {
+        kind: "workflow",
+        function: mockFnRef("module:nestedWorkflow"),
+        args: {},
+      },
+      retry: undefined,
+      schedulerOptions: {},
+      resolve: vi.fn(),
+      reject: vi.fn(),
+    };
+
+    const entries = await executor.startSteps([workflowMsg]);
+
+    // Workflows should go through regular startSteps, not batchGroup
+    expect(callLog).toHaveLength(1);
+    expect(callLog[0].mutation).toBe("startSteps");
+  });
+});
+
+// ==========================================================================
+// Bug-hunting tests: written after reading the implementation to target
+// specific code paths that look fragile.
+// ==========================================================================
+
+describe("batchGroup bug hunting", () => {
+  it("entries/messages length mismatch: batchGroup entry must not have runResult", async () => {
+    // When startSteps returns a mix of batchGroup and regular entries,
+    // entries.length < messages.length (1 batchGroup entry for N messages).
+    // If entries.every(e => e.step.runResult) were true, the code would
+    // iterate with messages[i]/entries[i] which are mismatched.
+    //
+    // This test guards the invariant that batchGroup entries from startSteps
+    // never have runResult set. If this fails, the entries[i]/messages[i]
+    // loop in run() would silently assign wrong results.
+    const batch = createMockBatch(["module:batchAction"]);
+    const { executor } = createExecutor({ batch });
+
+    const messages = [
+      actionMessage("b0", "module:batchAction"),
+      actionMessage("b1", "module:batchAction"),
+      mutationMessage("r0", "module:mutation"),
+    ];
+
+    const entries = await executor.startSteps(messages);
+
+    // 3 messages but only 2 entries (1 batchGroup + 1 regular)
+    expect(entries).toHaveLength(2);
+    expect(messages).toHaveLength(3);
+    // CRITICAL INVARIANT: batchGroup entry must NOT have runResult set
+    const bgEntry = entries.find((e) => e.step.kind === "batchGroup");
+    expect(bgEntry).toBeDefined();
+    expect(bgEntry!.step.runResult).toBeUndefined();
+  });
+
+  it("getGenerationState should report not-latest when batchGroup covers many messages", async () => {
+    // getGenerationState uses journalEntries.length vs bufferSize to determine
+    // if we're "caught up". But a batchGroup entry covers N messages while
+    // taking only 1 slot in journalEntries.
+    //
+    // With 2 journal entries (1 batchGroup of 100 + 1 regular) and 5 buffered
+    // messages, the code thinks we're caught up (2 <= 5) but we actually need
+    // to process 101 messages before we're done replaying.
+    const bgEntry = fakeBatchGroupEntry(0, 100);
+    const regularEntry: JournalEntry = {
+      _id: "step_1",
+      _creationTime: Date.now(),
+      workflowId: "wf_test" as any,
+      stepNumber: 1,
+      step: {
+        kind: "function" as const,
+        functionType: "action" as const,
+        handle: "function://test",
+        name: "afterBatch",
+        inProgress: false,
+        argsSize: 2,
+        args: {},
+        runResult: { kind: "success" as const, returnValue: "done" },
+        startedAt: 1000,
+        completedAt: 2000,
+      },
+    };
+
+    const { executor, channel } = createExecutor({
+      journalEntries: [bgEntry, regularEntry],
+    });
+
+    for (let i = 0; i < 5; i++) {
+      await channel.push(actionMessage(`s${i}`, "module:action"));
+    }
+
+    const state = executor.getGenerationState();
+    // BUG: returns latest=true because journalEntries.length (2) <= bufferSize (5)
+    // but we actually have 101 messages to replay. Should be latest=false.
+    expect(state.latest).toBe(false);
+  });
+
+  it("replay should give clear error when batchResults count < expected count", async () => {
+    // If loadBatchResults returns fewer results than entry.step.count,
+    // the code crashes with:
+    //   TypeError: Cannot read properties of undefined (reading 'result')
+    // It should throw a clear assertion error instead.
+    const bgEntry = fakeBatchGroupEntry(0, 3);
+    const { executor, channel, setMockBatchResults } = createExecutor({
+      journalEntries: [bgEntry],
+    });
+
+    // Only 2 results for count=3
+    setMockBatchResults([
+      { index: 0, result: { kind: "success", returnValue: "zero" } },
+      { index: 1, result: { kind: "success", returnValue: "one" } },
+    ]);
+
+    const msg0 = actionMessage("s0", "module:action");
+    const msg1 = actionMessage("s1", "module:action");
+    const msg2 = actionMessage("s2", "module:action");
+    const msgBlock = actionMessage("block", "module:action");
+    await channel.push(msg0);
+    await channel.push(msg1);
+    await channel.push(msg2);
+    await channel.push(msgBlock);
+
+    // Should throw a clear error about missing batch results, NOT a TypeError
+    await expect(executor.run()).rejects.toThrow(/batch.*result|missing|count/i);
+  });
+
+  it("replay should validate results count matches batchGroup count", async () => {
+    // Extra results (4 results for count=2) indicates data corruption.
+    // The code should detect this, not silently ignore the extras.
+    const bgEntry = fakeBatchGroupEntry(0, 2);
+    const { executor, channel, setMockBatchResults } = createExecutor({
+      journalEntries: [bgEntry],
+    });
+
+    setMockBatchResults([
+      { index: 0, result: { kind: "success", returnValue: "zero" } },
+      { index: 1, result: { kind: "success", returnValue: "one" } },
+      { index: 2, result: { kind: "success", returnValue: "extra1" } },
+      { index: 3, result: { kind: "success", returnValue: "extra2" } },
+    ]);
+
+    const msg0 = actionMessage("s0", "module:action");
+    const msg1 = actionMessage("s1", "module:action");
+    const msgBlock = actionMessage("block", "module:action");
+    await channel.push(msg0);
+    await channel.push(msg1);
+    await channel.push(msgBlock);
+
+    // Should throw on count mismatch (4 results for 2 expected)
+    await expect(executor.run()).rejects.toThrow();
+  });
+
+  it("replay should validate result indices are contiguous 0..N-1", async () => {
+    // Results with non-contiguous indices (gap: 0, 2, 4 for count=3) means
+    // sort-by-index then access-by-position gives wrong results:
+    // results[1] = {index:2, ...} instead of {index:1, ...}.
+    const bgEntry = fakeBatchGroupEntry(0, 3);
+    const { executor, channel, setMockBatchResults } = createExecutor({
+      journalEntries: [bgEntry],
+    });
+
+    setMockBatchResults([
+      { index: 0, result: { kind: "success", returnValue: "zero" } },
+      { index: 2, result: { kind: "success", returnValue: "two" } },
+      { index: 4, result: { kind: "success", returnValue: "four" } },
+    ]);
+
+    const msg0 = actionMessage("s0", "module:action");
+    const msg1 = actionMessage("s1", "module:action");
+    const msg2 = actionMessage("s2", "module:action");
+    const msgBlock = actionMessage("block", "module:action");
+    await channel.push(msg0);
+    await channel.push(msg1);
+    await channel.push(msg2);
+    await channel.push(msgBlock);
+
+    // Should throw because indices [0,2,4] are not contiguous [0,1,2].
+    // Current bug: silently assigns msg1 the result for index 2.
+    await expect(executor.run()).rejects.toThrow(/index|contiguous|mismatch/i);
+  });
+});

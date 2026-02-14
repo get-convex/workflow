@@ -56,6 +56,7 @@ export type StepRequest = {
 
 export class StepExecutor {
   private journalEntrySize: number;
+  private remainingMessageCount: number;
 
   constructor(
     private workflowId: string,
@@ -70,6 +71,13 @@ export class StepExecutor {
   ) {
     this.journalEntrySize = journalEntries.reduce(
       (size, entry) => size + journalEntrySize(entry),
+      0,
+    );
+    // Cache the total message count for getGenerationState (called on every
+    // Date.now()). A batchGroup entry covers `count` messages; others cover 1.
+    this.remainingMessageCount = journalEntries.reduce(
+      (count, entry) =>
+        count + (entry.step.kind === "batchGroup" ? entry.step.count : 1),
       0,
     );
 
@@ -88,6 +96,7 @@ export class StepExecutor {
       // Handle batchGroup replay: one entry covers N messages.
       if (entry && entry.step.kind === "batchGroup") {
         this.journalEntries.shift();
+        this.remainingMessageCount -= entry.step.count;
         if (entry.step.inProgress) {
           throw new Error(
             `Assertion failed: batchGroup entry still in progress`,
@@ -103,6 +112,22 @@ export class StepExecutor {
         }>;
         results.sort((a, b) => a.index - b.index);
 
+        // Validate results count and index integrity.
+        if (results.length !== entry.step.count) {
+          throw new Error(
+            `Batch result count mismatch for ${entry._id}: ` +
+              `expected ${entry.step.count} results but got ${results.length}`,
+          );
+        }
+        for (let i = 0; i < results.length; i++) {
+          if (results[i].index !== i) {
+            throw new Error(
+              `Batch result index mismatch for ${entry._id}: ` +
+                `expected index ${i} at position ${i} but got index ${results[i].index}`,
+            );
+          }
+        }
+
         // Resolve the first message (already dequeued).
         this._completeBatchItem(message, results[0]);
 
@@ -117,6 +142,7 @@ export class StepExecutor {
       // Regular replay: one entry per message.
       if (entry) {
         this.journalEntries.shift();
+        this.remainingMessageCount--;
         this.completeMessage(message, entry);
         continue;
       }
@@ -141,17 +167,21 @@ export class StepExecutor {
   }
 
   getGenerationState() {
-    if (this.journalEntries.length <= this.receiver.bufferSize) {
+    // Use cached message count (decremented as entries are consumed in run()).
+    if (this.remainingMessageCount <= this.receiver.bufferSize) {
       return { now: this.now, latest: true };
     }
-    return {
-      // We use the next entry's startedAt, since we're in code just before that
-      // step is invoked. We use the bufferSize, since multiple steps may be
-      // currently enqueued in one generation, but the code after it has already
-      // started executing.
-      now: this.journalEntries[this.receiver.bufferSize].step.startedAt,
-      latest: false,
-    };
+    // Find the entry that corresponds to the buffer boundary.
+    let accumulated = 0;
+    for (const entry of this.journalEntries) {
+      const entryMessages =
+        entry.step.kind === "batchGroup" ? entry.step.count : 1;
+      if (accumulated + entryMessages > this.receiver.bufferSize) {
+        return { now: entry.step.startedAt, latest: false };
+      }
+      accumulated += entryMessages;
+    }
+    return { now: this.now, latest: true };
   }
 
   completeMessage(message: StepRequest, entry: JournalEntry) {

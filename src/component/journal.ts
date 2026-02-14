@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { vResultValidator } from "@convex-dev/workpool";
 import { mutation, query } from "./_generated/server.js";
 import {
   journalDocument,
@@ -58,6 +59,7 @@ export const load = query({
         };
       }
     }
+    const t0 = Date.now();
     for await (const entry of ctx.db
       .query("steps")
       .withIndex("workflow", (q) => q.eq("workflowId", workflowId))) {
@@ -66,6 +68,12 @@ export const load = query({
       if (journalSize > MAX_JOURNAL_SIZE) {
         return { journalEntries, workflow, logLevel, ok: false };
       }
+    }
+    if (journalEntries.length > 10) {
+      const elapsed = Date.now() - t0;
+      globalThis.console.info(
+        `[PERF] journal.load read ${journalEntries.length} entries in ${elapsed}ms (${journalSize} bytes)`,
+      );
     }
     return { journalEntries, workflow, logLevel, ok: true };
   },
@@ -139,6 +147,10 @@ export const startSteps = mutation({
               durationMs: step.completedAt! - step.startedAt,
             });
           }
+        } else if (step.kind === "batchGroup") {
+          throw new Error(
+            `batchGroup steps should use startBatchGroupStep, not startSteps`,
+          );
         } else if (step.kind === "workflow") {
           const workflowId = await createHandler(ctx, {
             workflowName: step.name,
@@ -241,7 +253,10 @@ export const startBatchSteps = mutation({
   handler: async (
     ctx,
     args,
-  ): Promise<{ entries: JournalEntry[]; onCompleteHandle: string }> => {
+  ): Promise<{
+    entries: JournalEntry[];
+    onCompleteHandle: string;
+  }> => {
     if (!args.steps.every((step) => step.step.inProgress)) {
       throw new Error(`Assertion failed: not in progress`);
     }
@@ -259,9 +274,23 @@ export const startBatchSteps = mutation({
       .first();
     const stepNumberBase = maxEntry ? maxEntry.stepNumber + 1 : 0;
     const onCompleteHandle = await createFunctionHandle(
-      internal.pool.onComplete,
+      internal.pool.onCompleteBatchStep,
     );
 
+    // Schedule a polling completion checker that will re-enqueue the
+    // workflow once all batch steps have finished. This avoids OCC
+    // contention from per-item counter updates.
+    await ctx.scheduler.runAfter(
+      0,
+      internal.pool._checkBatchCompletion,
+      {
+        workflowId: workflow._id,
+        generationNumber,
+        workpoolOptions: args.workpoolOptions,
+      },
+    );
+
+    const t0 = Date.now();
     const entries = await Promise.all(
       args.steps.map(async (stepArgs, index) => {
         const stepNumber = stepNumberBase + index;
@@ -282,6 +311,108 @@ export const startBatchSteps = mutation({
         return entry;
       }),
     );
+    const elapsed = Date.now() - t0;
+    console.info(
+      `[PERF] startBatchSteps created ${entries.length} step docs in ${elapsed}ms`,
+    );
     return { entries, onCompleteHandle };
+  },
+});
+
+/**
+ * Creates a single "batchGroup" step doc for N batch items.
+ * Returns the entry plus an onComplete handle for individual item completions.
+ */
+export const startBatchGroupStep = mutation({
+  args: {
+    workflowId: v.string(),
+    generationNumber: v.number(),
+    count: v.number(),
+    workpoolOptions: v.optional(workpoolOptions),
+  },
+  returns: v.object({
+    entry: journalDocument,
+    onCompleteHandle: v.string(),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    entry: JournalEntry;
+    onCompleteHandle: string;
+  }> => {
+    const { generationNumber } = args;
+    const workflow = await getWorkflow(ctx, args.workflowId, generationNumber);
+    const console = await getDefaultLogger(ctx);
+
+    if (workflow.runResult !== undefined) {
+      throw new Error(`Workflow not running: ${args.workflowId}`);
+    }
+    const maxEntry = await ctx.db
+      .query("steps")
+      .withIndex("workflow", (q) => q.eq("workflowId", workflow._id))
+      .order("desc")
+      .first();
+    const stepNumberBase = maxEntry ? maxEntry.stepNumber + 1 : 0;
+
+    const stepId = await ctx.db.insert("steps", {
+      workflowId: workflow._id,
+      stepNumber: stepNumberBase,
+      step: {
+        kind: "batchGroup" as const,
+        count: args.count,
+        name: "batchGroup",
+        inProgress: true,
+        argsSize: 0,
+        args: {},
+        runResult: undefined,
+        startedAt: Date.now(),
+        completedAt: undefined,
+      },
+    });
+    const entry = await ctx.db.get(stepId);
+    assert(entry, "Step not found");
+
+    const onCompleteHandle = await createFunctionHandle(
+      internal.pool.onCompleteBatchGroupItem,
+    );
+
+    // Schedule polling completion checker.
+    await ctx.scheduler.runAfter(0, internal.pool._checkBatchCompletion, {
+      workflowId: workflow._id,
+      generationNumber,
+      workpoolOptions: args.workpoolOptions,
+    });
+
+    console.event("started", {
+      workflowId: workflow._id,
+      workflowName: workflow.name,
+      stepName: "batchGroup",
+      stepNumber: stepNumberBase,
+    });
+
+    return { entry, onCompleteHandle };
+  },
+});
+
+/**
+ * Load all batch results for a batchGroup step, sorted by index.
+ */
+export const loadBatchResults = query({
+  args: {
+    batchStepId: v.id("steps"),
+  },
+  returns: v.array(
+    v.object({
+      index: v.number(),
+      result: vResultValidator,
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const results = await ctx.db
+      .query("batchResults")
+      .withIndex("batchStep", (q) => q.eq("batchStepId", args.batchStepId))
+      .collect();
+    return results.map((r) => ({ index: r.index, result: r.result }));
   },
 });

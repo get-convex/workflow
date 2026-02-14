@@ -83,9 +83,40 @@ export class StepExecutor {
       const message = await this.receiver.get();
       // In the future we can correlate the calls to entries by handle, args,
       // etc. instead of just ordering. As is, the fn order can't change.
-      const entry = this.journalEntries.shift();
-      // why not to run queries inline: they fetch too much data internally
+      const entry = this.journalEntries[0];
+
+      // Handle batchGroup replay: one entry covers N messages.
+      if (entry && entry.step.kind === "batchGroup") {
+        this.journalEntries.shift();
+        if (entry.step.inProgress) {
+          throw new Error(
+            `Assertion failed: batchGroup entry still in progress`,
+          );
+        }
+        // Load all individual results from the batchResults table.
+        const results = (await this.ctx.runQuery(
+          this.component.journal.loadBatchResults,
+          { batchStepId: entry._id },
+        )) as unknown as Array<{
+          index: number;
+          result: { kind: string; returnValue?: unknown; error?: string };
+        }>;
+        results.sort((a, b) => a.index - b.index);
+
+        // Resolve the first message (already dequeued).
+        this._completeBatchItem(message, results[0]);
+
+        // Dequeue and resolve the remaining count - 1 messages.
+        for (let i = 1; i < entry.step.count; i++) {
+          const msg = await this.receiver.get();
+          this._completeBatchItem(msg, results[i]);
+        }
+        continue;
+      }
+
+      // Regular replay: one entry per message.
       if (entry) {
+        this.journalEntries.shift();
         this.completeMessage(message, entry);
         continue;
       }
@@ -149,6 +180,23 @@ export class StepExecutor {
         break;
       case "failed":
         message.reject(new Error(entry.step.runResult.error));
+        break;
+      case "canceled":
+        message.reject(new Error("Canceled"));
+        break;
+    }
+  }
+
+  private _completeBatchItem(
+    message: StepRequest,
+    result: { index: number; result: { kind: string; returnValue?: unknown; error?: string } },
+  ) {
+    switch (result.result.kind) {
+      case "success":
+        message.resolve(result.result.returnValue);
+        break;
+      case "failed":
+        message.reject(new Error(result.result.error));
         break;
       case "canceled":
         message.reject(new Error("Canceled"));
@@ -225,34 +273,29 @@ export class StepExecutor {
   private async _startStepsBatch(
     messages: StepRequest[],
   ): Promise<JournalEntry[]> {
-    const steps = await Promise.all(
-      messages.map(async (message) => {
-        const step = await this._buildStep(message);
-        return {
-          retry: message.retry,
-          schedulerOptions: message.schedulerOptions,
-          step,
-        };
-      }),
-    );
-    const { entries, onCompleteHandle } = (await this.ctx.runMutation(
-      this.component.journal.startBatchSteps,
-      {
-        workflowId: this.workflowId,
-        generationNumber: this.generationNumber,
-        steps,
-        workpoolOptions: this.workpoolOptions,
-      },
-    )) as unknown as { entries: JournalEntry[]; onCompleteHandle: string };
-    this._checkJournalSize(entries);
+    // Create a single batchGroup step doc for all N messages.
+    const { entry, onCompleteHandle } =
+      (await this.ctx.runMutation(
+        this.component.journal.startBatchGroupStep,
+        {
+          workflowId: this.workflowId,
+          generationNumber: this.generationNumber,
+          count: messages.length,
+          workpoolOptions: this.workpoolOptions,
+        },
+      )) as unknown as {
+        entry: JournalEntry;
+        onCompleteHandle: string;
+      };
+    this._checkJournalSize([entry]);
 
-    // Enqueue each batch task with the onComplete handle
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i];
-      const target = messages[i].target;
+    // Build all batch tasks upfront.
+    const maxWorkers = (this.batch as any).options?.maxWorkers ?? 10;
+    const tasks = messages.map((message, i) => {
+      const target = message.target;
       if (target.kind !== "function") {
         throw new Error(
-          `Assertion failed: batch step ${entry._id} has unexpected target kind "${target.kind}"`,
+          `Assertion failed: batch step has unexpected target kind "${target.kind}"`,
         );
       }
       const handlerName = this.batch!.resolveHandlerName(
@@ -260,27 +303,44 @@ export class StepExecutor {
       );
       if (!handlerName) {
         throw new Error(
-          `Assertion failed: batch step ${entry._id} has no handler for "${safeFunctionName(target.function)}" despite passing isRegistered`,
+          `Assertion failed: batch step has no handler for "${safeFunctionName(target.function)}" despite passing isRegistered`,
         );
       }
-      await this.batch!.enqueueByHandle(
-        this.ctx,
-        handlerName,
-        entry.step.args as Record<string, unknown>,
-        {
-          onComplete: {
-            fnHandle: onCompleteHandle,
-            context: {
-              stepId: entry._id,
-              generationNumber: this.generationNumber,
-              workpoolOptions: this.workpoolOptions,
-            },
+      return {
+        name: handlerName,
+        args: target.args as Record<string, unknown>,
+        slot: Math.floor(Math.random() * maxWorkers),
+        onComplete: {
+          fnHandle: onCompleteHandle,
+          context: {
+            batchStepId: entry._id,
+            index: i,
           },
-          retry: messages[i].retry,
         },
-      );
+        retryBehavior: undefined,
+      };
+    });
+
+    // First enqueue triggers batchConfig setup (executor start).
+    await this.batch!.enqueueByHandle(
+      this.ctx,
+      tasks[0].name,
+      tasks[0].args,
+      { onComplete: tasks[0].onComplete, retry: messages[0].retry },
+    );
+
+    // Batch-enqueue the rest directly via the component mutation.
+    const remaining = tasks.slice(1);
+    const BATCH_SIZE = 500;
+    for (let i = 0; i < remaining.length; i += BATCH_SIZE) {
+      const chunk = remaining.slice(i, i + BATCH_SIZE);
+      await this.ctx.runMutation(this.batch!.component.batch.enqueueBatch, {
+        tasks: chunk,
+        batchConfig: undefined,
+      });
     }
-    return entries;
+    // Return single entry — always inProgress, triggers executorBlocked.
+    return [entry];
   }
 
   private async _buildStep(message: StepRequest) {

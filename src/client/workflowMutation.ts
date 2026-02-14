@@ -119,9 +119,13 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
           `Assertion failed: not blocked but have in-progress journal entry`,
         );
       }
-      const channel = new BaseChannel<StepRequest>(
-        workpoolOptions.maxParallelism ?? 10,
-      );
+      // When batch is configured, use a large channel so the handler can push
+      // all batch messages (e.g. 1000 Promise.all items) in a single run,
+      // creating one batchGroup instead of many smaller ones across re-runs.
+      const channelCapacity = batch
+        ? Math.max(workpoolOptions.maxParallelism ?? 10, 10000)
+        : workpoolOptions.maxParallelism ?? 10;
+      const channel = new BaseChannel<StepRequest>(channelCapacity);
       const step = createWorkflowCtx(workflowId, channel);
       const executor = new StepExecutor(
         workflowId,

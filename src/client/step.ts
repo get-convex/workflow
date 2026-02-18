@@ -29,7 +29,7 @@ export type StepRequest = {
         kind: "function";
         functionType: FunctionType;
         function: FunctionReference<FunctionType, FunctionVisibility>;
-        args: unknown;
+        args: Record<string, any>;
       }
     | {
         kind: "event";

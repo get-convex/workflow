@@ -1,9 +1,8 @@
-import { v } from "convex/values";
+import { getConvexSize, v } from "convex/values";
 import { mutation, query } from "./_generated/server.js";
 import {
   journalDocument,
   type JournalEntry,
-  journalEntrySize,
   step,
   workflowDocument,
 } from "./schema.js";
@@ -62,7 +61,7 @@ export const load = query({
       .query("steps")
       .withIndex("workflow", (q) => q.eq("workflowId", workflowId))) {
       journalEntries.push(entry);
-      journalSize += journalEntrySize(entry);
+      journalSize += getConvexSize(entry);
       if (journalSize > MAX_JOURNAL_SIZE) {
         return { journalEntries, workflow, logLevel, ok: false };
       }

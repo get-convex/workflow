@@ -12,13 +12,8 @@ import {
   type GenericDataModel,
   type GenericMutationCtx,
 } from "convex/server";
-import { convexToJson, type Value } from "convex/values";
-import {
-  type JournalEntry,
-  journalEntrySize,
-  type Step,
-  valueSize,
-} from "../component/schema.js";
+import { convexToJson, getConvexSize, type Value } from "convex/values";
+import { type JournalEntry, type Step } from "../component/schema.js";
 import type { WorkflowComponent } from "./types.js";
 import { MAX_JOURNAL_SIZE } from "../shared.js";
 import type { EventId, SchedulerOptions } from "../types.js";
@@ -66,7 +61,7 @@ export class StepExecutor {
     private workpoolOptions: WorkpoolOptions | undefined,
   ) {
     this.journalEntrySize = journalEntries.reduce(
-      (size, entry) => size + journalEntrySize(entry),
+      (size, entry) => size + getConvexSize(entry),
       0,
     );
 
@@ -156,11 +151,12 @@ export class StepExecutor {
   async startSteps(messages: StepRequest[]): Promise<JournalEntry[]> {
     const steps = await Promise.all(
       messages.map(async (message) => {
+        const args = message.target.args ?? {};
         const commonFields = {
           inProgress: true,
           name: message.name,
-          args: message.target.args,
-          argsSize: valueSize(message.target.args as Value),
+          args,
+          argsSize: getConvexSize(args as Value),
           runResult: undefined,
           startedAt: this.now,
           completedAt: undefined,
@@ -203,7 +199,7 @@ export class StepExecutor {
       },
     )) as JournalEntry[];
     for (const entry of entries) {
-      this.journalEntrySize += journalEntrySize(entry);
+      this.journalEntrySize += getConvexSize(entry);
       if (this.journalEntrySize > MAX_JOURNAL_SIZE) {
         throw new Error(
           journalSizeError(this.journalEntrySize, this.workflowId) +

@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { api, internal } from "./_generated/api.js";
+import { api } from "./_generated/api.js";
 import { initConvexTest } from "./setup.test.js";
 import type { Id } from "./_generated/dataModel.js";
 
@@ -83,7 +83,7 @@ describe("workflow", () => {
     });
 
     // Create a step entry with kind "event" that references the event using startSteps API
-    const entries = await t.mutation(internal.journal.startSteps, {
+    const entries = await t.mutation(api.journal.startSteps, {
       workflowId,
       generationNumber: 0,
       steps: [
@@ -148,7 +148,7 @@ describe("workflow", () => {
 
     // Create a workflow step which will automatically create a nested workflow via startSteps
     // The startSteps handler creates the nested workflow when kind is "workflow"
-    const entries = await t.mutation(internal.journal.startSteps, {
+    const entries = await t.mutation(api.journal.startSteps, {
       workflowId: parentWorkflowId,
       generationNumber: 0,
       steps: [
@@ -242,7 +242,7 @@ describe("workflow", () => {
     });
 
     // Create a workflow step without workflowId (not yet started nested workflow) using startSteps
-    await t.mutation(internal.journal.startSteps, {
+    await t.mutation(api.journal.startSteps, {
       workflowId,
       generationNumber: 0,
       steps: [
@@ -286,7 +286,7 @@ describe("workflow", () => {
     });
 
     // Create an event step that starts waiting (no event sent yet, so it won't have a response)
-    await t.mutation(internal.journal.startSteps, {
+    await t.mutation(api.journal.startSteps, {
       workflowId,
       generationNumber: 0,
       steps: [
@@ -336,7 +336,7 @@ describe("workflow", () => {
 
     // Create mixed steps using startSteps API
     // The workflow step will automatically create a nested workflow
-    const entries = await t.mutation(internal.journal.startSteps, {
+    const entries = await t.mutation(api.journal.startSteps, {
       workflowId: parentWorkflowId,
       generationNumber: 0,
       steps: [

@@ -214,8 +214,8 @@ export class WorkflowManager {
    * @param workflowId - The workflow ID.
    * @param options - Options for the retry.
    * @param options.from - The step to retry from. Can be a step number,
-   *   a step name, or a FunctionReference (uses the function name).
-   *   Steps from this point onwards will be deleted and re-executed.
+   *   a step name, or the function / workflow `internal.foo.bar`.
+   *   Steps from this point onwards will be deleted before restarting.
    * @param options.startAsync - If true, the workflow will be enqueued
    *   via the workpool instead of running immediately.
    */
@@ -229,7 +229,10 @@ export class WorkflowManager {
   ): Promise<void> {
     let from: number | string | undefined;
     if (options?.from !== undefined) {
-      if (typeof options.from === "number" || typeof options.from === "string") {
+      if (
+        typeof options.from === "number" ||
+        typeof options.from === "string"
+      ) {
         from = options.from;
       } else {
         from = safeFunctionName(options.from);

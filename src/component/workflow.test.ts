@@ -44,6 +44,255 @@ describe("workflow", () => {
     expect(workflow2.workflow.runResult).toMatchObject({ kind: "canceled" });
   });
 
+  test("retry a failed workflow", async () => {
+    const t = initConvexTest();
+    const id = await t.mutation(api.workflow.create, {
+      workflowName: "test",
+      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowArgs: { location: "San Francisco" },
+      startAsync: true,
+    });
+    // Complete with failure
+    await t.mutation(api.workflow.complete, {
+      workflowId: id,
+      generationNumber: 0,
+      runResult: { kind: "failed", error: "something went wrong" },
+    });
+    const before = await t.query(api.workflow.getStatus, { workflowId: id });
+    expect(before.workflow.runResult).toMatchObject({ kind: "failed" });
+    expect(before.workflow.generationNumber).toBe(0);
+
+    // Retry
+    await t.mutation(api.workflow.retry, {
+      workflowId: id,
+      startAsync: true,
+    });
+    const after = await t.query(api.workflow.getStatus, { workflowId: id });
+    expect(after.workflow.runResult).toBeUndefined();
+    expect(after.workflow.generationNumber).toBe(1);
+  });
+
+  test("retry throws if workflow is still running", async () => {
+    const t = initConvexTest();
+    const id = await t.mutation(api.workflow.create, {
+      workflowName: "test",
+      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowArgs: {},
+      startAsync: true,
+    });
+    await expect(
+      t.mutation(api.workflow.retry, { workflowId: id, startAsync: true }),
+    ).rejects.toThrow("still running");
+  });
+
+  test("retry from step number deletes steps from that point", async () => {
+    const t = initConvexTest();
+    const id = await t.mutation(api.workflow.create, {
+      workflowName: "test",
+      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowArgs: {},
+      startAsync: true,
+    });
+    // Insert some steps
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 3; i++) {
+        await ctx.db.insert("steps", {
+          workflowId: id,
+          stepNumber: i,
+          step: {
+            kind: "function" as const,
+            functionType: "mutation" as const,
+            handle: "function://test",
+            name: `step${i}`,
+            inProgress: false,
+            argsSize: 0,
+            args: {},
+            runResult: { kind: "success", returnValue: null },
+            startedAt: Date.now(),
+            completedAt: Date.now(),
+          },
+        });
+      }
+    });
+    // Complete with failure
+    await t.mutation(api.workflow.complete, {
+      workflowId: id,
+      generationNumber: 0,
+      runResult: { kind: "failed", error: "step2 failed" },
+    });
+
+    // Retry from step 1
+    await t.mutation(api.workflow.retry, {
+      workflowId: id,
+      from: 1,
+      startAsync: true,
+    });
+
+    // Only step0 should remain
+    await t.run(async (ctx) => {
+      const steps = await ctx.db
+        .query("steps")
+        .withIndex("workflow", (q) => q.eq("workflowId", id))
+        .collect();
+      expect(steps).toHaveLength(1);
+      expect(steps[0].stepNumber).toBe(0);
+      expect(steps[0].step.name).toBe("step0");
+    });
+  });
+
+  test("retry from step name deletes that step and subsequent ones", async () => {
+    const t = initConvexTest();
+    const id = await t.mutation(api.workflow.create, {
+      workflowName: "test",
+      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowArgs: {},
+      startAsync: true,
+    });
+    // Insert steps with names
+    await t.run(async (ctx) => {
+      const names = ["fetch", "process", "save"];
+      for (let i = 0; i < names.length; i++) {
+        await ctx.db.insert("steps", {
+          workflowId: id,
+          stepNumber: i,
+          step: {
+            kind: "function" as const,
+            functionType: "action" as const,
+            handle: "function://test",
+            name: names[i],
+            inProgress: false,
+            argsSize: 0,
+            args: {},
+            runResult: { kind: "success", returnValue: null },
+            startedAt: Date.now(),
+            completedAt: Date.now(),
+          },
+        });
+      }
+    });
+    await t.mutation(api.workflow.complete, {
+      workflowId: id,
+      generationNumber: 0,
+      runResult: { kind: "failed", error: "save failed" },
+    });
+
+    // Retry from "process"
+    await t.mutation(api.workflow.retry, {
+      workflowId: id,
+      from: "process",
+      startAsync: true,
+    });
+
+    // Only "fetch" (step 0) should remain
+    await t.run(async (ctx) => {
+      const steps = await ctx.db
+        .query("steps")
+        .withIndex("workflow", (q) => q.eq("workflowId", id))
+        .collect();
+      expect(steps).toHaveLength(1);
+      expect(steps[0].step.name).toBe("fetch");
+    });
+  });
+
+  test("retry from unknown step name throws", async () => {
+    const t = initConvexTest();
+    const id = await t.mutation(api.workflow.create, {
+      workflowName: "test",
+      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowArgs: {},
+      startAsync: true,
+    });
+    await t.mutation(api.workflow.complete, {
+      workflowId: id,
+      generationNumber: 0,
+      runResult: { kind: "failed", error: "oops" },
+    });
+    await expect(
+      t.mutation(api.workflow.retry, {
+        workflowId: id,
+        from: "nonexistent",
+        startAsync: true,
+      }),
+    ).rejects.toThrow('Step "nonexistent" not found');
+  });
+
+  test("retry from nonexistent step number throws", async () => {
+    const t = initConvexTest();
+    const id = await t.mutation(api.workflow.create, {
+      workflowName: "test",
+      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowArgs: {},
+      startAsync: true,
+    });
+    await t.mutation(api.workflow.complete, {
+      workflowId: id,
+      generationNumber: 0,
+      runResult: { kind: "failed", error: "oops" },
+    });
+    await expect(
+      t.mutation(api.workflow.retry, {
+        workflowId: id,
+        from: 5,
+        startAsync: true,
+      }),
+    ).rejects.toThrow("Step number 5 not found");
+  });
+
+  test("retry deletes associated event steps", async () => {
+    const t = initConvexTest();
+    const id = await t.mutation(api.workflow.create, {
+      workflowName: "test",
+      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowArgs: {},
+      startAsync: true,
+    });
+    // Insert an event and an event step referencing it
+    let eventId: any;
+    await t.run(async (ctx) => {
+      eventId = await ctx.db.insert("events", {
+        workflowId: id,
+        name: "approval",
+        state: { kind: "created" },
+      });
+      await ctx.db.insert("steps", {
+        workflowId: id,
+        stepNumber: 0,
+        step: {
+          kind: "event" as const,
+          name: "waitForApproval",
+          inProgress: false,
+          argsSize: 0,
+          args: { eventId },
+          eventId,
+          startedAt: Date.now(),
+          completedAt: Date.now(),
+          runResult: { kind: "success", returnValue: null },
+        },
+      });
+    });
+    await t.mutation(api.workflow.complete, {
+      workflowId: id,
+      generationNumber: 0,
+      runResult: { kind: "failed", error: "oops" },
+    });
+
+    // Retry from step 0 — should delete the event too
+    await t.mutation(api.workflow.retry, {
+      workflowId: id,
+      from: 0,
+      startAsync: true,
+    });
+    await t.run(async (ctx) => {
+      const steps = await ctx.db
+        .query("steps")
+        .withIndex("workflow", (q) => q.eq("workflowId", id))
+        .collect();
+      expect(steps).toHaveLength(0);
+      const event = await ctx.db.get(eventId);
+      expect(event).toBeNull();
+    });
+  });
+
   test("cleaning up a workflow", async () => {
     const t = initConvexTest();
     const id = await t.mutation(api.workflow.create, {

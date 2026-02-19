@@ -177,21 +177,14 @@ describe("workflow", () => {
     });
     expect(nestedWorkflowId).toBeDefined();
 
-    // Cancel parent workflow so it can be cleaned up
+    // Cancel parent workflow - this should automatically cancel nested workflows
     await t.mutation(api.workflow.cancel, { workflowId: parentWorkflowId });
 
-    // Check nested workflow status - it may already be completed
-    // If it's still running, cancel it. If already completed, that's fine too.
-    let nestedWorkflowCompleted = false;
+    // Verify nested workflow was also canceled automatically
     await t.run(async (ctx) => {
       const nested = await ctx.db.get(nestedWorkflowId!);
-      if (nested?.runResult) {
-        nestedWorkflowCompleted = true;
-      }
+      expect(nested?.runResult).toBeDefined();
     });
-    if (!nestedWorkflowCompleted) {
-      await t.mutation(api.workflow.cancel, { workflowId: nestedWorkflowId! });
-    }
 
     // Verify both workflows exist before cleanup
     await t.run(async (ctx) => {
@@ -375,21 +368,14 @@ describe("workflow", () => {
     });
     expect(nestedWorkflowId).toBeDefined();
 
-    // Cancel parent workflow
+    // Cancel parent workflow - this should automatically cancel nested workflows
     await t.mutation(api.workflow.cancel, { workflowId: parentWorkflowId });
 
-    // Check nested workflow status - it may already be completed
-    // If it's still running, cancel it. If already completed, that's fine too.
-    let nestedWorkflowCompleted = false;
+    // Verify nested workflow was also canceled automatically
     await t.run(async (ctx) => {
       const nested = await ctx.db.get(nestedWorkflowId!);
-      if (nested?.runResult) {
-        nestedWorkflowCompleted = true;
-      }
+      expect(nested?.runResult).toBeDefined();
     });
-    if (!nestedWorkflowCompleted) {
-      await t.mutation(api.workflow.cancel, { workflowId: nestedWorkflowId! });
-    }
 
     // Verify resources exist before cleanup
     await t.run(async (ctx) => {

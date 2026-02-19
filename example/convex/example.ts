@@ -8,22 +8,24 @@ import { vResultValidator } from "@convex-dev/workpool";
 
 export const workflow = new WorkflowManager(components.workflow);
 
-export const exampleWorkflow = workflow.define({
-  args: {
-    location: v.string(),
-  },
-  handler: async (
-    step,
-    args,
-    // When returning things from other functions, you need to break the type
-    // inference cycle by specifying the return type explicitly.
-  ): Promise<{
-    name: string;
-    celsius: number;
-    farenheit: number;
-    windSpeed: number;
-    windGust: number;
-  }> => {
+export const exampleWorkflow = workflow
+  .define({
+    args: {
+      location: v.string(),
+    },
+    workpoolOptions: {
+      retryActionsByDefault: true,
+    },
+    // If you also want to run runtime validation on the return value.
+    returns: v.object({
+      name: v.string(),
+      celsius: v.number(),
+      farenheit: v.number(),
+      windSpeed: v.number(),
+      windGust: v.number(),
+    }),
+  })
+  .handler(async (step, args) => {
     console.time("overall");
     console.time("geocoding");
     // Run in parallel!
@@ -56,19 +58,7 @@ export const exampleWorkflow = workflow.define({
     });
     console.timeEnd("overall");
     return { name, celsius, farenheit, windSpeed, windGust };
-  },
-  workpoolOptions: {
-    retryActionsByDefault: true,
-  },
-  // If you also want to run runtime validation on the return value.
-  returns: v.object({
-    name: v.string(),
-    celsius: v.number(),
-    farenheit: v.number(),
-    windSpeed: v.number(),
-    windGust: v.number(),
-  }),
-});
+  });
 
 export const startWorkflow = internalMutation({
   args: {

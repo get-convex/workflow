@@ -53,7 +53,8 @@ export type StepRequest = {
 };
 
 export class StepExecutor {
-  private journalEntrySize: number;
+  private journalSize: number = 0;
+  private stepCount: number = 0;
 
   constructor(
     private workflowId: string,
@@ -64,17 +65,7 @@ export class StepExecutor {
     private receiver: BaseChannel<StepRequest>,
     private now: number,
     private workpoolOptions: WorkpoolOptions | undefined,
-  ) {
-    this.journalEntrySize = journalEntries.reduce(
-      (size, entry) => size + getConvexSize(entry),
-      0,
-    );
-
-    if (this.journalEntrySize > MAX_JOURNAL_SIZE) {
-      // This should never happen, but we'll throw an error just in case.
-      throw new Error(journalSizeError(this.journalEntrySize, this.workflowId));
-    }
-  }
+  ) {}
   async run(): Promise<WorkerResult> {
     while (true) {
       const message = await this.receiver.get();
@@ -94,8 +85,7 @@ export class StepExecutor {
       const entries = await this.startSteps(messages);
       if (entries.every((entry) => entry.step.runResult)) {
         for (let i = 0; i < entries.length; i++) {
-          const entry = entries[i];
-          this.completeMessage(messages[i], entry);
+          this.completeMessage(messages[i], entries[i]);
         }
         continue;
       }
@@ -103,6 +93,10 @@ export class StepExecutor {
         type: "executorBlocked",
       };
     }
+  }
+
+  getHistory() {
+    return { size: this.journalSize, stepCount: this.stepCount };
   }
 
   getGenerationState() {
@@ -120,6 +114,8 @@ export class StepExecutor {
   }
 
   completeMessage(message: StepRequest, entry: JournalEntry) {
+    this.stepCount++;
+    this.journalSize += getConvexSize(entry);
     if (entry.step.inProgress) {
       throw new Error(
         `Assertion failed: not blocked but have in-progress journal entry`,
@@ -231,10 +227,11 @@ export class StepExecutor {
       },
     )) as JournalEntry[];
     for (const entry of entries) {
-      this.journalEntrySize += getConvexSize(entry);
-      if (this.journalEntrySize > MAX_JOURNAL_SIZE) {
+      this.stepCount++;
+      this.journalSize += getConvexSize(entry);
+      if (this.journalSize > MAX_JOURNAL_SIZE) {
         throw new Error(
-          journalSizeError(this.journalEntrySize, this.workflowId) +
+          journalSizeError(this.journalSize, this.workflowId) +
             ` The failing step was ${entry.step.name} (${entry._id})`,
         );
       }

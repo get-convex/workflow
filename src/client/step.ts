@@ -17,6 +17,7 @@ import { type JournalEntry, type Step } from "../component/schema.js";
 import type { WorkflowComponent } from "./types.js";
 import { MAX_JOURNAL_SIZE } from "../shared.js";
 import type { EventId, SchedulerOptions } from "../types.js";
+import { pick } from "convex-helpers";
 
 export type WorkerResult =
   | { type: "handlerDone"; runResult: RunResult }
@@ -121,14 +122,18 @@ export class StepExecutor {
         `Assertion failed: not blocked but have in-progress journal entry`,
       );
     }
-    const stepArgsJson = JSON.stringify(convexToJson(entry.step.args));
-    const messageArgsJson = JSON.stringify(
-      convexToJson(message.target.args as Value),
+    const stepJson = JSON.stringify(
+      convexToJson(pick(entry.step, ["name", "args", "kind"])),
     );
-    if (stepArgsJson !== messageArgsJson) {
-      throw new Error(
-        `Journal entry mismatch: ${entry.step.args} !== ${message.target.args}`,
-      );
+    const messageJson = JSON.stringify(
+      convexToJson({
+        name: message.name,
+        args: message.target.args as Value,
+        kind: message.target.kind,
+      }),
+    );
+    if (stepJson !== messageJson) {
+      throw new Error(`Journal entry mismatch: ${stepJson} !== ${messageJson}`);
     }
     if (entry.step.runResult === undefined) {
       throw new Error(

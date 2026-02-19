@@ -353,8 +353,8 @@ export const cleanup = mutation({
     for (const journalEntry of journalEntries) {
       logger.debug("Deleting journal entry", journalEntry);
       await ctx.db.delete(journalEntry._id);
-      if (journalEntry.step.kind === "event") {
-        await ctx.db.delete(journalEntry.step.eventId!);
+      if (journalEntry.step.kind === "event" && journalEntry.step.eventId) {
+        await ctx.db.delete(journalEntry.step.eventId);
       } else if (
         journalEntry.step.kind === "workflow" &&
         journalEntry.step.workflowId

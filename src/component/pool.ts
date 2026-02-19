@@ -18,7 +18,6 @@ import { type Infer, v } from "convex/values";
 import { components, internal } from "./_generated/api.js";
 import { internalMutation, type MutationCtx } from "./_generated/server.js";
 import { logLevel } from "./logging.js";
-import { getWorkflow } from "./model.js";
 import { getDefaultLogger } from "./utils.js";
 import { completeHandler } from "./workflow.js";
 import type { Doc } from "./_generated/dataModel.js";
@@ -109,7 +108,12 @@ async function onCompleteHandler(
     return;
   }
   const journalEntry = await ctx.db.get(stepId);
-  assert(journalEntry, `Journal entry not found: ${stepId}`);
+  if (!journalEntry) {
+    console.error(
+      `Journal entry not found: ${stepId}. This is likely because it was already cleaned up.`,
+    );
+    return;
+  }
   const workflowId = journalEntry.workflowId;
 
   if (
@@ -127,10 +131,11 @@ async function onCompleteHandler(
     return;
   }
   const { generationNumber } = args.context;
-  const workflow = await getWorkflow(ctx, workflowId, null);
+  const workflow = await ctx.db.get("workflows", workflowId);
+  assert(workflow, `Workflow not found: ${workflowId}`);
   if (workflow.generationNumber !== generationNumber) {
     console.error(
-      `Workflow: ${workflowId} already has generation number ${workflow.generationNumber} when completing ${stepId}`,
+      `Workflow: ${workflowId} already has generation number ${workflow.generationNumber} when completing ${stepId}. Expected ${generationNumber}`,
     );
     return;
   }

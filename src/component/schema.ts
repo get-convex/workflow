@@ -1,10 +1,6 @@
-import {
-  vResultValidator,
-  type RunResult,
-  vWorkIdValidator,
-} from "@convex-dev/workpool";
+import { vResultValidator, vWorkIdValidator } from "@convex-dev/workpool";
 import { defineSchema, defineTable } from "convex/server";
-import { convexToJson, type Infer, v, type Value } from "convex/values";
+import { type Infer, v } from "convex/values";
 import { logLevel } from "./logging.js";
 import { deprecated, literals } from "convex-helpers/validators";
 

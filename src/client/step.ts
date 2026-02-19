@@ -96,7 +96,13 @@ export class StepExecutor {
   }
 
   getHistory() {
-    return { size: this.journalSize, stepCount: this.stepCount };
+    return {
+      // Technically the size may not match the stepCount if they check the size
+      // after adding a step but before it's finished - e.g. a non-awaited
+      // promise. The size only reflects finished steps
+      size: this.journalSize,
+      stepCount: this.stepCount + this.receiver.bufferSize,
+    };
   }
 
   getGenerationState() {

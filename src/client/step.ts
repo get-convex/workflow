@@ -29,7 +29,7 @@ export type StepRequest = {
         kind: "function";
         functionType: FunctionType;
         function: FunctionReference<FunctionType, FunctionVisibility>;
-        args: Record<string, any>;
+        args: Record<string, unknown>;
       }
     | {
         kind: "event";
@@ -38,7 +38,7 @@ export type StepRequest = {
     | {
         kind: "workflow";
         function: FunctionReference<"mutation", "internal">;
-        args: unknown;
+        args: Record<string, unknown>;
       };
   retry: RetryBehavior | boolean | undefined;
   schedulerOptions: SchedulerOptions;

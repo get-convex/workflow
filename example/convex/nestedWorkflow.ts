@@ -6,7 +6,7 @@ import { internalMutation } from "./_generated/server";
 export const parentWorkflow = workflow.define({
   args: { prompt: v.string() },
   handler: async (step, args) => {
-    console.log("Starting confirmation workflow");
+    console.log("Starting parent workflow");
     const length = await step.runWorkflow(
       internal.nestedWorkflow.childWorkflow,
       { foo: args.prompt },

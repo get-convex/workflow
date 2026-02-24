@@ -46,6 +46,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
   component: WorkflowComponent,
   registered: WorkflowDefinition<ArgsValidator>,
   defaultWorkpoolOptions?: WorkpoolOptions,
+  batchActionNames?: Set<string>,
 ): RegisteredMutation<
   "internal",
   {
@@ -127,6 +128,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         channel,
         Date.now(),
         workpoolOptions,
+        batchActionNames,
       );
       setupEnvironment(executor.getGenerationState.bind(executor), workflowId);
 

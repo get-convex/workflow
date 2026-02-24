@@ -42,16 +42,6 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             | { error: string; kind: "failed" }
             | { kind: "canceled" };
           workflowId?: string;
-          workpoolOptions?: {
-            defaultRetryBehavior?: {
-              base: number;
-              initialBackoffMs: number;
-              maxAttempts: number;
-            };
-            logLevel?: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
-            maxParallelism?: number;
-            retryActionsByDefault?: boolean;
-          };
         },
         string,
         Name
@@ -122,10 +112,12 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             _creationTime: number;
             _id: string;
             args: any;
+            executorShards?: number;
             generationNumber: number;
             logLevel?: any;
             name?: string;
             onComplete?: { context?: any; fnHandle: string };
+            readyToRun?: boolean;
             runResult?:
               | { kind: "success"; returnValue: any }
               | { error: string; kind: "failed" }
@@ -143,6 +135,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         {
           generationNumber: number;
           steps: Array<{
+            batchActionName?: string;
             retry?:
               | boolean
               | { base: number; initialBackoffMs: number; maxAttempts: number };
@@ -261,6 +254,111 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         Name
       >;
     };
+    taskQueue: {
+      claimTasks: FunctionReference<
+        "query",
+        "internal",
+        { limit: number; shard: number },
+        Array<{
+          args: any;
+          functionType: "query" | "mutation" | "action";
+          generationNumber: number;
+          handle: string;
+          retry?: {
+            base: number;
+            initialBackoffMs: number;
+            maxAttempts: number;
+          };
+          stepId: string;
+          workflowId: string;
+        }>,
+        Name
+      >;
+      diagnose: FunctionReference<
+        "query",
+        "internal",
+        { numShards?: number },
+        {
+          executorEpoch: number;
+          taskQueueCounts: Array<{ count: number; shard: number }>;
+          totalTasks: number;
+        },
+        Name
+      >;
+      getExecutorEpoch: FunctionReference<
+        "query",
+        "internal",
+        {},
+        number,
+        Name
+      >;
+      getHandoff: FunctionReference<
+        "query",
+        "internal",
+        { shard: number },
+        { ready: boolean; yielded: boolean } | null,
+        Name
+      >;
+      handoff: FunctionReference<
+        "mutation",
+        "internal",
+        { action: "init" | "ready" | "yielded" | "clear"; shard: number },
+        null,
+        Name
+      >;
+      recordResult: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          generationNumber: number;
+          result:
+            | { kind: "success"; returnValue: any }
+            | { error: string; kind: "failed" }
+            | { kind: "canceled" };
+          stepId: string;
+        },
+        null,
+        Name
+      >;
+      recordResultBatch: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          items: Array<{
+            generationNumber: number;
+            result:
+              | { kind: "success"; returnValue: any }
+              | { error: string; kind: "failed" }
+              | { kind: "canceled" };
+            stepId: string;
+          }>;
+        },
+        Array<{
+          generationNumber: number;
+          workflowHandle: string;
+          workflowId: string;
+        }>,
+        Name
+      >;
+      replayIfReady: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          generationNumber: number;
+          workflowHandle: string;
+          workflowId: string;
+        },
+        null,
+        Name
+      >;
+      startExecutors: FunctionReference<
+        "mutation",
+        "internal",
+        { executorHandle: string; numShards: number },
+        number,
+        Name
+      >;
+    };
     workflow: {
       cancel: FunctionReference<
         "mutation",
@@ -290,10 +388,42 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         null,
         Name
       >;
+      countByName: FunctionReference<
+        "query",
+        "internal",
+        { createdAfter?: number; name: string },
+        { completed: number; failed: number; running: number; total: number },
+        Name
+      >;
+      countByNamePage: FunctionReference<
+        "query",
+        "internal",
+        {
+          createdAfter?: number;
+          name: string;
+          paginationOpts: {
+            cursor: string | null;
+            endCursor?: string | null;
+            id?: number;
+            maximumBytesRead?: number;
+            maximumRowsRead?: number;
+            numItems: number;
+          };
+        },
+        {
+          completed: number;
+          continueCursor: string;
+          failed: number;
+          isDone: boolean;
+          running: number;
+        },
+        Name
+      >;
       create: FunctionReference<
         "mutation",
         "internal",
         {
+          executorShards?: number;
           maxParallelism?: number;
           onComplete?: { context?: any; fnHandle: string };
           startAsync?: boolean;
@@ -302,6 +432,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           workflowName: string;
         },
         string,
+        Name
+      >;
+      creationTimeBuckets: FunctionReference<
+        "query",
+        "internal",
+        { bucketMs: number; createdAfter: number; name: string },
+        Array<{ count: number; offsetSec: number }>,
         Name
       >;
       getStatus: FunctionReference<
@@ -366,10 +503,12 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             _creationTime: number;
             _id: string;
             args: any;
+            executorShards?: number;
             generationNumber: number;
             logLevel?: any;
             name?: string;
             onComplete?: { context?: any; fnHandle: string };
+            readyToRun?: boolean;
             runResult?:
               | { kind: "success"; returnValue: any }
               | { error: string; kind: "failed" }
@@ -480,6 +619,41 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             stepNumber: number;
             workId?: string;
             workflowId: string;
+          }>;
+          pageStatus?: "SplitRecommended" | "SplitRequired" | null;
+          splitCursor?: string | null;
+        },
+        Name
+      >;
+      timelinePage: FunctionReference<
+        "query",
+        "internal",
+        {
+          createdAfter?: number;
+          name: string;
+          paginationOpts: {
+            cursor: string | null;
+            endCursor?: string | null;
+            id?: number;
+            maximumBytesRead?: number;
+            maximumRowsRead?: number;
+            numItems: number;
+          };
+        },
+        {
+          continueCursor: string;
+          isDone: boolean;
+          page: Array<{
+            createdAt: number;
+            id: string;
+            runResult?: "success" | "failed" | "canceled";
+            steps: Array<{
+              completedAt?: number;
+              executionStartedAt?: number;
+              name: string;
+              startedAt: number;
+              stepNumber: number;
+            }>;
           }>;
           pageStatus?: "SplitRecommended" | "SplitRequired" | null;
           splitCursor?: string | null;

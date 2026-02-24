@@ -8,7 +8,7 @@ import {
   workflowDocument,
 } from "./schema.js";
 import { getWorkflow } from "./model.js";
-import { logLevel } from "./logging.js";
+import { createLogger, DEFAULT_LOG_LEVEL, logLevel } from "./logging.js";
 import { vRetryBehavior, type WorkId } from "@convex-dev/workpool";
 import {
   getWorkpool,
@@ -71,6 +71,20 @@ export const load = query({
   },
 });
 
+function shardForWorkflow(workflowId: string, numShards: number): number {
+  let hash = 0;
+  for (let i = 0; i < workflowId.length; i++) {
+    hash = (hash * 31 + workflowId.charCodeAt(i)) | 0;
+  }
+  return ((hash % numShards) + numShards) % numShards;
+}
+
+const DEFAULT_QM_RETRY = {
+  maxAttempts: 4,
+  initialBackoffMs: 125,
+  base: 2,
+};
+
 export const startSteps = mutation({
   args: {
     workflowId: v.string(),
@@ -85,6 +99,7 @@ export const startSteps = mutation({
             v.object({ runAfter: v.optional(v.number()) }),
           ),
         ),
+        batchActionName: v.optional(v.string()),
       }),
     ),
     workpoolOptions: v.optional(workpoolOptions),
@@ -96,7 +111,7 @@ export const startSteps = mutation({
     }
     const { generationNumber } = args;
     const workflow = await getWorkflow(ctx, args.workflowId, generationNumber);
-    const console = await getDefaultLogger(ctx);
+    const console = createLogger(DEFAULT_LOG_LEVEL);
 
     if (workflow.runResult !== undefined) {
       throw new Error(`Workflow not running: ${args.workflowId}`);
@@ -112,7 +127,7 @@ export const startSteps = mutation({
 
     const entries = await Promise.all(
       args.steps.map(async (stepArgs, index) => {
-        const { retry, schedulerOptions } = stepArgs;
+        const { schedulerOptions } = stepArgs;
         const stepNumber = stepNumberBase + index;
         const stepId = await ctx.db.insert("steps", {
           workflowId: workflow._id,
@@ -164,37 +179,89 @@ export const startSteps = mutation({
             stepId,
             workpoolOptions: args.workpoolOptions,
           };
-          let workId: WorkId;
+          let workId: string;
+          // Compute retry config: false → no retry, true/undefined → default, object → use as-is
+          const retryConfig =
+            stepArgs.retry === false
+              ? undefined
+              : typeof stepArgs.retry === "object"
+                ? stepArgs.retry
+                : DEFAULT_QM_RETRY;
           switch (step.functionType) {
             case "query": {
-              workId = await workpool.enqueueQuery(
-                ctx,
-                step.handle as FunctionHandle<"query">,
-                step.args,
-                { context, onComplete, name, ...schedulerOptions },
-              );
+              if (workflow.executorShards) {
+                const shard = shardForWorkflow(workflow._id as string, workflow.executorShards);
+                await ctx.db.insert("taskQueue", {
+                  shard,
+                  functionType: "query",
+                  handle: step.handle,
+                  args: step.args,
+                  stepId,
+                  workflowId: workflow._id,
+                  generationNumber,
+                  retry: retryConfig,
+                });
+                workId = `executor:${stepId}`;
+              } else {
+                workId = (await workpool.enqueueQuery(
+                  ctx,
+                  step.handle as FunctionHandle<"query">,
+                  step.args,
+                  { context, onComplete, name, ...schedulerOptions },
+                )) as unknown as string;
+              }
               break;
             }
             case "mutation": {
-              workId = await workpool.enqueueMutation(
-                ctx,
-                step.handle as FunctionHandle<"mutation">,
-                step.args,
-                { context, onComplete, name, ...schedulerOptions },
-              );
+              if (workflow.executorShards) {
+                const shard = shardForWorkflow(workflow._id as string, workflow.executorShards);
+                await ctx.db.insert("taskQueue", {
+                  shard,
+                  functionType: "mutation",
+                  handle: step.handle,
+                  args: step.args,
+                  stepId,
+                  workflowId: workflow._id,
+                  generationNumber,
+                  retry: retryConfig,
+                });
+                workId = `executor:${stepId}`;
+              } else {
+                workId = (await workpool.enqueueMutation(
+                  ctx,
+                  step.handle as FunctionHandle<"mutation">,
+                  step.args,
+                  { context, onComplete, name, ...schedulerOptions },
+                )) as unknown as string;
+              }
               break;
             }
             case "action": {
-              workId = await workpool.enqueueAction(
-                ctx,
-                step.handle as FunctionHandle<"action">,
-                step.args,
-                { context, onComplete, name, retry, ...schedulerOptions },
-              );
+              if (stepArgs.batchActionName && workflow.executorShards) {
+                // Route through sharded task queue for executor-driven execution.
+                const shard = shardForWorkflow(workflow._id as string, workflow.executorShards);
+                await ctx.db.insert("taskQueue", {
+                  shard,
+                  functionType: "action",
+                  handle: stepArgs.batchActionName,
+                  args: step.args,
+                  stepId,
+                  workflowId: workflow._id,
+                  generationNumber,
+                });
+                workId = `executor:${stepId}`;
+              } else {
+                workId = (await workpool.enqueueAction(
+                  ctx,
+                  step.handle as FunctionHandle<"action">,
+                  step.args,
+                  { context, onComplete, name, ...schedulerOptions },
+                )) as unknown as string;
+              }
               break;
             }
           }
-          step.workId = workId;
+          step.workId = workId as unknown as WorkId;
         }
         await ctx.db.replace(entry._id, entry);
 

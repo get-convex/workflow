@@ -350,6 +350,19 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         }>,
         Name
       >;
+      replayBatchIfReady: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          candidates: Array<{
+            generationNumber: number;
+            workflowHandle: string;
+            workflowId: string;
+          }>;
+        },
+        null,
+        Name
+      >;
       replayIfReady: FunctionReference<
         "mutation",
         "internal",

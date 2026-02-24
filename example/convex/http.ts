@@ -180,27 +180,8 @@ async function fetchQuery(url, fnName, args) {
   return json.value;
 }
 
-async function fetchAllPages() {
-  let cursor = null;
-  let isDone = false;
-  const all = [];
-  while (!isDone) {
-    const result = await fetchQuery(CONVEX_URL, "benchmark:benchmarkTimeline", {
-      name: WF_NAME,
-      createdAfter,
-      paginationOpts: { cursor, numItems: 1000 },
-    });
-    all.push(...result.page);
-    cursor = result.continueCursor;
-    isDone = result.isDone;
-    document.getElementById("elapsed").textContent =
-      "Loading... (" + all.length + " workflows)";
-  }
-  return all;
-}
-
-function rebuildAndDraw(workflows) {
-  allWorkflows = workflows.sort((a, b) => a.createdAt - b.createdAt);
+function rebuildAndDraw() {
+  allWorkflows.sort((a, b) => a.createdAt - b.createdAt);
 
   if (allWorkflows.length > 0) {
     benchmarkStart = allWorkflows[0].createdAt;
@@ -220,12 +201,29 @@ function rebuildAndDraw(workflows) {
   draw();
 }
 
+// Stream pages incrementally — draw after each page arrives.
+async function fetchAndDrawAllPages() {
+  let cursor = null;
+  let isDone = false;
+  allWorkflows = [];
+  while (!isDone) {
+    const result = await fetchQuery(CONVEX_URL, "benchmark:benchmarkTimeline", {
+      name: WF_NAME,
+      createdAfter,
+      paginationOpts: { cursor, numItems: 1000 },
+    });
+    allWorkflows.push(...result.page);
+    cursor = result.continueCursor;
+    isDone = result.isDone;
+    rebuildAndDraw();
+  }
+}
+
 // Poll timeline every 3s
 (async function pollTimeline() {
   while (true) {
     try {
-      const workflows = await fetchAllPages();
-      rebuildAndDraw(workflows);
+      await fetchAndDrawAllPages();
     } catch (e) {
       console.error("Timeline poll error:", e);
     }

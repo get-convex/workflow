@@ -202,21 +202,28 @@ function rebuildAndDraw() {
 }
 
 // Stream pages incrementally — draw after each page arrives.
+// Keep previous data visible until incoming count exceeds it.
 async function fetchAndDrawAllPages() {
   let cursor = null;
   let isDone = false;
-  allWorkflows = [];
+  const prev = allWorkflows;
+  const incoming = [];
   while (!isDone) {
     const result = await fetchQuery(CONVEX_URL, "benchmark:benchmarkTimeline", {
       name: WF_NAME,
       createdAfter,
       paginationOpts: { cursor, numItems: 1000 },
     });
-    allWorkflows.push(...result.page);
+    incoming.push(...result.page);
     cursor = result.continueCursor;
     isDone = result.isDone;
-    rebuildAndDraw();
+    if (incoming.length >= prev.length) {
+      allWorkflows = incoming;
+      rebuildAndDraw();
+    }
   }
+  allWorkflows = incoming;
+  rebuildAndDraw();
 }
 
 // Poll timeline every 3s

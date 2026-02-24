@@ -1,0 +1,43 @@
+{
+  "batched": {
+    "batchedMaxConcurrencyPerWorker": 1000,
+    "batchedMaxParallelism": 100,
+    "batchedMaxWorkers": 2,
+    "completedAt": 1771184188961,
+    "completedWorkflows": 1000,
+    "concurrency": [],
+    "count": 1000,
+    "durationMs": 0,
+    "elapsedMs": 0,
+    "failedWorkflows": 0,
+    "itemRows": [],
+    "jokesDone": 0,
+    "jokesTotal": 2000,
+    "judgesDone": 0,
+    "judgesTotal": 1000,
+    "maxConcurrency": 0,
+    "mode": "batched",
+    "picksDone": 0,
+    "picksTotal": 1000,
+    "regularMaxParallelism": 50,
+    "result": null,
+    "retry": {
+      "base": 2,
+      "initialBackoffMs": 200,
+      "maxAttempts": 4
+    },
+    "runId": "jh798fdrvjx5f14pb1s9d6k1b98172hh",
+    "startedAt": 1771184028895,
+    "status": "completed",
+    "steps": [],
+    "tieCount": 0,
+    "timelineEnd": 1771184028895,
+    "timelineStart": 1771184028895,
+    "winner1Count": 417,
+    "winner2Count": 583
+  },
+  "count": 1000,
+  "globalTimelineEnd": 1771184028895,
+  "globalTimelineStart": 1771184028895,
+  "regular": null
+}

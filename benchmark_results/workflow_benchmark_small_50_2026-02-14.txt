@@ -1,0 +1,6 @@
+=== workflow small benchmark ===
+section_count=50
+=== summary ===
+regular: status=completed elapsed_ms=30413 elapsed_s=31
+batched: status=completed elapsed_ms=36951 elapsed_s=38
+speedup=0.82x

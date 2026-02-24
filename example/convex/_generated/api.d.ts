@@ -9,7 +9,9 @@
  */
 
 import type * as admin from "../admin.js";
+import type * as benchmark from "../benchmark.js";
 import type * as example from "../example.js";
+import type * as http from "../http.js";
 import type * as nestedWorkflow from "../nestedWorkflow.js";
 import type * as passingSignals from "../passingSignals.js";
 import type * as transcription from "../transcription.js";
@@ -23,7 +25,9 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
+  benchmark: typeof benchmark;
   example: typeof example;
+  http: typeof http;
   nestedWorkflow: typeof nestedWorkflow;
   passingSignals: typeof passingSignals;
   transcription: typeof transcription;
@@ -58,4 +62,5 @@ export declare const internal: FilterApi<
 
 export declare const components: {
   workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
+  workpool: import("@convex-dev/workpool/_generated/component.js").ComponentApi<"workpool">;
 };

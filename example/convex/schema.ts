@@ -8,4 +8,9 @@ export default defineSchema({
     workflowId: vWorkflowId,
     out: v.any(),
   }).index("workflowId", ["workflowId"]),
+  benchmarkResults: defineTable({
+    workflowId: vWorkflowId,
+    result: v.any(),
+    completedAt: v.number(),
+  }).index("workflowId", ["workflowId"]),
 });

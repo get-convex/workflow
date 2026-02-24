@@ -342,6 +342,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
               | { kind: "canceled" };
             stepId: string;
           }>;
+          replayInline?: boolean;
         },
         Array<{
           generationNumber: number;

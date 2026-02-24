@@ -201,8 +201,8 @@ export class WorkflowManager {
     const POLL_BACKOFF_MS = 500;
     const POLL_BACKOFF_ACTIVE_MS = 100;
     const RESCHEDULE_MS = 8 * 60 * 1000; // 8 minutes, before 10-min action timeout
-    const FLUSH_INTERVAL_MS = 200;
-    const FLUSH_BATCH_SIZE = 200;
+    const FLUSH_INTERVAL_MS = 100;
+    const FLUSH_BATCH_SIZE = 50;
     const MAX_FLUSH_RETRIES = 5;
     const HANDOFF_POLL_MS = 500;
     const HANDOFF_SUCCESSOR_TIMEOUT_MS = 30_000;
@@ -258,23 +258,15 @@ export class WorkflowManager {
         const inFlightStepIds = new Set<string>();
         let flushing = false;
 
-        // Flush pending results, then replay candidates in a single batch.
-        // Serializing flush → replay keeps inter-step latency tight: the
-        // next step is enqueued immediately after recording the result.
+        // Flush pending results in batches with inline replay.
         const flush = async () => {
           if (flushing) return;
           flushing = true;
           try {
             while (pendingResults.length > 0) {
               const batch = pendingResults.splice(0, FLUSH_BATCH_SIZE);
-              let candidates: Array<{
-                workflowId: string;
-                generationNumber: number;
-                workflowHandle: string;
-              }>;
-              const flushCalledAt = Date.now();
               try {
-                candidates = await ctx.runMutation(
+                await ctx.runMutation(
                   component.taskQueue.recordResultBatch,
                   {
                     items: batch.map((r) => ({
@@ -282,8 +274,8 @@ export class WorkflowManager {
                       result: r.result,
                       generationNumber: r.generationNumber,
                       executorFinishedAt: r.executorFinishedAt,
-                      flushCalledAt,
                     })),
+                    replayInline: true,
                   },
                 );
               } catch {
@@ -292,30 +284,6 @@ export class WorkflowManager {
               }
               for (const item of batch) {
                 inFlightStepIds.delete(item.stepId);
-              }
-              // Replay all candidates in a single batched mutation call.
-              // This avoids "too many concurrent commits" rate limiting
-              // (previously fired N individual mutations per flush batch).
-              if (candidates.length > 0) {
-                for (let attempt = 0; attempt < 5; attempt++) {
-                  try {
-                    await ctx.runMutation(
-                      component.taskQueue.replayBatchIfReady,
-                      { candidates },
-                    );
-                    break;
-                  } catch {
-                    if (attempt < 4) {
-                      await new Promise((r) =>
-                        setTimeout(r, 500 * Math.pow(2, attempt)),
-                      );
-                    } else {
-                      console.error(
-                        `Failed to replay batch of ${candidates.length} workflows after 5 retries`,
-                      );
-                    }
-                  }
-                }
               }
             }
           } finally {

@@ -222,9 +222,10 @@ export const recordResultBatch = mutation({
         flushCalledAt: v.optional(v.number()),
       }),
     ),
+    replayInline: v.optional(v.boolean()),
   },
   returns: v.array(replayCandidate),
-  handler: async (ctx, { items }) => {
+  handler: async (ctx, { items, replayInline }) => {
     const console = createLogger(DEFAULT_LOG_LEVEL);
     const candidates = new Map<
       string,
@@ -311,8 +312,39 @@ export const recordResultBatch = mutation({
       }
     }
 
-    // Return candidates — executor handles replay in a concurrent pipeline.
-    // No inProgress index reads here = minimal OCC surface.
+    // When replayInline is set, replay ready workflows in this same mutation
+    // instead of requiring a separate replayBatchIfReady call.
+    if (replayInline) {
+      for (const { workflowId, generationNumber, workflowHandle } of candidates.values()) {
+        const workflow = await ctx.db.get(workflowId);
+        if (!workflow || workflow.runResult || workflow.generationNumber !== generationNumber) {
+          continue;
+        }
+        const inProgress = await ctx.db
+          .query("steps")
+          .withIndex("inProgress", (q) =>
+            q.eq("step.inProgress", true).eq("workflowId", workflowId),
+          )
+          .first();
+        if (inProgress) {
+          continue;
+        }
+        try {
+          await ctx.runMutation(
+            workflowHandle as FunctionHandle<"mutation">,
+            { workflowId, generationNumber },
+          );
+        } catch (e) {
+          const error = e instanceof Error ? e.message : `Unknown error: ${String(e)}`;
+          console.error(`Error running workflow ${workflowId}: ${error}`);
+          await ctx.db.patch(workflowId, {
+            runResult: { kind: "failed", error },
+          });
+        }
+      }
+      return [];
+    }
+
     return [...candidates.values()];
   },
 });

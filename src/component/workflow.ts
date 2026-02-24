@@ -41,7 +41,6 @@ const createArgs = v.object({
   maxParallelism: v.optional(v.number()),
   onComplete: v.optional(vOnComplete),
   startAsync: v.optional(v.boolean()),
-  batchBridgeHandle: v.optional(v.string()),
   executorShards: v.optional(v.number()),
   // TODO: ttl
 });
@@ -64,7 +63,6 @@ export async function createHandler(
     generationNumber: 0,
     onComplete: args.onComplete,
     readyToRun: args.startAsync ? true : undefined,
-    batchBridgeHandle: args.batchBridgeHandle,
     executorShards: args.executorShards,
   });
   console.debug(

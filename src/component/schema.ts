@@ -54,11 +54,6 @@ const workflowObject = {
   // Set to true when the workflow is ready for the coordinator to pick up.
   readyToRun: v.optional(v.boolean()),
 
-  // FunctionHandle for the app-level batch bridge mutation.
-  // When set, action steps with batchActionName route through this bridge
-  // instead of the standard workpool.
-  batchBridgeHandle: v.optional(v.string()),
-
   // When set, action steps with batchActionName route through the sharded
   // task queue instead of the batch bridge or workpool.
   executorShards: v.optional(v.number()),

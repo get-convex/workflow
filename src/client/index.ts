@@ -3,13 +3,11 @@ import type {
   WorkpoolOptions,
   WorkpoolRetryOptions,
 } from "@convex-dev/workpool";
-// BatchWorkpool not yet exported from @convex-dev/workpool@0.3.1
-type BatchWorkpool = any;
 import { parse } from "convex-helpers/validators";
 import {
   createFunctionHandle,
   internalActionGeneric,
-  internalMutationGeneric,
+
   type DefaultFunctionArgs,
   type FunctionArgs,
   type FunctionHandle,
@@ -105,10 +103,7 @@ export type WorkflowStatus =
   | { type: "failed"; error: string };
 
 export class WorkflowManager {
-  private batch?: BatchWorkpool;
   private batchActionNames = new Set<string>();
-  private batchBridgeRef: FunctionReference<"mutation", "internal"> | null =
-    null;
   private executorShards?: number;
   private executorActionHandlers = new Map<
     string,
@@ -120,11 +115,9 @@ export class WorkflowManager {
     public component: WorkflowComponent,
     public options?: {
       workpoolOptions?: WorkpoolOptions;
-      batch?: BatchWorkpool;
       executorShards?: number;
     },
   ) {
-    this.batch = options?.batch;
     this.executorShards = options?.executorShards;
   }
 
@@ -150,69 +143,24 @@ export class WorkflowManager {
       ) => Promise<Returns>;
     },
   ): RegisteredAction<"internal", Args, Returns> {
-    if (this.executorShards) {
-      // Executor mode: store handler for executor to call, register name for
-      // batch action detection in step.ts, return a dummy action placeholder.
-      this.executorActionHandlers.set(name, opts.handler);
-      this.batchActionNames.add(name);
-      // Return a no-op action placeholder — the function ref must exist for
-      // safeFunctionName but is never invoked directly.
-      return internalActionGeneric({
-        handler: async () => {
-          throw new Error(
-            `${name} should not be called directly — it runs inside executors`,
-          );
-        },
-      }) as any;
-    }
-    if (!this.batch) {
+    if (!this.executorShards) {
       throw new Error(
-        "WorkflowManager.action() requires a `batch` or `executorShards` option in the constructor",
+        "WorkflowManager.action() requires `executorShards` in the constructor",
       );
     }
+    // Store handler for executor to call, register name for
+    // batch action detection in step.ts, return a dummy action placeholder.
+    this.executorActionHandlers.set(name, opts.handler);
     this.batchActionNames.add(name);
-    return this.batch.action(name, opts);
-  }
-
-  /**
-   * Create a bridge mutation that the workflow component calls (via
-   * FunctionHandle) to enqueue work into the app-level BatchWorkpool.
-   *
-   * Export the return value and pass its reference to `setBatchBridgeRef`.
-   */
-  batchBridge(): RegisteredMutation<"internal", any, any> {
-    if (!this.batch) {
-      throw new Error(
-        "WorkflowManager.batchBridge() requires a `batch` option in the constructor",
-      );
-    }
-    const batch = this.batch;
-    return internalMutationGeneric({
-      handler: async (
-        ctx: GenericMutationCtx<GenericDataModel>,
-        args: {
-          name: string;
-          args: DefaultFunctionArgs;
-          onComplete: string;
-          context: unknown;
-        },
-      ) => {
-        const taskId = await batch.enqueueByHandle(ctx, args.name, args.args, {
-          onComplete: { fnHandle: args.onComplete, context: args.context },
-        });
-        return taskId;
+    // Return a no-op action placeholder — the function ref must exist for
+    // safeFunctionName but is never invoked directly.
+    return internalActionGeneric({
+      handler: async () => {
+        throw new Error(
+          `${name} should not be called directly — it runs inside executors`,
+        );
       },
     }) as any;
-  }
-
-  /**
-   * Store the FunctionReference for the batch bridge mutation.
-   * Must be called after exporting the result of `batchBridge()`.
-   *
-   * @param ref - The function reference for the exported bridge mutation.
-   */
-  setBatchBridgeRef(ref: FunctionReference<"mutation", "internal">) {
-    this.batchBridgeRef = ref;
   }
 
   /**
@@ -691,9 +639,6 @@ export class WorkflowManager {
           context: options.context,
         }
       : undefined;
-    const batchBridgeHandle = this.batchBridgeRef
-      ? await createFunctionHandle(this.batchBridgeRef)
-      : undefined;
     const workflowId = await ctx.runMutation(this.component.workflow.create, {
       workflowName: safeFunctionName(workflow),
       workflowHandle: handle,
@@ -701,7 +646,6 @@ export class WorkflowManager {
       maxParallelism: this.options?.workpoolOptions?.maxParallelism,
       onComplete,
       startAsync: options?.startAsync ?? options?.validateAsync,
-      batchBridgeHandle,
       executorShards: this.executorShards,
     });
     return workflowId as unknown as WorkflowId;

@@ -112,7 +112,6 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             _creationTime: number;
             _id: string;
             args: any;
-            batchBridgeHandle?: string;
             executorShards?: number;
             generationNumber: number;
             logLevel?: any;
@@ -424,7 +423,6 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "mutation",
         "internal",
         {
-          batchBridgeHandle?: string;
           executorShards?: number;
           maxParallelism?: number;
           onComplete?: { context?: any; fnHandle: string };
@@ -505,7 +503,6 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             _creationTime: number;
             _id: string;
             args: any;
-            batchBridgeHandle?: string;
             executorShards?: number;
             generationNumber: number;
             logLevel?: any;

@@ -8,7 +8,6 @@
  * @module
  */
 
-import type * as batch from "../batch.js";
 import type * as coordinator from "../coordinator.js";
 import type * as event from "../event.js";
 import type * as journal from "../journal.js";
@@ -27,7 +26,6 @@ import type {
 import { anyApi, componentsGeneric } from "convex/server";
 
 const fullApi: ApiFromModules<{
-  batch: typeof batch;
   coordinator: typeof coordinator;
   event: typeof event;
   journal: typeof journal;

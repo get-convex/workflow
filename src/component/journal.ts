@@ -250,20 +250,6 @@ export const startSteps = mutation({
                   generationNumber,
                 });
                 workId = `executor:${stepId}`;
-              } else if (stepArgs.batchActionName && workflow.batchBridgeHandle) {
-                // Route through app-level batch bridge for inline execution.
-                // No separate action invocation — runs inside long-lived batch executors.
-                const onCompleteHandle = await createFunctionHandle(onComplete);
-                const taskId = await ctx.runMutation(
-                  workflow.batchBridgeHandle as FunctionHandle<"mutation">,
-                  {
-                    name: stepArgs.batchActionName,
-                    args: step.args,
-                    onComplete: onCompleteHandle,
-                    context,
-                  },
-                );
-                workId = taskId;
               } else {
                 workId = (await workpool.enqueueAction(
                   ctx,

@@ -7,7 +7,7 @@ import {
 } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { mutation, type MutationCtx, query } from "./_generated/server.js";
-import { createLogger, DEFAULT_LOG_LEVEL, logLevel } from "./logging.js";
+import { logLevel } from "./logging.js";
 import { getWorkflow } from "./model.js";
 import { getWorkpool } from "./pool.js";
 import schema, {
@@ -55,7 +55,7 @@ export async function createHandler(
   args: Infer<typeof createArgs>,
   _schedulerOptions?: SchedulerOptions,
 ) {
-  const console = createLogger(DEFAULT_LOG_LEVEL);
+  const console = await getDefaultLogger(ctx);
   const workflowId = await ctx.db.insert("workflows", {
     name: args.workflowName,
     workflowHandle: args.workflowHandle,
@@ -423,7 +423,7 @@ export async function completeHandler(
     args.workflowId,
     args.generationNumber,
   );
-  const console = createLogger(DEFAULT_LOG_LEVEL);
+  const console = await getDefaultLogger(ctx);
   if (workflow.runResult) {
     throw new Error(`Workflow not running: ${workflow}`);
   }
@@ -453,14 +453,17 @@ export async function completeHandler(
             if (typeof step.workId === "string" && (step.workId as string).startsWith("executor:")) {
               // Clean up the task queue entry if it exists.
               const stepId = (step.workId as string).slice("executor:".length);
-              const taskEntry = await ctx.db
-                .query("taskQueue")
-                .withIndex("by_stepId", (q) =>
-                  q.eq("stepId", ctx.db.normalizeId("steps", stepId)!),
-                )
-                .unique();
-              if (taskEntry) {
-                await ctx.db.delete(taskEntry._id);
+              const normalizedStepId = ctx.db.normalizeId("steps", stepId);
+              if (normalizedStepId) {
+                const taskEntry = await ctx.db
+                  .query("taskQueue")
+                  .withIndex("by_stepId", (q) =>
+                    q.eq("stepId", normalizedStepId),
+                  )
+                  .unique();
+                if (taskEntry) {
+                  await ctx.db.delete(taskEntry._id);
+                }
               }
             } else {
               await workpool.cancel(ctx, step.workId);

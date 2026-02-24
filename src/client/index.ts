@@ -299,7 +299,7 @@ export class WorkflowManager {
                   }
                   if (!replaySucceeded) {
                     console.error(
-                      `Failed to replay workflow ${c.workflowId} after 3 retries — workflow may be stuck`,
+                      `Failed to replay workflow ${c.workflowId} after 3 retries — workflow may need manual replay`,
                     );
                   }
                 }

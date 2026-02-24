@@ -3,17 +3,25 @@ import type {
   WorkpoolOptions,
   WorkpoolRetryOptions,
 } from "@convex-dev/workpool";
+// BatchWorkpool not yet exported from @convex-dev/workpool@0.3.1
+type BatchWorkpool = any;
 import { parse } from "convex-helpers/validators";
 import {
   createFunctionHandle,
+  internalActionGeneric,
+  internalMutationGeneric,
+  type DefaultFunctionArgs,
   type FunctionArgs,
+  type FunctionHandle,
   type FunctionReference,
   type FunctionVisibility,
+  type GenericActionCtx,
   type GenericDataModel,
   type GenericMutationCtx,
   type GenericQueryCtx,
   type PaginationOptions,
   type PaginationResult,
+  type RegisteredAction,
   type RegisteredMutation,
   type ReturnValueForOptionalValidator,
 } from "convex/server";
@@ -97,12 +105,526 @@ export type WorkflowStatus =
   | { type: "failed"; error: string };
 
 export class WorkflowManager {
+  private batch?: BatchWorkpool;
+  private batchActionNames = new Set<string>();
+  private batchBridgeRef: FunctionReference<"mutation", "internal"> | null =
+    null;
+  private executorShards?: number;
+  private executorActionHandlers = new Map<
+    string,
+    (ctx: GenericActionCtx<GenericDataModel>, args: any) => Promise<any>
+  >();
+  private executorRef: FunctionReference<"action", "internal"> | null = null;
+
   constructor(
     public component: WorkflowComponent,
     public options?: {
-      workpoolOptions: WorkpoolOptions;
+      workpoolOptions?: WorkpoolOptions;
+      batch?: BatchWorkpool;
+      executorShards?: number;
     },
-  ) {}
+  ) {
+    this.batch = options?.batch;
+    this.executorShards = options?.executorShards;
+  }
+
+  /**
+   * Register an action to run inline in batch executors.
+   * The action handler runs inside long-lived executor actions (no separate
+   * action invocation, no 512 concurrent action limit).
+   *
+   * @param name - A unique name for the batch action.
+   * @param opts - The action definition (args validator and handler).
+   * @returns A registered action to export from your Convex module.
+   */
+  action<
+    Args extends DefaultFunctionArgs = any,
+    Returns = any,
+  >(
+    name: string,
+    opts: {
+      args: Record<string, Validator<any, any, any>>;
+      handler: (
+        ctx: GenericActionCtx<GenericDataModel>,
+        args: Args,
+      ) => Promise<Returns>;
+    },
+  ): RegisteredAction<"internal", Args, Returns> {
+    if (this.executorShards) {
+      // Executor mode: store handler for executor to call, register name for
+      // batch action detection in step.ts, return a dummy action placeholder.
+      this.executorActionHandlers.set(name, opts.handler);
+      this.batchActionNames.add(name);
+      // Return a no-op action placeholder — the function ref must exist for
+      // safeFunctionName but is never invoked directly.
+      return internalActionGeneric({
+        handler: async () => {
+          throw new Error(
+            `${name} should not be called directly — it runs inside executors`,
+          );
+        },
+      }) as any;
+    }
+    if (!this.batch) {
+      throw new Error(
+        "WorkflowManager.action() requires a `batch` or `executorShards` option in the constructor",
+      );
+    }
+    this.batchActionNames.add(name);
+    return this.batch.action(name, opts);
+  }
+
+  /**
+   * Create a bridge mutation that the workflow component calls (via
+   * FunctionHandle) to enqueue work into the app-level BatchWorkpool.
+   *
+   * Export the return value and pass its reference to `setBatchBridgeRef`.
+   */
+  batchBridge(): RegisteredMutation<"internal", any, any> {
+    if (!this.batch) {
+      throw new Error(
+        "WorkflowManager.batchBridge() requires a `batch` option in the constructor",
+      );
+    }
+    const batch = this.batch;
+    return internalMutationGeneric({
+      handler: async (
+        ctx: GenericMutationCtx<GenericDataModel>,
+        args: {
+          name: string;
+          args: DefaultFunctionArgs;
+          onComplete: string;
+          context: unknown;
+        },
+      ) => {
+        const taskId = await batch.enqueueByHandle(ctx, args.name, args.args, {
+          onComplete: { fnHandle: args.onComplete, context: args.context },
+        });
+        return taskId;
+      },
+    }) as any;
+  }
+
+  /**
+   * Store the FunctionReference for the batch bridge mutation.
+   * Must be called after exporting the result of `batchBridge()`.
+   *
+   * @param ref - The function reference for the exported bridge mutation.
+   */
+  setBatchBridgeRef(ref: FunctionReference<"mutation", "internal">) {
+    this.batchBridgeRef = ref;
+  }
+
+  /**
+   * Create a long-running executor action for the sharded task queue.
+   * Each executor claims tasks from a single shard, processes them
+   * concurrently, and chains to the next task atomically.
+   *
+   * Export the return value from your Convex module, then call
+   * `setExecutorRef()` with its reference.
+   */
+  executor(): RegisteredAction<"internal", { shard: number; epoch?: number }, null> {
+    if (!this.executorShards) {
+      throw new Error(
+        "WorkflowManager.executor() requires `executorShards` in the constructor",
+      );
+    }
+    const handlers = this.executorActionHandlers;
+    const component = this.component;
+    const numShards = this.executorShards;
+    const getExecutorRef = () => this.executorRef;
+
+    const CLAIM_LIMIT = 800;
+    const MAX_CONCURRENCY = 200;
+    const POLL_BACKOFF_MS = 500;
+    const POLL_BACKOFF_ACTIVE_MS = 150;
+    const RESCHEDULE_MS = 8 * 60 * 1000; // 8 minutes, before 10-min action timeout
+    const FLUSH_INTERVAL_MS = 500;
+    const FLUSH_BATCH_SIZE = 50;
+    const MAX_FLUSH_RETRIES = 5;
+    const HANDOFF_POLL_MS = 500;
+    const HANDOFF_SUCCESSOR_TIMEOUT_MS = 30_000;
+    const HANDOFF_PREDECESSOR_TIMEOUT_MS = 30_000;
+
+    return internalActionGeneric({
+      handler: async (
+        ctx: GenericActionCtx<GenericDataModel>,
+        args: { shard: number; epoch?: number },
+      ) => {
+        const { shard, epoch } = args;
+        const startTime = Date.now();
+        // Stagger restarts by shard index so at most 1 shard hands off at a time.
+        const JITTER_WINDOW_MS = 60_000;
+        const shardSlotMs = Math.floor((shard / numShards) * JITTER_WINDOW_MS);
+        const perturbMs = Math.floor(
+          Math.random() * Math.floor(JITTER_WINDOW_MS / numShards),
+        );
+        const jitterMs = shardSlotMs + perturbMs;
+
+        const checkEpoch = async (): Promise<boolean> => {
+          const currentEpoch: number = await ctx.runQuery(
+            component.taskQueue.getExecutorEpoch,
+            {},
+          );
+          if (currentEpoch === 0) return true;
+          return epoch === currentEpoch;
+        };
+
+        type Task = {
+          functionType: "query" | "mutation" | "action";
+          handle: string;
+          args: any;
+          stepId: string;
+          workflowId: string;
+          generationNumber: number;
+          retry?: {
+            maxAttempts: number;
+            initialBackoffMs: number;
+            base: number;
+          };
+        };
+
+        type PendingResult = {
+          stepId: string;
+          result: RunResult;
+          generationNumber: number;
+        };
+
+        // --- Result batching ---
+        const pendingResults: PendingResult[] = [];
+        const inFlightStepIds = new Set<string>();
+        let flushing = false;
+
+        // Flush pending results in batches. On error, items go back to
+        // the buffer for retry — the executor never dies from flush failures.
+        // After recording, trigger per-workflow replays in parallel.
+        const flush = async () => {
+          if (flushing) return;
+          flushing = true;
+          try {
+            while (pendingResults.length > 0) {
+              const batch = pendingResults.splice(0, FLUSH_BATCH_SIZE);
+              let candidates: Array<{ workflowId: string; generationNumber: number; workflowHandle: string }>;
+              try {
+                candidates = await ctx.runMutation(
+                  component.taskQueue.recordResultBatch,
+                  { items: batch.map((r) => ({ ...r, stepId: r.stepId })) },
+                );
+              } catch {
+                pendingResults.unshift(...batch);
+                return;
+              }
+              // Remove flushed stepIds from in-flight tracking.
+              for (const item of batch) {
+                inFlightStepIds.delete(item.stepId);
+              }
+              // Replay workflows in parallel — each is a tiny per-workflow mutation.
+              if (candidates.length > 0) {
+                const failed: typeof candidates = [];
+                await Promise.all(
+                  candidates.map((c) =>
+                    ctx.runMutation(component.taskQueue.replayIfReady, {
+                      workflowId: c.workflowId,
+                      generationNumber: c.generationNumber,
+                      workflowHandle: c.workflowHandle,
+                    }).catch(() => {
+                      failed.push(c);
+                    }),
+                  ),
+                );
+                // Retry failed replays sequentially with backoff.
+                for (const c of failed) {
+                  let replaySucceeded = false;
+                  for (let attempt = 0; attempt < 3; attempt++) {
+                    await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+                    try {
+                      await ctx.runMutation(component.taskQueue.replayIfReady, {
+                        workflowId: c.workflowId,
+                        generationNumber: c.generationNumber,
+                        workflowHandle: c.workflowHandle,
+                      });
+                      replaySucceeded = true;
+                      break;
+                    } catch {
+                      // Continue retrying
+                    }
+                  }
+                  if (!replaySucceeded) {
+                    console.error(
+                      `Failed to replay workflow ${c.workflowId} after 3 retries — workflow may be stuck`,
+                    );
+                  }
+                }
+              }
+            }
+          } finally {
+            flushing = false;
+          }
+        };
+
+        let flushLoopRunning = true;
+        const flushLoop = (async () => {
+          while (flushLoopRunning) {
+            await new Promise((r) => setTimeout(r, FLUSH_INTERVAL_MS));
+            if (pendingResults.length > 0) {
+              await flush();
+            }
+          }
+        })();
+
+        // --- Bounded-concurrency task processor ---
+        let activeCount = 0;
+        let resolveIdle: (() => void) | null = null;
+        const taskBuffer: Task[] = [];
+
+        const processTask = async (task: Task): Promise<void> => {
+          const maxAttempts = Math.max(task.retry?.maxAttempts ?? 1, 1);
+          const initialBackoffMs = task.retry?.initialBackoffMs ?? 125;
+          const base = task.retry?.base ?? 2;
+
+          let result: RunResult | undefined;
+          for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            try {
+              let returnValue: unknown;
+              switch (task.functionType) {
+                case "query":
+                  returnValue = await ctx.runQuery(
+                    task.handle as FunctionHandle<"query">,
+                    task.args,
+                  );
+                  break;
+                case "mutation":
+                  returnValue = await ctx.runMutation(
+                    task.handle as FunctionHandle<"mutation">,
+                    task.args,
+                  );
+                  break;
+                case "action": {
+                  const handler = handlers.get(task.handle);
+                  if (!handler) {
+                    result = { kind: "failed" as const, error: `Unknown action: ${task.handle}` };
+                    break;
+                  }
+                  returnValue = await handler(ctx, task.args);
+                  break;
+                }
+              }
+              if (result?.kind === "failed") break; // unknown action — no retry
+              result = { kind: "success", returnValue: returnValue ?? null };
+              break;
+            } catch (e) {
+              const error = e instanceof Error ? e.message : `Unknown error: ${String(e)}`;
+              result = { kind: "failed", error };
+              if (attempt < maxAttempts - 1) {
+                const backoff = initialBackoffMs * Math.pow(base, attempt);
+                await new Promise((r) => setTimeout(r, backoff));
+              }
+            }
+          }
+          pendingResults.push({ stepId: task.stepId, result: result!, generationNumber: task.generationNumber });
+        };
+
+        const feedTask = (task: Task) => {
+          if (activeCount < MAX_CONCURRENCY) {
+            activeCount++;
+            runTask(task);
+          } else {
+            taskBuffer.push(task);
+          }
+        };
+
+        const runTask = (task: Task) => {
+          processTask(task)
+            .catch(() => {})
+            .finally(() => {
+              const next = taskBuffer.shift();
+              if (next) {
+                runTask(next);
+              } else {
+                activeCount--;
+                if (activeCount === 0 && resolveIdle) {
+                  resolveIdle();
+                }
+              }
+            });
+        };
+
+        // Wait for all tasks to complete, then reliably flush all results.
+        const waitUntilIdle = async () => {
+          await new Promise<void>((resolve) => {
+            if (activeCount === 0) resolve();
+            else resolveIdle = resolve;
+          });
+          // Drain all pending results with retries.
+          let retries = 0;
+          while (pendingResults.length > 0) {
+            await flush();
+            if (pendingResults.length > 0) {
+              retries++;
+              if (retries >= MAX_FLUSH_RETRIES) {
+                // Give up on remaining items — tasks stay in queue,
+                // next executor run will re-process them.
+                pendingResults.length = 0;
+                break;
+              }
+              await new Promise((r) => setTimeout(r, 200));
+            }
+          }
+        };
+
+        // --- Non-blocking handshake ---
+        // Move handoff cleanup into a background promise so the main
+        // claiming loop starts immediately. Brief overlap of two executors
+        // on the same shard is safe (claimTasks is read-only,
+        // recordResultBatch checks generationNumber + inProgress).
+        type Handoff = { ready: boolean; yielded: boolean } | null;
+        const handoffDoc: Handoff = await ctx.runQuery(
+          component.taskQueue.getHandoff,
+          { shard },
+        );
+        const handoffCleanup: Promise<void> = (async () => {
+          if (!handoffDoc || handoffDoc.yielded) {
+            if (handoffDoc) {
+              await ctx.runMutation(component.taskQueue.handoff, {
+                shard,
+                action: "clear",
+              });
+            }
+            return;
+          }
+          await ctx.runMutation(component.taskQueue.handoff, {
+            shard,
+            action: "ready",
+          });
+          // Poll for yield in background.
+          const predecessorDeadline =
+            Date.now() + HANDOFF_PREDECESSOR_TIMEOUT_MS;
+          while (Date.now() < predecessorDeadline) {
+            await new Promise((r) => setTimeout(r, HANDOFF_POLL_MS));
+            const state: Handoff = await ctx.runQuery(
+              component.taskQueue.getHandoff,
+              { shard },
+            );
+            if (!state || state.yielded) break;
+          }
+          await ctx.runMutation(component.taskQueue.handoff, {
+            shard,
+            action: "clear",
+          });
+        })().catch(() => {});
+        // Main loop starts IMMEDIATELY — zero gap.
+
+        // --- Main loop ---
+        try {
+          while (true) {
+            if (Date.now() - startTime > RESCHEDULE_MS + jitterMs) {
+              // --- Old executor handoff ---
+              // Create handoff doc, schedule successor, keep claiming
+              // until successor is ready, then yield and drain.
+              if (await checkEpoch()) {
+                await ctx.runMutation(component.taskQueue.handoff, {
+                  shard,
+                  action: "init",
+                });
+                const ref = getExecutorRef();
+                if (ref) {
+                  await ctx.scheduler.runAfter(0, ref, { shard, epoch });
+                }
+                // Handoff claiming loop: keep processing tasks until
+                // the successor signals ready (or timeout).
+                const successorDeadline =
+                  Date.now() + HANDOFF_SUCCESSOR_TIMEOUT_MS;
+                while (Date.now() < successorDeadline) {
+                  if (!(await checkEpoch())) break;
+                  const state: Handoff = await ctx.runQuery(
+                    component.taskQueue.getHandoff,
+                    { shard },
+                  );
+                  if (state?.ready) {
+                    await ctx.runMutation(component.taskQueue.handoff, {
+                      shard,
+                      action: "yielded",
+                    });
+                    break;
+                  }
+                  // Continue claiming tasks (streaming) while waiting.
+                  const tasks: Task[] = await ctx.runQuery(
+                    component.taskQueue.claimTasks,
+                    { shard, limit: CLAIM_LIMIT },
+                  );
+                  const newTasks = tasks.filter(t => !inFlightStepIds.has(t.stepId));
+                  if (newTasks.length > 0) {
+                    for (const task of newTasks) {
+                      inFlightStepIds.add(task.stepId);
+                      feedTask(task);
+                    }
+                  } else {
+                    await new Promise((r) => setTimeout(r, POLL_BACKOFF_MS));
+                  }
+                }
+
+              }
+              await waitUntilIdle();
+              return null;
+            }
+
+            // If a newer startExecutors call happened, stop claiming
+            // new work — but drain any tasks already in the shard first
+            // so they aren't stranded without an executor.
+            if (!(await checkEpoch())) {
+              const drainTasks: Task[] = await ctx.runQuery(
+                component.taskQueue.claimTasks,
+                { shard, limit: CLAIM_LIMIT },
+              );
+              const newDrainTasks = drainTasks.filter(t => !inFlightStepIds.has(t.stepId));
+              if (newDrainTasks.length > 0) {
+                for (const task of newDrainTasks) {
+                  inFlightStepIds.add(task.stepId);
+                  feedTask(task);
+                }
+                continue; // re-check epoch — may have more tasks
+              }
+              await waitUntilIdle();
+              return null;
+            }
+
+            if (activeCount + taskBuffer.length < MAX_CONCURRENCY) {
+              const tasks: Task[] = await ctx.runQuery(
+                component.taskQueue.claimTasks,
+                { shard, limit: CLAIM_LIMIT },
+              );
+              const newTasks = tasks.filter(t => !inFlightStepIds.has(t.stepId));
+              if (newTasks.length > 0) {
+                for (const task of newTasks) {
+                  inFlightStepIds.add(task.stepId);
+                  feedTask(task);
+                }
+                continue; // immediately claim more
+              }
+            }
+
+            // Sleep: shorter when tasks are active, longer when truly idle.
+            const sleepMs = activeCount > 0 ? POLL_BACKOFF_ACTIVE_MS : POLL_BACKOFF_MS;
+            await new Promise((r) => setTimeout(r, sleepMs));
+          }
+        } finally {
+          flushLoopRunning = false;
+          await flushLoop;
+          await handoffCleanup;
+        }
+      },
+    }) as any;
+  }
+
+  /**
+   * Store the FunctionReference for the executor action, used for
+   * self-rescheduling before the 10-minute action timeout.
+   *
+   * @param ref - The function reference for the exported executor action.
+   */
+  setExecutorRef(ref: FunctionReference<"action", "internal">) {
+    this.executorRef = ref;
+  }
 
   /**
    * Define a new workflow.
@@ -129,6 +651,7 @@ export class WorkflowManager {
       this.component,
       workflow,
       this.options?.workpoolOptions,
+      this.batchActionNames.size > 0 ? this.batchActionNames : undefined,
     );
   }
 
@@ -168,6 +691,9 @@ export class WorkflowManager {
           context: options.context,
         }
       : undefined;
+    const batchBridgeHandle = this.batchBridgeRef
+      ? await createFunctionHandle(this.batchBridgeRef)
+      : undefined;
     const workflowId = await ctx.runMutation(this.component.workflow.create, {
       workflowName: safeFunctionName(workflow),
       workflowHandle: handle,
@@ -175,6 +701,8 @@ export class WorkflowManager {
       maxParallelism: this.options?.workpoolOptions?.maxParallelism,
       onComplete,
       startAsync: options?.startAsync ?? options?.validateAsync,
+      batchBridgeHandle,
+      executorShards: this.executorShards,
     });
     return workflowId as unknown as WorkflowId;
   }
@@ -216,6 +744,25 @@ export class WorkflowManager {
   async cancel(ctx: RunMutationCtx, workflowId: WorkflowId) {
     await ctx.runMutation(this.component.workflow.cancel, {
       workflowId,
+    });
+  }
+
+  /**
+   * Launch executor actions for all shards. Call this once before starting
+   * executor-mode workflows, or from a mutation that kicks off a benchmark.
+   *
+   * @param ctx - The Convex context (mutation).
+   */
+  async startExecutors(ctx: RunMutationCtx) {
+    if (!this.executorShards || !this.executorRef) {
+      throw new Error(
+        "startExecutors requires executorShards and setExecutorRef",
+      );
+    }
+    const executorHandle = await createFunctionHandle(this.executorRef);
+    await ctx.runMutation(this.component.taskQueue.startExecutors, {
+      executorHandle,
+      numShards: this.executorShards,
     });
   }
 
@@ -358,7 +905,6 @@ export class WorkflowManager {
       result,
       name: args.name,
       workflowId: args.workflowId,
-      workpoolOptions: this.options?.workpoolOptions,
     })) as EventId<Name>;
   }
 

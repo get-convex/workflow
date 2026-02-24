@@ -50,6 +50,18 @@ const workflowObject = {
 
   // Internal execution status, used to totally order mutations.
   generationNumber: v.number(),
+
+  // Set to true when the workflow is ready for the coordinator to pick up.
+  readyToRun: v.optional(v.boolean()),
+
+  // FunctionHandle for the app-level batch bridge mutation.
+  // When set, action steps with batchActionName route through this bridge
+  // instead of the standard workpool.
+  batchBridgeHandle: v.optional(v.string()),
+
+  // When set, action steps with batchActionName route through the sharded
+  // task queue instead of the batch bridge or workpool.
+  executorShards: v.optional(v.number()),
 };
 
 export const workflowDocument = v.object({
@@ -176,7 +188,12 @@ export default defineSchema({
     logLevel: v.optional(logLevel),
     maxParallelism: v.optional(v.number()),
   }),
-  workflows: defineTable(workflowObject).index("name", ["name"]),
+  coordinatorState: defineTable({
+    scheduled: v.boolean(),
+  }),
+  workflows: defineTable(workflowObject)
+    .index("name", ["name"])
+    .index("readyToRun", ["readyToRun"]),
   steps: defineTable(journalObject)
     .index("workflow", ["workflowId", "stepNumber"])
     .index("inProgress", ["step.inProgress", "workflowId"]),
@@ -184,6 +201,30 @@ export default defineSchema({
     "workflowId",
     "state.kind",
   ]),
+  executorEpoch: defineTable({
+    epoch: v.number(),
+  }),
+  taskQueue: defineTable({
+    shard: v.number(),
+    functionType: v.union(v.literal("query"), v.literal("mutation"), v.literal("action")),
+    handle: v.string(),
+    args: v.any(),
+    stepId: v.id("steps"),
+    workflowId: v.id("workflows"),
+    generationNumber: v.number(),
+    retry: v.optional(v.object({
+      maxAttempts: v.number(),
+      initialBackoffMs: v.number(),
+      base: v.number(),
+    })),
+  })
+    .index("by_shard", ["shard"])
+    .index("by_stepId", ["stepId"]),
+  executorHandoff: defineTable({
+    shard: v.number(),
+    ready: v.boolean(),
+    yielded: v.boolean(),
+  }).index("by_shard", ["shard"]),
   onCompleteFailures: defineTable(
     v.union(
       v.object({

@@ -7,7 +7,7 @@ import {
 } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { mutation, type MutationCtx, query } from "./_generated/server.js";
-import { type Logger, logLevel } from "./logging.js";
+import { createLogger, DEFAULT_LOG_LEVEL, logLevel } from "./logging.js";
 import { getWorkflow } from "./model.js";
 import { getWorkpool } from "./pool.js";
 import schema, {
@@ -17,6 +17,7 @@ import schema, {
   type JournalEntry,
 } from "./schema.js";
 import { getDefaultLogger } from "./utils.js";
+import { ensureCoordinatorRunning } from "./coordinator.js";
 import {
   type WorkflowId,
   type OnCompleteArgs,
@@ -28,7 +29,7 @@ import {
   type PublicWorkflow,
   vPublicWorkflow,
 } from "../types.js";
-import { api, internal } from "./_generated/api.js";
+import { api } from "./_generated/api.js";
 import { formatErrorWithStack } from "../shared.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { paginator } from "convex-helpers/server/pagination";
@@ -40,6 +41,8 @@ const createArgs = v.object({
   maxParallelism: v.optional(v.number()),
   onComplete: v.optional(vOnComplete),
   startAsync: v.optional(v.boolean()),
+  batchBridgeHandle: v.optional(v.string()),
+  executorShards: v.optional(v.number()),
   // TODO: ttl
 });
 export const create = mutation({
@@ -51,16 +54,18 @@ export const create = mutation({
 export async function createHandler(
   ctx: MutationCtx,
   args: Infer<typeof createArgs>,
-  schedulerOptions?: SchedulerOptions,
+  _schedulerOptions?: SchedulerOptions,
 ) {
-  const console = await getDefaultLogger(ctx);
-  await updateMaxParallelism(ctx, console, args.maxParallelism);
+  const console = createLogger(DEFAULT_LOG_LEVEL);
   const workflowId = await ctx.db.insert("workflows", {
     name: args.workflowName,
     workflowHandle: args.workflowHandle,
     args: args.workflowArgs,
     generationNumber: 0,
     onComplete: args.onComplete,
+    readyToRun: args.startAsync ? true : undefined,
+    batchBridgeHandle: args.batchBridgeHandle,
+    executorShards: args.executorShards,
   });
   console.debug(
     `Created workflow ${workflowId}:`,
@@ -68,18 +73,7 @@ export async function createHandler(
     args.workflowHandle,
   );
   if (args.startAsync) {
-    const workpool = await getWorkpool(ctx, args);
-    await workpool.enqueueMutation(
-      ctx,
-      args.workflowHandle as FunctionHandle<"mutation">,
-      { workflowId, generationNumber: 0 },
-      {
-        name: args.workflowName,
-        onComplete: internal.pool.handlerOnComplete,
-        context: { workflowId, generationNumber: 0 },
-        ...schedulerOptions,
-      },
-    );
+    await ensureCoordinatorRunning(ctx);
   } else {
     // If we can't start it, may as well not create it, eh? Fail fast...
     await ctx.runMutation(args.workflowHandle as FunctionHandle<"mutation">, {
@@ -197,6 +191,182 @@ export const listByName = query({
   },
 });
 
+// Paginated count — each call reads one page within the 16MB read limit.
+// Returns partial counts + a cursor. Call in a loop from an action to
+// count across arbitrarily many workflows.
+export const countByNamePage = query({
+  args: {
+    name: v.string(),
+    createdAfter: v.optional(v.number()),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: v.object({
+    completed: v.number(),
+    failed: v.number(),
+    running: v.number(),
+    continueCursor: v.string(),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, { name, createdAfter, paginationOpts }) => {
+    const result = await paginator(ctx.db, schema)
+      .query("workflows")
+      .withIndex("name", (q) => q.eq("name", name))
+      .order("desc")
+      .paginate(paginationOpts);
+
+    let completed = 0;
+    let failed = 0;
+    let running = 0;
+    const hitOld = createdAfter
+      ? result.page.some((wf) => wf._creationTime < createdAfter)
+      : false;
+    for (const wf of result.page) {
+      if (createdAfter && wf._creationTime < createdAfter) break;
+      if (!wf.runResult) running++;
+      else if (wf.runResult.kind === "success") completed++;
+      else failed++;
+    }
+    return {
+      completed,
+      failed,
+      running,
+      continueCursor: result.continueCursor,
+      isDone: result.isDone || hitOld,
+    };
+  },
+});
+
+// Legacy single-call count — works for small result sets (<~15k workflows).
+export const countByName = query({
+  args: {
+    name: v.string(),
+    createdAfter: v.optional(v.number()),
+  },
+  returns: v.object({
+    total: v.number(),
+    completed: v.number(),
+    failed: v.number(),
+    running: v.number(),
+  }),
+  handler: async (ctx, { name, createdAfter }) => {
+    let completed = 0;
+    let failed = 0;
+    let running = 0;
+    for await (const wf of ctx.db
+      .query("workflows")
+      .withIndex("name", (q) => q.eq("name", name))
+      .order("desc")) {
+      if (createdAfter && wf._creationTime < createdAfter) break;
+      if (!wf.runResult) running++;
+      else if (wf.runResult.kind === "success") completed++;
+      else failed++;
+    }
+    return { total: completed + failed + running, completed, failed, running };
+  },
+});
+
+export const creationTimeBuckets = query({
+  args: {
+    name: v.string(),
+    createdAfter: v.number(),
+    bucketMs: v.number(),
+  },
+  returns: v.array(v.object({ offsetSec: v.number(), count: v.number() })),
+  handler: async (ctx, { name, createdAfter, bucketMs }) => {
+    const buckets = new Map<number, number>();
+    for await (const wf of ctx.db
+      .query("workflows")
+      .withIndex("name", (q) => q.eq("name", name))
+      .order("desc")) {
+      if (wf._creationTime < createdAfter) break;
+      const bucket = Math.floor((wf._creationTime - createdAfter) / bucketMs) * (bucketMs / 1000);
+      buckets.set(bucket, (buckets.get(bucket) || 0) + 1);
+    }
+    return [...buckets.entries()]
+      .map(([offsetSec, count]) => ({ offsetSec, count }))
+      .sort((a, b) => a.offsetSec - b.offsetSec);
+  },
+});
+
+export const timelinePage = query({
+  args: {
+    name: v.string(),
+    createdAfter: v.optional(v.number()),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: vPaginationResult(
+    v.object({
+      id: v.string(),
+      createdAt: v.number(),
+      runResult: v.optional(v.union(v.literal("success"), v.literal("failed"), v.literal("canceled"))),
+      steps: v.array(
+        v.object({
+          stepNumber: v.number(),
+          name: v.string(),
+          startedAt: v.number(),
+          completedAt: v.optional(v.number()),
+          executionStartedAt: v.optional(v.number()),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, { name, createdAfter, paginationOpts }) => {
+    // Paginate desc (newest first) so we can stop early at createdAfter
+    const result = await paginator(ctx.db, schema)
+      .query("workflows")
+      .withIndex("name", (q) => q.eq("name", name))
+      .order("desc")
+      .paginate(paginationOpts);
+
+    const filtered = createdAfter
+      ? result.page.filter((wf) => wf._creationTime >= createdAfter)
+      : result.page;
+
+    // If any workflow on this page is older than createdAfter, we're done
+    const hitOld = createdAfter
+      ? result.page.some((wf) => wf._creationTime < createdAfter)
+      : false;
+
+    const page = await Promise.all(
+      filtered.map(async (wf) => {
+        const stepDocs = await ctx.db
+          .query("steps")
+          .withIndex("workflow", (q) => q.eq("workflowId", wf._id))
+          .collect();
+        return {
+          id: wf._id,
+          createdAt: wf._creationTime,
+          runResult: wf.runResult?.kind as "success" | "failed" | "canceled" | undefined,
+          steps: stepDocs.map((s) => {
+            // Extract executionStartedAt from the action's return value if present.
+            // Actions can include `executorStartedAt` in their result to distinguish
+            // queue wait time from actual execution time.
+            const rv = s.step.runResult?.kind === "success"
+              ? (s.step.runResult.returnValue as Record<string, unknown>)
+              : undefined;
+            const executionStartedAt = typeof rv?.executorStartedAt === "number"
+              ? rv.executorStartedAt
+              : undefined;
+            return {
+              stepNumber: s.stepNumber,
+              name: s.step.name,
+              startedAt: s.step.startedAt,
+              completedAt: s.step.completedAt,
+              executionStartedAt,
+            };
+          }),
+        };
+      }),
+    );
+
+    return {
+      ...result,
+      isDone: result.isDone || hitOld,
+      page,
+    } as any;
+  },
+});
+
 export const listSteps = query({
   args: {
     workflowId: v.id("workflows"),
@@ -255,7 +425,7 @@ export async function completeHandler(
     args.workflowId,
     args.generationNumber,
   );
-  const console = await getDefaultLogger(ctx);
+  const console = createLogger(DEFAULT_LOG_LEVEL);
   if (workflow.runResult) {
     throw new Error(`Workflow not running: ${workflow}`);
   }
@@ -281,7 +451,22 @@ export async function completeHandler(
       for (const { step } of inProgress) {
         if (!step.kind || step.kind === "function") {
           if (step.workId) {
-            await workpool.cancel(ctx, step.workId);
+            // Executor-managed steps use "executor:" prefix — skip workpool cancel.
+            if (typeof step.workId === "string" && (step.workId as string).startsWith("executor:")) {
+              // Clean up the task queue entry if it exists.
+              const stepId = (step.workId as string).slice("executor:".length);
+              const taskEntry = await ctx.db
+                .query("taskQueue")
+                .withIndex("by_stepId", (q) =>
+                  q.eq("stepId", ctx.db.normalizeId("steps", stepId)!),
+                )
+                .unique();
+              if (taskEntry) {
+                await ctx.db.delete(taskEntry._id);
+              }
+            } else {
+              await workpool.cancel(ctx, step.workId);
+            }
           }
         } else if (step.kind === "workflow") {
           if (step.workflowId) {
@@ -357,22 +542,6 @@ export const cleanup = mutation({
     return true;
   },
 });
-
-async function updateMaxParallelism(
-  ctx: MutationCtx,
-  console: Logger,
-  maxParallelism: number | undefined,
-) {
-  const config = await ctx.db.query("config").first();
-  if (config) {
-    if (maxParallelism && maxParallelism !== config.maxParallelism) {
-      console.warn("Updating max parallelism to", maxParallelism);
-      await ctx.db.patch(config._id, { maxParallelism });
-    }
-  } else {
-    await ctx.db.insert("config", { maxParallelism });
-  }
-}
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const console = "THIS IS A REMINDER TO USE getDefaultLogger";

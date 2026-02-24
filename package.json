@@ -63,6 +63,7 @@
     "convex-helpers": "^0.1.99"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.75.0",
     "async-channel": "^0.2.0"
   },
   "devDependencies": {

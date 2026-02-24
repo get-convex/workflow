@@ -17,9 +17,7 @@ import {
 import { type Infer, v } from "convex/values";
 import { components, internal } from "./_generated/api.js";
 import { internalMutation, type MutationCtx } from "./_generated/server.js";
-import { logLevel } from "./logging.js";
-import { getWorkflow } from "./model.js";
-import { getDefaultLogger } from "./utils.js";
+import { createLogger, DEFAULT_LOG_LEVEL, logLevel } from "./logging.js";
 import { completeHandler } from "./workflow.js";
 import type { Doc } from "./_generated/dataModel.js";
 import { vWorkflowId, type WorkflowId } from "../types.js";
@@ -96,14 +94,12 @@ async function onCompleteHandler(
     context: object;
   },
 ) {
-  const console = await getDefaultLogger(ctx);
+  const console = createLogger(DEFAULT_LOG_LEVEL);
   const stepId =
     "stepId" in args.context && typeof args.context.stepId === "string"
       ? ctx.db.normalizeId("steps", args.context.stepId)
       : null;
   if (!stepId) {
-    // Write to failures table and return
-    // So someone can investigate if this ever happens
     console.error("Invalid onComplete context", args.context);
     await ctx.db.insert("onCompleteFailures", args);
     return;
@@ -127,7 +123,11 @@ async function onCompleteHandler(
     return;
   }
   const { generationNumber } = args.context;
-  const workflow = await getWorkflow(ctx, workflowId, null);
+  const workflow = await ctx.db.get(workflowId);
+  if (!workflow) {
+    console.error(`Workflow not found: ${workflowId}`);
+    return;
+  }
   if (workflow.generationNumber !== generationNumber) {
     console.error(
       `Workflow: ${workflowId} already has generation number ${workflow.generationNumber} when completing ${stepId}`,
@@ -180,26 +180,52 @@ async function onCompleteHandler(
     }
     return;
   }
-  const workpool = await getWorkpool(ctx, args.context.workpoolOptions);
-  await enqueueWorkflow(ctx, workflow, workpool);
+  // Only progress the workflow when no other steps are still running.
+  // This avoids wasted replay calls (and OCC conflicts) when parallel
+  // steps (e.g. analyze-a and analyze-b) complete at different times.
+  const otherInProgress = await ctx.db
+    .query("steps")
+    .withIndex("inProgress", (q) =>
+      q.eq("step.inProgress", true).eq("workflowId", workflowId),
+    )
+    .first();
+  if (!otherInProgress) {
+    // Inline progression: run the workflow mutation directly in this
+    // transaction instead of scheduling a separate directRunWorkflow.
+    // This keeps step result recording + workflow progression atomic, and
+    // at high scale (10K+) the saved scheduling hop outweighs the slightly
+    // larger transaction's OCC window.
+    try {
+      await ctx.runMutation(
+        workflow.workflowHandle as FunctionHandle<"mutation">,
+        {
+          workflowId: workflow._id,
+          generationNumber: workflow.generationNumber,
+        },
+      );
+    } catch (e) {
+      const error =
+        e instanceof Error ? e.message : `Unknown error: ${String(e)}`;
+      console.error(`Error running workflow ${workflowId}: ${error}`);
+      await ctx.db.patch(workflowId, {
+        runResult: { kind: "failed", error },
+      });
+    }
+  }
 }
 
 export async function enqueueWorkflow(
   ctx: MutationCtx,
   workflow: Doc<"workflows">,
-  workpool: Workpool,
 ) {
-  const { _id: workflowId, generationNumber, name, workflowHandle } = workflow;
-  await workpool.enqueueMutation(
-    ctx,
-    workflowHandle as FunctionHandle<"mutation">,
-    { workflowId, generationNumber },
-    {
-      name,
-      onComplete: internal.pool.handlerOnComplete,
-      context: { workflowId, generationNumber },
-    },
-  );
+  // Schedule the workflow mutation directly instead of going through the
+  // coordinator.  This avoids OCC contention on workflow documents — the old
+  // approach patched `readyToRun` on every step completion, which conflicts
+  // with the coordinator's reads/writes on the same docs at high scale.
+  await ctx.scheduler.runAfter(0, internal.pool.directRunWorkflow, {
+    workflowId: workflow._id,
+    generationNumber: workflow.generationNumber,
+  });
 }
 
 export type OnComplete =
@@ -228,7 +254,7 @@ export const handlerOnComplete = internalMutation({
     if (args.result.kind === "success") {
       return;
     }
-    const console = await getDefaultLogger(ctx);
+    const console = createLogger(DEFAULT_LOG_LEVEL);
     if (!validate(handlerOnCompleteContext, args.context)) {
       console.error("Invalid handlerOnComplete context", args.context);
       const workflowId = ctx.db.normalizeId(
@@ -262,5 +288,37 @@ export const handlerOnComplete = internalMutation({
     });
   },
 });
+export const directRunWorkflow = internalMutation({
+  args: {
+    workflowId: v.id("workflows"),
+    generationNumber: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, { workflowId, generationNumber }) => {
+    const console = createLogger(DEFAULT_LOG_LEVEL);
+    const workflow = await ctx.db.get(workflowId);
+    if (
+      !workflow ||
+      workflow.runResult ||
+      workflow.generationNumber !== generationNumber
+    ) {
+      return;
+    }
+    try {
+      await ctx.runMutation(
+        workflow.workflowHandle as FunctionHandle<"mutation">,
+        { workflowId, generationNumber },
+      );
+    } catch (e) {
+      const error =
+        e instanceof Error ? e.message : `Unknown error: ${String(e)}`;
+      console.error(`Error running workflow ${workflowId}: ${error}`);
+      await ctx.db.patch(workflowId, {
+        runResult: { kind: "failed", error },
+      });
+    }
+  },
+});
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const console = "THIS IS A REMINDER TO USE getDefaultLogger";

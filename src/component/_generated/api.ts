@@ -8,11 +8,14 @@
  * @module
  */
 
+import type * as batch from "../batch.js";
+import type * as coordinator from "../coordinator.js";
 import type * as event from "../event.js";
 import type * as journal from "../journal.js";
 import type * as logging from "../logging.js";
 import type * as model from "../model.js";
 import type * as pool from "../pool.js";
+import type * as taskQueue from "../taskQueue.js";
 import type * as utils from "../utils.js";
 import type * as workflow from "../workflow.js";
 
@@ -24,11 +27,14 @@ import type {
 import { anyApi, componentsGeneric } from "convex/server";
 
 const fullApi: ApiFromModules<{
+  batch: typeof batch;
+  coordinator: typeof coordinator;
   event: typeof event;
   journal: typeof journal;
   logging: typeof logging;
   model: typeof model;
   pool: typeof pool;
+  taskQueue: typeof taskQueue;
   utils: typeof utils;
   workflow: typeof workflow;
 }> = anyApi as any;

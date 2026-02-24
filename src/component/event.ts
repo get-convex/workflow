@@ -5,7 +5,7 @@ import { mutation, type MutationCtx } from "./_generated/server.js";
 import { vResultValidator } from "@convex-dev/workpool";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { assert } from "convex-helpers";
-import { enqueueWorkflow, getWorkpool, workpoolOptions } from "./pool.js";
+import { enqueueWorkflow } from "./pool.js";
 
 export async function awaitEvent(
   ctx: MutationCtx,
@@ -106,7 +106,6 @@ export const send = mutation({
     eventId: v.optional(v.id("events")),
     name: v.optional(v.string()),
     result: vResultValidator,
-    workpoolOptions: v.optional(workpoolOptions),
   },
   returns: v.id("events"),
   handler: async (ctx, args) => {
@@ -169,8 +168,7 @@ export const send = mutation({
         if (!anyMoreEvents) {
           const workflow = await ctx.db.get(workflowId);
           assert(workflow, `Workflow ${workflowId} not found`);
-          const workpool = await getWorkpool(ctx, args.workpoolOptions);
-          await enqueueWorkflow(ctx, workflow, workpool);
+          await enqueueWorkflow(ctx, workflow);
         }
         break;
       }

@@ -19,6 +19,7 @@ import {
   type Step,
   valueSize,
 } from "../component/schema.js";
+import { safeFunctionName } from "./safeFunctionName.js";
 import type { WorkflowComponent } from "./types.js";
 import { MAX_JOURNAL_SIZE } from "../shared.js";
 import type { EventId, SchedulerOptions } from "../types.js";
@@ -64,6 +65,7 @@ export class StepExecutor {
     private receiver: BaseChannel<StepRequest>,
     private now: number,
     private workpoolOptions: WorkpoolOptions | undefined,
+    private batchActionNames?: Set<string>,
   ) {
     this.journalEntrySize = journalEntries.reduce(
       (size, entry) => size + journalEntrySize(entry),
@@ -186,10 +188,27 @@ export class StepExecutor {
                   ...commonFields,
                   args: target.args,
                 };
+        // Detect batch actions by checking if the function name's base matches
+        // a registered batch action name.
+        let batchActionName: string | undefined;
+        if (
+          this.batchActionNames &&
+          target.kind === "function" &&
+          target.functionType === "action"
+        ) {
+          const fnName = safeFunctionName(target.function);
+          const parts = fnName.split(/[:/]/);
+          const baseName = parts[parts.length - 1];
+          if (this.batchActionNames.has(baseName)) {
+            batchActionName = baseName;
+          }
+        }
+
         return {
           retry: message.retry,
           schedulerOptions: message.schedulerOptions,
           step,
+          batchActionName,
         };
       }),
     );

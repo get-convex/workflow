@@ -11,7 +11,15 @@ import {
 } from "./_generated/server.js";
 import { vWorkflowId, type WorkflowId } from "@convex-dev/workflow";
 import { vResultValidator } from "@convex-dev/workpool";
-import Anthropic from "@anthropic-ai/sdk";
+// Dynamic import — only loaded when benchmarkMode is "real".
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _anthropicModule: any = null;
+async function getAnthropicModule() {
+  if (!_anthropicModule) {
+    _anthropicModule = await import("@anthropic-ai/sdk");
+  }
+  return _anthropicModule;
+}
 
 // ── Shared constants ──
 const SIMULATE_BASE_MS = 8000;
@@ -99,7 +107,7 @@ function buildPrompt(task: string, index: number, input?: string): string {
   }
 }
 
-function getAnthropicClient(): Anthropic {
+async function getAnthropicClient() {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error(
@@ -107,6 +115,8 @@ function getAnthropicClient(): Anthropic {
         "npx convex env set ANTHROPIC_API_KEY sk-ant-****",
     );
   }
+  const mod = await getAnthropicModule();
+  const Anthropic = mod.default;
   // maxRetries handles 429 and 5xx with exponential backoff internally.
   // At 20k workflows × 4 steps we'll be rate-limited constantly.
   return new Anthropic({ apiKey, maxRetries: 20 });
@@ -118,7 +128,7 @@ async function callClaude(
   input?: string,
 ): Promise<StepResult> {
   const executorStartedAt = Date.now();
-  const client = getAnthropicClient();
+  const client = await getAnthropicClient();
   const response = await client.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 512,
@@ -304,7 +314,7 @@ export const onBenchmarkComplete = internalMutation({
 // Benchmark launchers & status
 // ═══════════════════════════════════════════════════════════════════════════
 
-const BATCH_CREATE_SIZE = 1000;
+const BATCH_CREATE_SIZE = 100;
 
 export const startBenchmarkBatch = internalMutation({
   args: {

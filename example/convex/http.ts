@@ -71,6 +71,7 @@ const BENCHMARK_VIZ_HTML = /* html */ `<!DOCTYPE html>
       <span style="color:#666; margin-left:8px">│</span>
       <span style="color:#555">░ queued</span>
       <span style="color:#aaa">█ executing</span>
+      <span style="color:rgba(255,255,255,0.6)">█ write delay</span>
     </div>
   </div>
   <canvas id="timescale" height="24"></canvas>
@@ -261,9 +262,17 @@ function draw() {
         const xExec = ((step.executionStartedAt - benchmarkStart) / timeSpanMs) * W;
         ctx.fillStyle = stepQueuedColor(step.stepNumber);
         ctx.fillRect(x0, y, Math.max(xExec - x0, 1), 1);
-        // Execution portion (bright)
+        // Execution portion (bright) — ends at executorFinishedAt if available
+        const execEnd = step.executorFinishedAt || endT;
+        const xExecEnd = ((execEnd - benchmarkStart) / timeSpanMs) * W;
         ctx.fillStyle = stepColor(step.stepNumber);
-        ctx.fillRect(xExec, y, Math.max(x1 - xExec, 1), 1);
+        ctx.fillRect(xExec, y, Math.max(xExecEnd - xExec, 1), 1);
+        // Write delay (white) — gap between executor finish and DB write
+        if (step.executorFinishedAt && step.completedAt && step.completedAt > step.executorFinishedAt) {
+          const xWriteStart = ((step.executorFinishedAt - benchmarkStart) / timeSpanMs) * W;
+          ctx.fillStyle = "rgba(255,255,255,0.6)";
+          ctx.fillRect(xWriteStart, y, Math.max(x1 - xWriteStart, 1), 1);
+        }
       } else {
         // No queue info — full bar
         ctx.fillStyle = stepColor(step.stepNumber);

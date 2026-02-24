@@ -62,6 +62,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   args: any;
                   argsSize: number;
                   completedAt?: number;
+                  executorFinishedAt?: number;
                   functionType: "query" | "mutation" | "action";
                   handle: string;
                   inProgress: boolean;
@@ -78,6 +79,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   args: any;
                   argsSize: number;
                   completedAt?: number;
+                  executorFinishedAt?: number;
                   handle: string;
                   inProgress: boolean;
                   kind: "workflow";
@@ -94,6 +96,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   argsSize: number;
                   completedAt?: number;
                   eventId?: string;
+                  executorFinishedAt?: number;
                   inProgress: boolean;
                   kind: "event";
                   name: string;
@@ -145,6 +148,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   args: any;
                   argsSize: number;
                   completedAt?: number;
+                  executorFinishedAt?: number;
                   functionType: "query" | "mutation" | "action";
                   handle: string;
                   inProgress: boolean;
@@ -161,6 +165,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   args: any;
                   argsSize: number;
                   completedAt?: number;
+                  executorFinishedAt?: number;
                   handle: string;
                   inProgress: boolean;
                   kind: "workflow";
@@ -177,6 +182,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   argsSize: number;
                   completedAt?: number;
                   eventId?: string;
+                  executorFinishedAt?: number;
                   inProgress: boolean;
                   kind: "event";
                   name: string;
@@ -207,6 +213,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 args: any;
                 argsSize: number;
                 completedAt?: number;
+                executorFinishedAt?: number;
                 functionType: "query" | "mutation" | "action";
                 handle: string;
                 inProgress: boolean;
@@ -223,6 +230,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 args: any;
                 argsSize: number;
                 completedAt?: number;
+                executorFinishedAt?: number;
                 handle: string;
                 inProgress: boolean;
                 kind: "workflow";
@@ -239,6 +247,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 argsSize: number;
                 completedAt?: number;
                 eventId?: string;
+                executorFinishedAt?: number;
                 inProgress: boolean;
                 kind: "event";
                 name: string;
@@ -325,6 +334,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "internal",
         {
           items: Array<{
+            executorFinishedAt?: number;
             generationNumber: number;
             result:
               | { kind: "success"; returnValue: any }
@@ -454,6 +464,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   args: any;
                   argsSize: number;
                   completedAt?: number;
+                  executorFinishedAt?: number;
                   functionType: "query" | "mutation" | "action";
                   handle: string;
                   inProgress: boolean;
@@ -470,6 +481,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   args: any;
                   argsSize: number;
                   completedAt?: number;
+                  executorFinishedAt?: number;
                   handle: string;
                   inProgress: boolean;
                   kind: "workflow";
@@ -486,6 +498,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   argsSize: number;
                   completedAt?: number;
                   eventId?: string;
+                  executorFinishedAt?: number;
                   inProgress: boolean;
                   kind: "event";
                   name: string;
@@ -650,6 +663,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             steps: Array<{
               completedAt?: number;
               executionStartedAt?: number;
+              executorFinishedAt?: number;
               name: string;
               startedAt: number;
               stepNumber: number;

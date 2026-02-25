@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { vResultValidator } from "@convex-dev/workpool";
 import { mutation, query } from "./_generated/server.js";
+import { api } from "./_generated/api.js";
 import type { Id } from "./_generated/dataModel.js";
 import { createLogger, DEFAULT_LOG_LEVEL } from "./logging.js";
 import type { FunctionHandle } from "convex/server";
@@ -222,9 +223,10 @@ export const recordResultBatch = mutation({
         flushCalledAt: v.optional(v.number()),
       }),
     ),
+    replayInline: v.optional(v.boolean()),
   },
   returns: v.array(replayCandidate),
-  handler: async (ctx, { items }) => {
+  handler: async (ctx, { items, replayInline }) => {
     const console = createLogger(DEFAULT_LOG_LEVEL);
     const candidates = new Map<
       string,
@@ -309,6 +311,63 @@ export const recordResultBatch = mutation({
           generationNumber: workflow.generationNumber,
         });
       }
+    }
+
+    // Durable safety net: schedule a delayed replayIfReady for each
+    // candidate. This is committed atomically with the result recording,
+    // so it survives executor crashes and hard timeouts. In the normal
+    // case inline replay handles it first and the scheduled call is a
+    // cheap no-op (checks runResult, returns early).
+    if (replayInline) {
+      for (const candidate of candidates.values()) {
+        await ctx.scheduler.runAfter(
+          10_000,
+          api.taskQueue.replayIfReady,
+          candidate,
+        );
+      }
+    }
+
+    // When replayInline is set, attempt replay within this same mutation.
+    // This eliminates OCC conflicts for the common case. Candidates where
+    // other steps are still in-progress are returned to the client so it
+    // can retry via replayBatchIfReady — this prevents the race where two
+    // concurrent batches each complete the "last" step but both skip replay
+    // because neither sees the other's commit (snapshot isolation).
+    if (replayInline) {
+      const unreplayed: Array<{ workflowId: Id<"workflows">; workflowHandle: string; generationNumber: number }> = [];
+      for (const candidate of candidates.values()) {
+        const { workflowId, generationNumber, workflowHandle } = candidate;
+        const workflow = await ctx.db.get(workflowId);
+        if (!workflow || workflow.runResult || workflow.generationNumber !== generationNumber) {
+          continue;
+        }
+        const inProgress = await ctx.db
+          .query("steps")
+          .withIndex("inProgress", (q) =>
+            q.eq("step.inProgress", true).eq("workflowId", workflowId),
+          )
+          .first();
+        if (inProgress) {
+          // Other steps still running in a concurrent batch — return to
+          // client for retry so the workflow isn't permanently stranded.
+          unreplayed.push(candidate);
+          continue;
+        }
+        try {
+          await ctx.runMutation(
+            workflowHandle as FunctionHandle<"mutation">,
+            { workflowId, generationNumber },
+          );
+        } catch (e) {
+          const error = e instanceof Error ? e.message : `Unknown error: ${String(e)}`;
+          console.error(`Error running workflow ${workflowId}: ${error}`);
+          await ctx.db.patch(workflowId, {
+            runResult: { kind: "failed", error },
+          });
+        }
+      }
+      return unreplayed;
     }
 
     // Return candidates — executor handles replay in a concurrent pipeline.

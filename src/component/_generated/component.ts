@@ -335,6 +335,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         {
           items: Array<{
             executorFinishedAt?: number;
+            flushCalledAt?: number;
             generationNumber: number;
             result:
               | { kind: "success"; returnValue: any }
@@ -342,6 +343,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
               | { kind: "canceled" };
             stepId: string;
           }>;
+          replayInline?: boolean;
         },
         Array<{
           generationNumber: number;

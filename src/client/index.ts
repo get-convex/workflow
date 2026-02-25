@@ -200,7 +200,7 @@ export class WorkflowManager {
     const MAX_CONCURRENCY = 500;
     const POLL_BACKOFF_MS = 500;
     const POLL_BACKOFF_ACTIVE_MS = 100;
-    const RESCHEDULE_MS = 8 * 60 * 1000; // 8 minutes, before 10-min action timeout
+    const RESCHEDULE_MS = 5 * 60 * 1000; // 5 minutes — leaves 5 min for drain+handoff before 10-min kill
     const FLUSH_INTERVAL_MS = 100;
     const FLUSH_BATCH_SIZE = 50;
     const MAX_FLUSH_RETRIES = 5;
@@ -290,6 +290,7 @@ export class WorkflowManager {
                       executorFinishedAt: r.executorFinishedAt,
                       flushCalledAt,
                     })),
+                    replayInline: true,
                   },
                 );
               } catch {
@@ -662,6 +663,22 @@ export class WorkflowManager {
         } finally {
           flushLoopRunning = false;
           await flushLoop;
+          // Last-resort safety net: if the rescue queue still has items
+          // after all flush retries, durably schedule individual replay
+          // mutations so workflows aren't permanently stranded when the
+          // executor action exits.
+          for (const candidate of replayRescueQueue) {
+            try {
+              await ctx.scheduler.runAfter(
+                0,
+                component.taskQueue.replayIfReady,
+                candidate,
+              );
+            } catch {
+              // Best effort — scheduler may reject if at limit.
+            }
+          }
+          replayRescueQueue.length = 0;
           await handoffCleanup;
         }
       },

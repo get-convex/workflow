@@ -1,0 +1,750 @@
+{
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "workflowId": "fanout"
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 1604,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 0,
+  "winner2Count": 0
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 5184,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 0,
+  "winner2Count": 0
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 8796,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 0,
+  "winner2Count": 0
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 12503,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 0,
+  "winner2Count": 0
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 16399,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 0,
+  "winner2Count": 2
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 20102,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 5,
+  "winner2Count": 8
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 23874,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 7,
+  "winner2Count": 18
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 27494,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 21,
+  "winner2Count": 41
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 31209,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 23,
+  "winner2Count": 44
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 34861,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 24,
+  "winner2Count": 48
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 38494,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 33,
+  "winner2Count": 68
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 42268,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 42,
+  "winner2Count": 85
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 49589,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 52,
+  "winner2Count": 100
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 53224,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 55,
+  "winner2Count": 109
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 56804,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 56,
+  "winner2Count": 109
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 60468,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 69,
+  "winner2Count": 122
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 64122,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 76,
+  "winner2Count": 134
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 67926,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 89,
+  "winner2Count": 157
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 71559,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 95,
+  "winner2Count": 168
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 75219,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 101,
+  "winner2Count": 171
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 78956,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 108,
+  "winner2Count": 181
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 82915,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 114,
+  "winner2Count": 186
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 86502,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 122,
+  "winner2Count": 197
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 90704,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 127,
+  "winner2Count": 205
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 94710,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 133,
+  "winner2Count": 227
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 98425,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 138,
+  "winner2Count": 233
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 102169,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 149,
+  "winner2Count": 243
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 106103,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 153,
+  "winner2Count": 255
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 109770,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 169,
+  "winner2Count": 279
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 113580,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 177,
+  "winner2Count": 292
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 117276,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 187,
+  "winner2Count": 298
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 121256,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 198,
+  "winner2Count": 311
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 125104,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 0,
+  "winner1Count": 213,
+  "winner2Count": 325
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 128801,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 1,
+  "winner1Count": 246,
+  "winner2Count": 386
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 132473,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 263,
+  "winner2Count": 403
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 136139,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 308,
+  "winner2Count": 454
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 139846,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 334,
+  "winner2Count": 489
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 143527,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 343,
+  "winner2Count": 515
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 147259,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 386,
+  "winner2Count": 568
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 151002,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 401,
+  "winner2Count": 593
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 151002,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 401,
+  "winner2Count": 593
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 151002,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 401,
+  "winner2Count": 593
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 151002,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 401,
+  "winner2Count": 593
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 151002,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 401,
+  "winner2Count": 593
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 169622,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 401,
+  "winner2Count": 593
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 169622,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 401,
+  "winner2Count": 593
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 169622,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 401,
+  "winner2Count": 593
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 169622,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 401,
+  "winner2Count": 593
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 169622,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 401,
+  "winner2Count": 593
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 188370,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 401,
+  "winner2Count": 593
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 188370,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 401,
+  "winner2Count": 593
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 188370,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 401,
+  "winner2Count": 593
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 199683,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 402,
+  "winner2Count": 593
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 203568,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 402,
+  "winner2Count": 594
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 207581,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 402,
+  "winner2Count": 595
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 207581,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 402,
+  "winner2Count": 595
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 207581,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 402,
+  "winner2Count": 595
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 207581,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 402,
+  "winner2Count": 595
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 207581,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 402,
+  "winner2Count": 595
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 226103,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 402,
+  "winner2Count": 595
+}
+{
+  "count": 1000,
+  "done": false,
+  "elapsedMs": 226103,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "running",
+  "tieCount": 2,
+  "winner1Count": 402,
+  "winner2Count": 595
+}
+{
+  "completedAt": 1771182039560,
+  "count": 1000,
+  "done": true,
+  "elapsedMs": 233033,
+  "mode": "batched",
+  "runId": "jh7cbr9nt0s9t9kewfwms5qmd1816vam",
+  "startedAt": 1771181806527,
+  "status": "completed",
+  "tieCount": 2,
+  "winner1Count": 402,
+  "winner2Count": 596
+}

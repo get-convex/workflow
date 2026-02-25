@@ -1,0 +1,13 @@
+{
+  "completedAt": 1771185501792,
+  "count": 1000,
+  "done": true,
+  "elapsedMs": 75715,
+  "mode": "batched",
+  "runId": "jh76gmq0qy2nkzs7dmb4a85715816eq5",
+  "startedAt": 1771185426077,
+  "status": "completed",
+  "tieCount": 3,
+  "winner1Count": 417,
+  "winner2Count": 580
+}

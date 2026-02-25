@@ -185,7 +185,7 @@ export class WorkflowManager {
    * Export the return value from your Convex module, then call
    * `setExecutorRef()` with its reference.
    */
-  executor(): RegisteredAction<"internal", { shard: number; epoch?: number }, null> {
+  executor() {
     if (!this.executorShards) {
       throw new Error(
         "WorkflowManager.executor() requires `executorShards` in the constructor",
@@ -258,6 +258,16 @@ export class WorkflowManager {
         const inFlightStepIds = new Set<string>();
         let flushing = false;
 
+        // Rescue queue: replay candidates that failed to commit.
+        // The flush loop retries these on every tick so workflows
+        // don't get permanently stranded by transient OCC failures.
+        type ReplayCandidate = {
+          workflowId: string;
+          generationNumber: number;
+          workflowHandle: string;
+        };
+        const replayRescueQueue: ReplayCandidate[] = [];
+
         // Flush pending results, then replay candidates in a single batch.
         // Serializing flush → replay keeps inter-step latency tight: the
         // next step is enqueued immediately after recording the result.
@@ -267,11 +277,7 @@ export class WorkflowManager {
           try {
             while (pendingResults.length > 0) {
               const batch = pendingResults.splice(0, FLUSH_BATCH_SIZE);
-              let candidates: Array<{
-                workflowId: string;
-                generationNumber: number;
-                workflowHandle: string;
-              }>;
+              let candidates: ReplayCandidate[];
               const flushCalledAt = Date.now();
               try {
                 candidates = await ctx.runMutation(
@@ -303,11 +309,30 @@ export class WorkflowManager {
                 } catch {
                   // Retry once after brief pause
                   await new Promise((r) => setTimeout(r, 100));
-                  await ctx.runMutation(
-                    component.taskQueue.replayBatchIfReady,
-                    { candidates },
-                  ).catch(() => {});
+                  try {
+                    await ctx.runMutation(
+                      component.taskQueue.replayBatchIfReady,
+                      { candidates },
+                    );
+                  } catch {
+                    // Move to rescue queue — flush loop will keep retrying
+                    // so these workflows don't get permanently stranded.
+                    replayRescueQueue.push(...candidates);
+                  }
                 }
+              }
+            }
+            // Drain rescue queue: retry previously failed replays.
+            if (replayRescueQueue.length > 0) {
+              const rescue = replayRescueQueue.splice(0, replayRescueQueue.length);
+              try {
+                await ctx.runMutation(
+                  component.taskQueue.replayBatchIfReady,
+                  { candidates: rescue },
+                );
+              } catch {
+                // Still failing — put them back for next flush tick.
+                replayRescueQueue.push(...rescue);
               }
             }
           } finally {
@@ -464,6 +489,16 @@ export class WorkflowManager {
                 break;
               }
               await new Promise((r) => setTimeout(r, 200));
+            }
+          }
+          // Drain rescue queue before shutting down so workflows
+          // aren't stranded by transient replay failures.
+          let rescueRetries = 0;
+          while (replayRescueQueue.length > 0 && rescueRetries < MAX_FLUSH_RETRIES) {
+            await flush();
+            if (replayRescueQueue.length > 0) {
+              rescueRetries++;
+              await new Promise((r) => setTimeout(r, 500));
             }
           }
         };

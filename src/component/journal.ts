@@ -180,13 +180,16 @@ export const startSteps = mutation({
             workpoolOptions: args.workpoolOptions,
           };
           let workId: string;
-          // Compute retry config: false → no retry, true/undefined → default, object → use as-is
-          const retryConfig =
-            stepArgs.retry === false
-              ? undefined
-              : typeof stepArgs.retry === "object"
-                ? stepArgs.retry
-                : DEFAULT_QM_RETRY;
+          // Retry config only applies to actions — queries and mutations
+          // are deterministic and retried automatically by Convex on OCC.
+          const actionRetryConfig =
+            step.functionType === "action"
+              ? (stepArgs.retry === false
+                  ? undefined
+                  : typeof stepArgs.retry === "object"
+                    ? stepArgs.retry
+                    : DEFAULT_QM_RETRY)
+              : undefined;
           switch (step.functionType) {
             case "query": {
               if (workflow.executorShards) {
@@ -199,7 +202,6 @@ export const startSteps = mutation({
                   stepId,
                   workflowId: workflow._id,
                   generationNumber,
-                  retry: retryConfig,
                 });
                 workId = `executor:${stepId}`;
               } else {
@@ -223,7 +225,6 @@ export const startSteps = mutation({
                   stepId,
                   workflowId: workflow._id,
                   generationNumber,
-                  retry: retryConfig,
                 });
                 workId = `executor:${stepId}`;
               } else {
@@ -248,6 +249,7 @@ export const startSteps = mutation({
                   stepId,
                   workflowId: workflow._id,
                   generationNumber,
+                  retry: actionRetryConfig,
                 });
                 workId = `executor:${stepId}`;
               } else {

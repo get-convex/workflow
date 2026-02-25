@@ -36,10 +36,21 @@ const BENCHMARK_VIZ_HTML = /* html */ `<!DOCTYPE html>
   #stats span { margin-right: 16px; }
   #timescale-container { height: 24px; position: relative; overflow: hidden; }
   #timescale { height: 24px; }
+  #phase-graph-container {
+    position: relative;
+    margin-top: 100px;
+    height: 150px;
+    border-bottom: 1px solid #333;
+  }
+  canvas#phaseGraph { display: block; width: 100%; height: 150px; }
+  #phase-graph-container .y-label {
+    position: absolute; right: 4px; color: rgba(255,255,255,0.5);
+    font: 10px monospace; pointer-events: none;
+  }
   #canvas-container {
     position: relative;
-    margin-top: 100px; overflow-y: auto; overflow-x: hidden;
-    height: calc(100vh - 100px);
+    overflow-y: auto; overflow-x: hidden;
+    height: calc(100vh - 250px);
   }
   canvas#timeline { display: block; transform-origin: top left; }
   canvas#timescale { display: block; }
@@ -75,6 +86,9 @@ const BENCHMARK_VIZ_HTML = /* html */ `<!DOCTYPE html>
     </div>
   </div>
   <canvas id="timescale" height="24"></canvas>
+</div>
+<div id="phase-graph-container">
+  <canvas id="phaseGraph"></canvas>
 </div>
 <div id="canvas-container">
   <canvas id="timeline"></canvas>
@@ -136,12 +150,16 @@ let latestStatus = { total: 0, completed: 0, failed: 0, running: 0 };
 // ── Canvas setup ──
 const timeCanvas = document.getElementById("timescale");
 const timeCtx = timeCanvas.getContext("2d");
+const phaseCanvas = document.getElementById("phaseGraph");
+const phaseCtx = phaseCanvas.getContext("2d");
 const canvas = document.getElementById("timeline");
 const ctx = canvas.getContext("2d");
 
 function resize() {
   const w = window.innerWidth;
   timeCanvas.width = w;
+  phaseCanvas.width = w;
+  phaseCanvas.height = 150;
   canvas.width = w;
 }
 window.addEventListener("resize", () => { resize(); draw(); });
@@ -360,6 +378,96 @@ function draw() {
   }
 
   drawTimescale(W);
+  drawPhaseGraph(W);
+}
+
+// ── Phase concurrency graph ──
+// Stacked area chart: for each time bucket, count workflows executing each phase.
+const PHASE_COLORS = [
+  "rgba(68,136,255,0.8)",   // extract
+  "rgba(80,220,120,0.8)",   // analyze-a
+  "rgba(255,180,40,0.8)",   // analyze-b
+  "rgba(255,68,68,0.8)",    // summarize
+];
+const PHASE_FILLS = [
+  "rgba(68,136,255,0.3)",
+  "rgba(80,220,120,0.3)",
+  "rgba(255,180,40,0.3)",
+  "rgba(255,68,68,0.3)",
+];
+
+function drawPhaseGraph(W) {
+  const H = phaseCanvas.height;
+  phaseCtx.fillStyle = "#111";
+  phaseCtx.fillRect(0, 0, W, H);
+
+  if (allWorkflows.length === 0 || timeSpanMs <= 1) return;
+
+  // Build time buckets
+  const NUM_BUCKETS = Math.min(W, 400);
+  const bucketMs = timeSpanMs / NUM_BUCKETS;
+  // counts[bucket][phase] = number of workflows executing that phase
+  const counts = Array.from({ length: NUM_BUCKETS }, () => [0, 0, 0, 0]);
+
+  for (const wf of allWorkflows) {
+    for (const step of wf.steps) {
+      const execStart = step.executionStartedAt || step.startedAt;
+      const execEnd = step.executorFinishedAt || step.completedAt || Date.now();
+      const phase = step.stepNumber;
+      if (phase < 0 || phase > 3) continue;
+      const b0 = Math.max(0, Math.floor((execStart - benchmarkStart) / bucketMs));
+      const b1 = Math.min(NUM_BUCKETS - 1, Math.floor((execEnd - benchmarkStart) / bucketMs));
+      for (let b = b0; b <= b1; b++) {
+        counts[b][phase]++;
+      }
+    }
+  }
+
+  // Find max stacked total for Y scale
+  let maxTotal = 0;
+  for (let b = 0; b < NUM_BUCKETS; b++) {
+    const sum = counts[b][0] + counts[b][1] + counts[b][2] + counts[b][3];
+    if (sum > maxTotal) maxTotal = sum;
+  }
+  if (maxTotal === 0) return;
+
+  const xScale = W / NUM_BUCKETS;
+  const yScale = (H - 20) / maxTotal; // leave 20px top for labels
+
+  // Draw stacked areas bottom-up: summarize, analyze-b, analyze-a, extract
+  // (so extract is on top, matching the timeline left-to-right order visually)
+  const phaseOrder = [3, 2, 1, 0]; // bottom to top
+  for (const phase of phaseOrder) {
+    phaseCtx.beginPath();
+    phaseCtx.moveTo(0, H);
+    for (let b = 0; b < NUM_BUCKETS; b++) {
+      let stackedVal = 0;
+      for (let p = 3; p >= phase; p--) {
+        stackedVal += counts[b][p];
+      }
+      const x = b * xScale;
+      const y = H - stackedVal * yScale;
+      phaseCtx.lineTo(x, y);
+    }
+    phaseCtx.lineTo(W, H);
+    phaseCtx.closePath();
+    phaseCtx.fillStyle = PHASE_FILLS[phase];
+    phaseCtx.fill();
+    phaseCtx.strokeStyle = PHASE_COLORS[phase];
+    phaseCtx.lineWidth = 1;
+    phaseCtx.stroke();
+  }
+
+  // Y-axis labels
+  document.querySelectorAll("#phase-graph-container .y-label").forEach(el => el.remove());
+  const container = document.getElementById("phase-graph-container");
+  for (const val of [maxTotal, Math.round(maxTotal / 2)]) {
+    const el = document.createElement("div");
+    el.className = "y-label";
+    el.textContent = val.toLocaleString();
+    el.style.top = (H - val * yScale - 6) + "px";
+    container.appendChild(el);
+  }
 }
 
 function drawTimescale(W) {

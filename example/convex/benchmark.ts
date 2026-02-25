@@ -9,7 +9,7 @@ import {
   internalQuery,
   query,
 } from "./_generated/server.js";
-import { vWorkflowId, type WorkflowId } from "@convex-dev/workflow";
+import { vWorkflowId, WorkflowRateLimitError, type WorkflowId } from "@convex-dev/workflow";
 import { vResultValidator } from "@convex-dev/workpool";
 // Dynamic import — only loaded when benchmarkMode is "real".
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -117,34 +117,71 @@ async function getAnthropicClient() {
   }
   const mod = await getAnthropicModule();
   const Anthropic = mod.default;
-  // maxRetries handles 429 and 5xx with exponential backoff internally.
-  // At 20k workflows × 4 steps we'll be rate-limited constantly.
-  return new Anthropic({ apiKey, maxRetries: 20 });
+  // SDK handles short 429 waits (under 60s) with exponential backoff.
+  // Our WorkflowRateLimitError + shared gate handles the rest.
+  return new Anthropic({ apiKey, maxRetries: 10 });
 }
+
+// Module-level rate-limit gate shared across all concurrent callClaude
+// calls within this executor shard. First call to hit a 429 sets the
+// deadline; every other call checks it before making an API request.
+let claudeRateLimitUntil = 0;
 
 async function callClaude(
   index: number,
   task: string,
   input?: string,
 ): Promise<StepResult> {
+  // Check the shared gate — if we're rate-limited, don't even try,
+  // just tell the executor to sleep and retry us later.
+  const now = Date.now();
+  if (claudeRateLimitUntil > now) {
+    throw new WorkflowRateLimitError(claudeRateLimitUntil - now);
+  }
+
   const executorStartedAt = Date.now();
   const client = await getAnthropicClient();
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 512,
-    messages: [
-      { role: "user", content: buildPrompt(task, index, input) },
-    ],
-  });
-  const text =
-    response.content[0].type === "text" ? response.content[0].text : "";
-  return {
-    result: text,
-    executorStartedAt,
-    readyAt: Date.now(),
-    inputTokens: response.usage.input_tokens,
-    outputTokens: response.usage.output_tokens,
-  };
+  const mod = await getAnthropicModule();
+  const SdkRateLimitError = mod.RateLimitError;
+
+  try {
+    const response = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 512,
+      messages: [
+        { role: "user", content: buildPrompt(task, index, input) },
+      ],
+    });
+    const text =
+      response.content[0].type === "text" ? response.content[0].text : "";
+    return {
+      result: text,
+      executorStartedAt,
+      readyAt: Date.now(),
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    };
+  } catch (err) {
+    // Match rate limit errors by instanceof OR status code (instanceof
+    // can fail across dynamic import module boundaries).
+    const isRateLimit = err instanceof SdkRateLimitError
+      || (err as { status?: number })?.status === 429
+      || (err instanceof Error && /rate.limit|429|too.many.requests/i.test(err.message));
+    if (isRateLimit) {
+      const rateLimitErr = err as { headers?: { get?: (k: string) => string | null } };
+      const retryAfterStr = rateLimitErr.headers?.get?.("retry-after");
+      const waitMs = retryAfterStr
+        ? Math.ceil(parseFloat(retryAfterStr) * 1000)
+        : 30_000;
+      // Set the shared gate so other calls don't even attempt
+      const deadline = Date.now() + waitMs;
+      if (deadline > claudeRateLimitUntil) {
+        claudeRateLimitUntil = deadline;
+      }
+      throw new WorkflowRateLimitError(waitMs);
+    }
+    throw err;
+  }
 }
 
 async function doWork(

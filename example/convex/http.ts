@@ -75,15 +75,19 @@ const BENCHMARK_VIZ_HTML = /* html */ `<!DOCTYPE html>
     <span class="stat-failed">Failed: <b id="s-failed">-</b></span>
     <span id="elapsed" style="color:#888"></span>
     <div id="legend">
-      <span class="c-extract">■ extract</span>
-      <span class="c-analyze-a">■ analyze-a</span>
-      <span class="c-analyze-b">■ analyze-b</span>
-      <span class="c-summarize">■ summarize</span>
+      <span class="c-extract">■ extract <b id="s-extract">0</b></span>
+      <span class="c-analyze-a">■ analyze-a <b id="s-analyze-a">0</b></span>
+      <span class="c-analyze-b">■ analyze-b <b id="s-analyze-b">0</b></span>
+      <span class="c-summarize">■ summarize <b id="s-summarize">0</b></span>
       <span style="color:#666; margin-left:8px">│</span>
       <span style="color:#555">░ queued</span>
       <span style="color:#aaa">█ executing</span>
       <span style="color:rgba(255,200,50,0.7)">█ queue wait</span>
       <span style="color:rgba(255,255,255,0.6)">█ mutation wait</span>
+      <span style="color:#666; margin-left:8px">│</span>
+      <label style="color:#aaa; cursor:pointer; user-select:none">
+        <input type="checkbox" id="sort-shard-toggle"> sort by shard
+      </label>
     </div>
   </div>
   <canvas id="timescale" height="24"></canvas>
@@ -137,7 +141,7 @@ function shardForId(id) {
   }
   return ((hash % NUM_SHARDS) + NUM_SHARDS) % NUM_SHARDS;
 }
-const sortByShard = params.get("sort") === "shard";
+let sortByShard = params.get("sort") === "shard";
 
 // ── State ──
 const WF_NAME = "benchmark:executorResearchWorkflow";
@@ -165,6 +169,13 @@ function resize() {
 }
 window.addEventListener("resize", () => { resize(); draw(); });
 resize();
+
+const sortToggle = document.getElementById("sort-shard-toggle");
+sortToggle.checked = sortByShard;
+sortToggle.addEventListener("change", () => {
+  sortByShard = sortToggle.checked;
+  rebuildAndDraw();
+});
 
 // ── Paginated status polling (avoids 16MB read limit at 20k+ workflows) ──
 async function fetchStatusPages() {
@@ -236,6 +247,22 @@ function rebuildAndDraw() {
 
   document.getElementById("elapsed").textContent =
     "Span: " + (timeSpanMs / 1000).toFixed(1) + "s  |  " + allWorkflows.length + " workflows";
+
+  // Count completed steps by phase
+  const stepNames = ["extract", "analyze-a", "analyze-b", "summarize"];
+  const stepCounts = [0, 0, 0, 0];
+  for (const wf of allWorkflows) {
+    for (const s of wf.steps) {
+      if (s.completedAt && s.stepNumber >= 0 && s.stepNumber < 4) {
+        stepCounts[s.stepNumber]++;
+      }
+    }
+  }
+  document.getElementById("s-extract").textContent = stepCounts[0];
+  document.getElementById("s-analyze-a").textContent = stepCounts[1];
+  document.getElementById("s-analyze-b").textContent = stepCounts[2];
+  document.getElementById("s-summarize").textContent = stepCounts[3];
+
   draw();
 }
 

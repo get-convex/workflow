@@ -258,15 +258,22 @@ export class WorkflowManager {
         const inFlightStepIds = new Set<string>();
         let flushing = false;
 
-        // Flush pending results in batches with inline replay.
+        // Flush pending results, then replay candidates in a single batch.
+        // Serializing flush → replay keeps inter-step latency tight: the
+        // next step is enqueued immediately after recording the result.
         const flush = async () => {
           if (flushing) return;
           flushing = true;
           try {
             while (pendingResults.length > 0) {
               const batch = pendingResults.splice(0, FLUSH_BATCH_SIZE);
+              let candidates: Array<{
+                workflowId: string;
+                generationNumber: number;
+                workflowHandle: string;
+              }>;
               try {
-                await ctx.runMutation(
+                candidates = await ctx.runMutation(
                   component.taskQueue.recordResultBatch,
                   {
                     items: batch.map((r) => ({
@@ -275,7 +282,6 @@ export class WorkflowManager {
                       generationNumber: r.generationNumber,
                       executorFinishedAt: r.executorFinishedAt,
                     })),
-                    replayInline: true,
                   },
                 );
               } catch {
@@ -284,6 +290,22 @@ export class WorkflowManager {
               }
               for (const item of batch) {
                 inFlightStepIds.delete(item.stepId);
+              }
+              // Replay all candidates in a single batched mutation
+              if (candidates.length > 0) {
+                try {
+                  await ctx.runMutation(
+                    component.taskQueue.replayBatchIfReady,
+                    { candidates },
+                  );
+                } catch {
+                  // Retry once after brief pause
+                  await new Promise((r) => setTimeout(r, 100));
+                  await ctx.runMutation(
+                    component.taskQueue.replayBatchIfReady,
+                    { candidates },
+                  ).catch(() => {});
+                }
               }
             }
           } finally {

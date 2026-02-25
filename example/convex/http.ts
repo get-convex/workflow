@@ -113,6 +113,17 @@ if (!params.has("after")) {
 }
 const createdAfter = Number(params.get("after"));
 
+// ── Shard hash (matches server-side shardForWorkflow) ──
+const NUM_SHARDS = 100;
+function shardForId(id) {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  }
+  return ((hash % NUM_SHARDS) + NUM_SHARDS) % NUM_SHARDS;
+}
+const sortByShard = params.get("sort") === "shard";
+
 // ── State ──
 const WF_NAME = "benchmark:executorResearchWorkflow";
 const ROW_H = 1;
@@ -143,7 +154,7 @@ async function fetchStatusPages() {
   let isDone = false;
   while (!isDone) {
     const page = await fetchQuery(CONVEX_URL, "benchmark:benchmarkStatusPage", {
-      name: WF_NAME, createdAfter, paginationOpts: { cursor, numItems: 500 },
+      name: WF_NAME, createdAfter, paginationOpts: { cursor, numItems: 1000 },
     });
     completed += page.completed;
     failed += page.failed;
@@ -159,11 +170,12 @@ async function fetchStatusPages() {
   document.getElementById("s-failed").textContent = failed;
 }
 
-// Poll status every 2s
+// Poll status every 2s (backs off on errors)
 (async function pollStatus() {
+  let backoff = 2000;
   while (true) {
-    try { await fetchStatusPages(); } catch (e) { console.error("Status poll error:", e); }
-    await new Promise(r => setTimeout(r, 2000));
+    try { await fetchStatusPages(); backoff = 2000; } catch (e) { console.error("Status poll error:", e); backoff = Math.min(backoff * 2, 30000); }
+    await new Promise(r => setTimeout(r, backoff));
   }
 })();
 
@@ -181,7 +193,14 @@ async function fetchQuery(url, fnName, args) {
 }
 
 function rebuildAndDraw() {
-  allWorkflows.sort((a, b) => a.createdAt - b.createdAt);
+  if (sortByShard) {
+    allWorkflows.sort((a, b) => {
+      const sa = shardForId(a.id), sb = shardForId(b.id);
+      return sa !== sb ? sa - sb : a.createdAt - b.createdAt;
+    });
+  } else {
+    allWorkflows.sort((a, b) => a.createdAt - b.createdAt);
+  }
 
   if (allWorkflows.length > 0) {
     benchmarkStart = allWorkflows[0].createdAt;
@@ -203,20 +222,27 @@ function rebuildAndDraw() {
 
 // Stream pages incrementally — draw after each page arrives.
 // Keep previous data visible until incoming count exceeds it.
+const PAGE_SIZE = 500;
+const PAGES_PER_DRAW = 8; // fetch 8 pages (4000 workflows) before redrawing
+
 async function fetchAndDrawAllPages() {
-  let cursor = null;
-  let isDone = false;
   const prev = allWorkflows;
   const incoming = [];
+  let cursor = null;
+  let isDone = false;
+
   while (!isDone) {
-    const result = await fetchQuery(CONVEX_URL, "benchmark:benchmarkTimeline", {
-      name: WF_NAME,
-      createdAfter,
-      paginationOpts: { cursor, numItems: 1000 },
-    });
-    incoming.push(...result.page);
-    cursor = result.continueCursor;
-    isDone = result.isDone;
+    // Fetch PAGES_PER_DRAW pages before redrawing to minimize draw overhead
+    for (let p = 0; p < PAGES_PER_DRAW && !isDone; p++) {
+      const result = await fetchQuery(CONVEX_URL, "benchmark:benchmarkTimeline", {
+        name: WF_NAME,
+        createdAfter,
+        paginationOpts: { cursor, numItems: PAGE_SIZE },
+      });
+      incoming.push(...result.page);
+      cursor = result.continueCursor;
+      isDone = result.isDone;
+    }
     if (incoming.length >= prev.length) {
       allWorkflows = incoming;
       rebuildAndDraw();
@@ -226,15 +252,18 @@ async function fetchAndDrawAllPages() {
   rebuildAndDraw();
 }
 
-// Poll timeline every 3s
+// Poll timeline every 3s (backs off on errors)
 (async function pollTimeline() {
+  let backoff = 3000;
   while (true) {
     try {
       await fetchAndDrawAllPages();
+      backoff = 3000;
     } catch (e) {
       console.error("Timeline poll error:", e);
+      backoff = Math.min(backoff * 2, 30000);
     }
-    await new Promise(r => setTimeout(r, 3000));
+    await new Promise(r => setTimeout(r, backoff));
   }
 })();
 
@@ -245,7 +274,8 @@ function draw() {
   const n = allWorkflows.length || 1;
 
   // Render at 1px per row, CSS-scale only the Y axis to fit viewport.
-  canvas.height = Math.max(n, 100);
+  // Cap at 32768 to avoid browser canvas size limits.
+  canvas.height = Math.min(Math.max(n, 100), 32768);
   canvas.style.width = W + "px";
   canvas.style.height = containerH + "px";
   canvas.style.imageRendering = n > containerH ? "auto" : "pixelated";
@@ -253,9 +283,10 @@ function draw() {
   ctx.fillStyle = "#111";
   ctx.fillRect(0, 0, W, canvas.height);
 
+  const rowScale = canvas.height / n;
   for (let i = 0; i < allWorkflows.length; i++) {
     const wf = allWorkflows[i];
-    const y = i;
+    const y = Math.floor(i * rowScale);
 
     for (const step of wf.steps) {
       const x0 = ((step.startedAt - benchmarkStart) / timeSpanMs) * W;
@@ -286,27 +317,46 @@ function draw() {
     }
   }
 
-  // Horizontal row-count labels — drawn via CSS overlay so they aren't squished
-  // by the 1px-per-row canvas scaling.
-  const labelEvery = n > 5000 ? 5000 : n > 500 ? 1000 : n > 50 ? 100 : 10;
-  // Draw separator lines on the canvas (these scale fine at 1px)
-  ctx.fillStyle = "rgba(255,255,255,0.25)";
-  for (let m = labelEvery; m < allWorkflows.length; m += labelEvery) {
-    ctx.fillRect(0, m, W, 1);
-  }
-
   // Remove old label overlays
   document.querySelectorAll(".row-label").forEach(el => el.remove());
   const container = document.getElementById("canvas-container");
   const scaleY = containerH / n;
-  for (let m = labelEvery; m < allWorkflows.length; m += labelEvery) {
-    const el = document.createElement("div");
-    el.className = "row-label";
-    el.textContent = m.toLocaleString();
-    el.style.cssText = "position:absolute;left:4px;top:" + (m * scaleY) + "px;"
-      + "color:rgba(255,255,255,0.8);font:11px monospace;pointer-events:none;"
-      + "background:rgba(17,17,17,0.8);padding:0 4px;line-height:16px;z-index:2;";
-    container.appendChild(el);
+
+  if (sortByShard) {
+    // Draw shard separators and labels
+    let prevShard = -1;
+    for (let i = 0; i < allWorkflows.length; i++) {
+      const s = shardForId(allWorkflows[i].id);
+      if (s !== prevShard && prevShard !== -1) {
+        const yLine = Math.floor(i * rowScale);
+        ctx.fillStyle = "rgba(255,255,255,0.3)";
+        ctx.fillRect(0, yLine, W, 1);
+        const el = document.createElement("div");
+        el.className = "row-label";
+        el.textContent = "s" + s;
+        el.style.cssText = "position:absolute;left:4px;top:" + (i * scaleY) + "px;"
+          + "color:rgba(255,200,100,0.9);font:11px monospace;pointer-events:none;"
+          + "background:rgba(17,17,17,0.8);padding:0 4px;line-height:16px;z-index:2;";
+        container.appendChild(el);
+      }
+      prevShard = s;
+    }
+  } else {
+    // Row-count labels
+    const labelEvery = n > 5000 ? 5000 : n > 500 ? 1000 : n > 50 ? 100 : 10;
+    ctx.fillStyle = "rgba(255,255,255,0.25)";
+    for (let m = labelEvery; m < allWorkflows.length; m += labelEvery) {
+      ctx.fillRect(0, Math.floor(m * rowScale), W, 1);
+    }
+    for (let m = labelEvery; m < allWorkflows.length; m += labelEvery) {
+      const el = document.createElement("div");
+      el.className = "row-label";
+      el.textContent = m.toLocaleString();
+      el.style.cssText = "position:absolute;left:4px;top:" + (m * scaleY) + "px;"
+        + "color:rgba(255,255,255,0.8);font:11px monospace;pointer-events:none;"
+        + "background:rgba(17,17,17,0.8);padding:0 4px;line-height:16px;z-index:2;";
+      container.appendChild(el);
+    }
   }
 
   drawTimescale(W);

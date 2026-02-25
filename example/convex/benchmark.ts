@@ -314,7 +314,7 @@ export const onBenchmarkComplete = internalMutation({
 // Benchmark launchers & status
 // ═══════════════════════════════════════════════════════════════════════════
 
-const BATCH_CREATE_SIZE = 100;
+const BATCH_CREATE_SIZE = 25;
 
 export const startBenchmarkBatch = internalMutation({
   args: {
@@ -355,23 +355,43 @@ export const startBenchmark = internalMutation({
     ),
     benchmarkMode: v.optional(vBenchmarkMode),
     count: v.number(),
+    skipExecutorStart: v.optional(v.boolean()),
   },
   returns: v.object({ startedAt: v.number(), vizUrl: v.string() }),
-  handler: async (ctx, { mode, benchmarkMode: bm, count }) => {
+  handler: async (ctx, { mode, benchmarkMode: bm, count, skipExecutorStart }) => {
     const benchmarkMode = bm ?? "simulated";
     const startedAt = Date.now();
 
-    for (let offset = 0; offset < count; offset += BATCH_CREATE_SIZE) {
-      const batchCount = Math.min(BATCH_CREATE_SIZE, count - offset);
-      await ctx.scheduler.runAfter(
-        0,
-        internal.benchmark.startBenchmarkBatch,
-        { mode, benchmarkMode, count: batchCount, offset },
-      );
+    if (count <= BATCH_CREATE_SIZE) {
+      // Small count — create inline, no scheduler delay.
+      const wf = mode === "executor" ? executorWorkflow : standardWorkflow;
+      const def = mode === "executor"
+        ? internal.benchmark.executorResearchWorkflow
+        : internal.benchmark.standardResearchWorkflow;
+      for (let i = 0; i < count; i++) {
+        await wf.start(ctx, def, { index: i, benchmarkMode }, {
+          startAsync: true,
+          onComplete: internal.benchmark.onBenchmarkComplete,
+          context: null,
+        });
+      }
+    } else {
+      // Convex limits scheduled functions to 1000 per mutation.
+      // startExecutors is scheduled separately (uses 1 slot).
+      const maxBatches = skipExecutorStart ? 999 : 998;
+      const batchSize = Math.max(BATCH_CREATE_SIZE, Math.ceil(count / maxBatches));
+      for (let offset = 0; offset < count; offset += batchSize) {
+        const batchCount = Math.min(batchSize, count - offset);
+        await ctx.scheduler.runAfter(
+          0,
+          internal.benchmark.startBenchmarkBatch,
+          { mode, benchmarkMode, count: batchCount, offset },
+        );
+      }
     }
 
-    if (mode === "executor") {
-      await executorWorkflow.startExecutors(ctx);
+    if (mode === "executor" && !skipExecutorStart) {
+      await ctx.scheduler.runAfter(0, internal.benchmark.startExecutors, {});
     }
     const siteUrl = process.env.CONVEX_SITE_URL ?? process.env.CONVEX_CLOUD_URL?.replace(".convex.cloud", ".convex.site") ?? "";
     const vizUrl = siteUrl + "/benchmark-viz?after=" + startedAt;

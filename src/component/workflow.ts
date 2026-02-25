@@ -62,7 +62,7 @@ export async function createHandler(
     args: args.workflowArgs,
     generationNumber: 0,
     onComplete: args.onComplete,
-    readyToRun: args.startAsync ? true : undefined,
+    readyToRun: args.startAsync && !args.executorShards ? true : undefined,
     executorShards: args.executorShards,
   });
   console.debug(
@@ -70,10 +70,14 @@ export async function createHandler(
     args.workflowArgs,
     args.workflowHandle,
   );
-  if (args.startAsync) {
+  if (args.startAsync && !args.executorShards) {
     await ensureCoordinatorRunning(ctx);
   } else {
-    // If we can't start it, may as well not create it, eh? Fail fast...
+    // For executor-mode workflows, always run inline even with startAsync —
+    // the first replay just inserts a task into the sharded queue, which is
+    // fast and avoids the coordinator batch-scheduling bottleneck.
+    // For non-executor workflows without startAsync, this is the existing
+    // fail-fast path.
     await ctx.runMutation(args.workflowHandle as FunctionHandle<"mutation">, {
       workflowId,
       generationNumber: 0,
@@ -304,6 +308,8 @@ export const timelinePage = query({
           startedAt: v.number(),
           completedAt: v.optional(v.number()),
           executionStartedAt: v.optional(v.number()),
+          executorFinishedAt: v.optional(v.number()),
+          flushCalledAt: v.optional(v.number()),
         }),
       ),
     }),
@@ -351,6 +357,8 @@ export const timelinePage = query({
               startedAt: s.step.startedAt,
               completedAt: s.step.completedAt,
               executionStartedAt,
+              executorFinishedAt: s.step.executorFinishedAt,
+              flushCalledAt: s.step.flushCalledAt,
             };
           }),
         };

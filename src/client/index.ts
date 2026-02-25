@@ -52,6 +52,20 @@ export {
 } from "../types.js";
 export type { RunOptions, WorkflowCtx } from "./workflowContext.js";
 
+/**
+ * Throw this from an executor action handler to signal a rate limit.
+ * The executor will wait `retryAfterMs` before retrying the task,
+ * without counting it as a failure attempt.
+ */
+export class WorkflowRateLimitError extends Error {
+  public readonly retryAfterMs: number;
+  constructor(retryAfterMs: number) {
+    super(`Rate limited, retry after ${retryAfterMs}ms`);
+    this.name = "WorkflowRateLimitError";
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
 export type CallbackOptions = {
   /**
    * A mutation to run after the function succeeds, fails, or is canceled.
@@ -182,12 +196,12 @@ export class WorkflowManager {
     const numShards = this.executorShards;
     const getExecutorRef = () => this.executorRef;
 
-    const CLAIM_LIMIT = 800;
-    const MAX_CONCURRENCY = 200;
+    const CLAIM_LIMIT = 1500;
+    const MAX_CONCURRENCY = 500;
     const POLL_BACKOFF_MS = 500;
-    const POLL_BACKOFF_ACTIVE_MS = 150;
+    const POLL_BACKOFF_ACTIVE_MS = 100;
     const RESCHEDULE_MS = 8 * 60 * 1000; // 8 minutes, before 10-min action timeout
-    const FLUSH_INTERVAL_MS = 500;
+    const FLUSH_INTERVAL_MS = 100;
     const FLUSH_BATCH_SIZE = 50;
     const MAX_FLUSH_RETRIES = 5;
     const HANDOFF_POLL_MS = 500;
@@ -236,72 +250,63 @@ export class WorkflowManager {
           stepId: string;
           result: RunResult;
           generationNumber: number;
+          executorFinishedAt: number;
         };
 
-        // --- Result batching ---
+        // --- Result batching with serialized replay ---
         const pendingResults: PendingResult[] = [];
         const inFlightStepIds = new Set<string>();
         let flushing = false;
 
-        // Flush pending results in batches. On error, items go back to
-        // the buffer for retry — the executor never dies from flush failures.
-        // After recording, trigger per-workflow replays in parallel.
+        // Flush pending results, then replay candidates in a single batch.
+        // Serializing flush → replay keeps inter-step latency tight: the
+        // next step is enqueued immediately after recording the result.
         const flush = async () => {
           if (flushing) return;
           flushing = true;
           try {
             while (pendingResults.length > 0) {
               const batch = pendingResults.splice(0, FLUSH_BATCH_SIZE);
-              let candidates: Array<{ workflowId: string; generationNumber: number; workflowHandle: string }>;
+              let candidates: Array<{
+                workflowId: string;
+                generationNumber: number;
+                workflowHandle: string;
+              }>;
+              const flushCalledAt = Date.now();
               try {
                 candidates = await ctx.runMutation(
                   component.taskQueue.recordResultBatch,
-                  { items: batch.map((r) => ({ ...r, stepId: r.stepId })) },
+                  {
+                    items: batch.map((r) => ({
+                      stepId: r.stepId,
+                      result: r.result,
+                      generationNumber: r.generationNumber,
+                      executorFinishedAt: r.executorFinishedAt,
+                      flushCalledAt,
+                    })),
+                  },
                 );
               } catch {
-                pendingResults.unshift(...batch);
+                pendingResults.push(...batch);
                 return;
               }
-              // Remove flushed stepIds from in-flight tracking.
               for (const item of batch) {
                 inFlightStepIds.delete(item.stepId);
               }
-              // Replay workflows in parallel — each is a tiny per-workflow mutation.
+              // Replay all candidates in a single batched mutation
               if (candidates.length > 0) {
-                const failed: typeof candidates = [];
-                await Promise.all(
-                  candidates.map((c) =>
-                    ctx.runMutation(component.taskQueue.replayIfReady, {
-                      workflowId: c.workflowId,
-                      generationNumber: c.generationNumber,
-                      workflowHandle: c.workflowHandle,
-                    }).catch(() => {
-                      failed.push(c);
-                    }),
-                  ),
-                );
-                // Retry failed replays sequentially with backoff.
-                for (const c of failed) {
-                  let replaySucceeded = false;
-                  for (let attempt = 0; attempt < 3; attempt++) {
-                    await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
-                    try {
-                      await ctx.runMutation(component.taskQueue.replayIfReady, {
-                        workflowId: c.workflowId,
-                        generationNumber: c.generationNumber,
-                        workflowHandle: c.workflowHandle,
-                      });
-                      replaySucceeded = true;
-                      break;
-                    } catch {
-                      // Continue retrying
-                    }
-                  }
-                  if (!replaySucceeded) {
-                    console.error(
-                      `Failed to replay workflow ${c.workflowId} after 3 retries — workflow may need manual replay`,
-                    );
-                  }
+                try {
+                  await ctx.runMutation(
+                    component.taskQueue.replayBatchIfReady,
+                    { candidates },
+                  );
+                } catch {
+                  // Retry once after brief pause
+                  await new Promise((r) => setTimeout(r, 100));
+                  await ctx.runMutation(
+                    component.taskQueue.replayBatchIfReady,
+                    { candidates },
+                  ).catch(() => {});
                 }
               }
             }
@@ -325,13 +330,41 @@ export class WorkflowManager {
         let resolveIdle: (() => void) | null = null;
         const taskBuffer: Task[] = [];
 
+        // Per-step-type rate-limit gates: keyed by action handle so
+        // different APIs (e.g. OpenAI vs Anthropic) don't gate each other.
+        // Jitter spreads the thundering herd over a window after the deadline.
+        const rateLimitGates = new Map<string, number>();
+        const RATE_LIMIT_JITTER_MS = 10000;
+        const waitForRateLimit = async (handle: string) => {
+          const until = rateLimitGates.get(handle) ?? 0;
+          if (until <= Date.now()) return; // no active gate
+          while ((rateLimitGates.get(handle) ?? 0) > Date.now()) {
+            const remaining = (rateLimitGates.get(handle) ?? 0) - Date.now();
+            await new Promise((r) => setTimeout(r, remaining));
+          }
+          // Jitter so tasks don't all wake up at the exact same instant
+          await new Promise((r) => setTimeout(r, Math.random() * RATE_LIMIT_JITTER_MS));
+        };
+        const setRateLimitGate = (handle: string, retryAfterMs: number) => {
+          const deadline = Date.now() + retryAfterMs;
+          const current = rateLimitGates.get(handle) ?? 0;
+          if (deadline > current) {
+            rateLimitGates.set(handle, deadline);
+          }
+        };
+
         const processTask = async (task: Task): Promise<void> => {
           const maxAttempts = Math.max(task.retry?.maxAttempts ?? 1, 1);
           const initialBackoffMs = task.retry?.initialBackoffMs ?? 125;
           const base = task.retry?.base ?? 2;
 
           let result: RunResult | undefined;
-          for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          let attempt = 0;
+          let rateLimitRetries = 0;
+          const MAX_RATE_LIMIT_RETRIES = 20;
+          while (attempt < maxAttempts) {
+            // Wait for any active rate-limit gate for this step type
+            await waitForRateLimit(task.handle);
             try {
               let returnValue: unknown;
               switch (task.functionType) {
@@ -361,15 +394,30 @@ export class WorkflowManager {
               result = { kind: "success", returnValue: returnValue ?? null };
               break;
             } catch (e) {
+              if (e instanceof WorkflowRateLimitError) {
+                // Set per-step-type gate — only tasks using the same
+                // action handle wait; other step types keep running.
+                setRateLimitGate(task.handle, e.retryAfterMs);
+                rateLimitRetries++;
+                if (rateLimitRetries >= MAX_RATE_LIMIT_RETRIES) {
+                  // Give up after too many rate-limit retries to avoid
+                  // holding the executor indefinitely.
+                  const error = `Rate limited ${rateLimitRetries} times, giving up`;
+                  result = { kind: "failed", error };
+                  break;
+                }
+                continue; // retry without consuming an attempt
+              }
               const error = e instanceof Error ? e.message : `Unknown error: ${String(e)}`;
               result = { kind: "failed", error };
-              if (attempt < maxAttempts - 1) {
-                const backoff = initialBackoffMs * Math.pow(base, attempt);
+              attempt++;
+              if (attempt < maxAttempts) {
+                const backoff = initialBackoffMs * Math.pow(base, attempt - 1);
                 await new Promise((r) => setTimeout(r, backoff));
               }
             }
           }
-          pendingResults.push({ stepId: task.stepId, result: result!, generationNumber: task.generationNumber });
+          pendingResults.push({ stepId: task.stepId, result: result!, generationNumber: task.generationNumber, executorFinishedAt: Date.now() });
         };
 
         const feedTask = (task: Task) => {
@@ -512,6 +560,23 @@ export class WorkflowManager {
                 }
 
               }
+              // Drain: flush results may trigger replays that create new tasks.
+              // Loop until the shard is fully empty. Small delay lets
+              // replay sub-mutations commit before we check.
+              for (let drain = 0; drain < 10; drain++) {
+                await waitUntilIdle();
+                await new Promise((r) => setTimeout(r, 500));
+                const remaining: Task[] = await ctx.runQuery(
+                  component.taskQueue.claimTasks,
+                  { shard, limit: CLAIM_LIMIT },
+                );
+                const newRemaining = remaining.filter(t => !inFlightStepIds.has(t.stepId));
+                if (newRemaining.length === 0) break;
+                for (const task of newRemaining) {
+                  inFlightStepIds.add(task.stepId);
+                  feedTask(task);
+                }
+              }
               await waitUntilIdle();
               return null;
             }
@@ -520,17 +585,21 @@ export class WorkflowManager {
             // new work — but drain any tasks already in the shard first
             // so they aren't stranded without an executor.
             if (!(await checkEpoch())) {
-              const drainTasks: Task[] = await ctx.runQuery(
-                component.taskQueue.claimTasks,
-                { shard, limit: CLAIM_LIMIT },
-              );
-              const newDrainTasks = drainTasks.filter(t => !inFlightStepIds.has(t.stepId));
-              if (newDrainTasks.length > 0) {
+              // Drain all remaining tasks including any created by replays.
+              // Small delay lets replay sub-mutations commit before we check.
+              for (let drain = 0; drain < 10; drain++) {
+                await waitUntilIdle();
+                await new Promise((r) => setTimeout(r, 500));
+                const drainTasks: Task[] = await ctx.runQuery(
+                  component.taskQueue.claimTasks,
+                  { shard, limit: CLAIM_LIMIT },
+                );
+                const newDrainTasks = drainTasks.filter(t => !inFlightStepIds.has(t.stepId));
+                if (newDrainTasks.length === 0) break;
                 for (const task of newDrainTasks) {
                   inFlightStepIds.add(task.stepId);
                   feedTask(task);
                 }
-                continue; // re-check epoch — may have more tasks
               }
               await waitUntilIdle();
               return null;

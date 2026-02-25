@@ -74,6 +74,13 @@ const stepCommonFields = {
   runResult: v.optional(vResultValidator),
   startedAt: v.number(),
   completedAt: v.optional(v.number()),
+  // When the executor finished processing (before batched flush).
+  // Gap between this and completedAt = batching/write delay.
+  executorFinishedAt: v.optional(v.number()),
+  // When the flush loop called the mutation (after queue wait).
+  // executorFinishedAt → flushCalledAt = queue wait
+  // flushCalledAt → completedAt = mutation wait (slot + OCC + execution)
+  flushCalledAt: v.optional(v.number()),
 };
 
 export const step = v.union(

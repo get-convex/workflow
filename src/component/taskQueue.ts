@@ -218,6 +218,8 @@ export const recordResultBatch = mutation({
         stepId: v.id("steps"),
         result: vResultValidator,
         generationNumber: v.number(),
+        executorFinishedAt: v.optional(v.number()),
+        flushCalledAt: v.optional(v.number()),
       }),
     ),
   },
@@ -229,7 +231,7 @@ export const recordResultBatch = mutation({
       { workflowId: Id<"workflows">; workflowHandle: string; generationNumber: number }
     >();
 
-    for (const { stepId, result, generationNumber } of items) {
+    for (const { stepId, result, generationNumber, executorFinishedAt, flushCalledAt } of items) {
       const deleteTask = async () => {
         const taskEntry = await ctx.db
           .query("taskQueue")
@@ -262,6 +264,12 @@ export const recordResultBatch = mutation({
 
       journalEntry.step.inProgress = false;
       journalEntry.step.completedAt = Date.now();
+      if (executorFinishedAt) {
+        journalEntry.step.executorFinishedAt = executorFinishedAt;
+      }
+      if (flushCalledAt) {
+        journalEntry.step.flushCalledAt = flushCalledAt;
+      }
       switch (result.kind) {
         case "success":
           journalEntry.step.runResult = {
@@ -303,6 +311,8 @@ export const recordResultBatch = mutation({
       }
     }
 
+    // Return candidates — executor handles replay in a concurrent pipeline.
+    // No inProgress index reads here = minimal OCC surface.
     return [...candidates.values()];
   },
 });
@@ -338,6 +348,44 @@ export const replayIfReady = mutation({
       await ctx.db.patch(workflowId, {
         runResult: { kind: "failed", error },
       });
+    }
+    return null;
+  },
+});
+
+// Batched replay: process multiple candidates in a single mutation call.
+// Reduces mutation count from N to 1, avoiding "too many concurrent commits".
+export const replayBatchIfReady = mutation({
+  args: { candidates: v.array(replayCandidate) },
+  returns: v.null(),
+  handler: async (ctx, { candidates }) => {
+    const console = createLogger(DEFAULT_LOG_LEVEL);
+    for (const { workflowId, generationNumber, workflowHandle } of candidates) {
+      const workflow = await ctx.db.get(workflowId);
+      if (!workflow || workflow.runResult || workflow.generationNumber !== generationNumber) {
+        continue;
+      }
+      const inProgress = await ctx.db
+        .query("steps")
+        .withIndex("inProgress", (q) =>
+          q.eq("step.inProgress", true).eq("workflowId", workflowId),
+        )
+        .first();
+      if (inProgress) {
+        continue;
+      }
+      try {
+        await ctx.runMutation(
+          workflowHandle as FunctionHandle<"mutation">,
+          { workflowId, generationNumber },
+        );
+      } catch (e) {
+        const error = e instanceof Error ? e.message : `Unknown error: ${String(e)}`;
+        console.error(`Error running workflow ${workflowId}: ${error}`);
+        await ctx.db.patch(workflowId, {
+          runResult: { kind: "failed", error },
+        });
+      }
     }
     return null;
   },

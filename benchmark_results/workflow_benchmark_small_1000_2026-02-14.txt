@@ -1,2 +1,0 @@
-=== workflow small benchmark ===
-section_count=1000

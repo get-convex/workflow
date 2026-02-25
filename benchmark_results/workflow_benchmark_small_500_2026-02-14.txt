@@ -1,8 +1,0 @@
-=== workflow small benchmark ===
-section_count=500
-=== summary ===
-regular: status=completed elapsed_ms=303899 elapsed_s=307
-batched: status=completed elapsed_ms=39422 elapsed_s=42
-speedup=7.71x
-
-Note: persisted from completed terminal run output at 2026-02-14 23:12 local.

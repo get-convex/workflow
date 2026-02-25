@@ -1,4 +1,0 @@
-=== workflow small benchmark ===
-section_count=1000
-[CONVEX ?(llmSimulation:clearAll)] [ERROR] 'Simulation not found: j9712dprjeky0709w2098prf65816c0h'
-[CONVEX ?(llmSimulation:clearAll)] [ERROR] 'Simulation not found: j97507jy904tpv1erkkkzgt1yx8172qh'

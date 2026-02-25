@@ -82,7 +82,8 @@ const BENCHMARK_VIZ_HTML = /* html */ `<!DOCTYPE html>
       <span style="color:#666; margin-left:8px">│</span>
       <span style="color:#555">░ queued</span>
       <span style="color:#aaa">█ executing</span>
-      <span style="color:rgba(255,255,255,0.6)">█ write delay</span>
+      <span style="color:rgba(255,200,50,0.7)">█ queue wait</span>
+      <span style="color:rgba(255,255,255,0.6)">█ mutation wait</span>
     </div>
   </div>
   <canvas id="timescale" height="24"></canvas>
@@ -321,11 +322,22 @@ function draw() {
         const xExecEnd = ((execEnd - benchmarkStart) / timeSpanMs) * W;
         ctx.fillStyle = stepColor(step.stepNumber);
         ctx.fillRect(xExec, y, Math.max(xExecEnd - xExec, 1), 1);
-        // Write delay (white) — gap between executor finish and DB write
+        // Write delay — split into queue wait and mutation wait
         if (step.executorFinishedAt && step.completedAt && step.completedAt > step.executorFinishedAt) {
           const xWriteStart = ((step.executorFinishedAt - benchmarkStart) / timeSpanMs) * W;
-          ctx.fillStyle = "rgba(255,255,255,0.6)";
-          ctx.fillRect(xWriteStart, y, Math.max(x1 - xWriteStart, 1), 1);
+          if (step.flushCalledAt && step.flushCalledAt > step.executorFinishedAt) {
+            // Queue wait (yellow) — sitting in pendingResults array
+            const xFlush = ((step.flushCalledAt - benchmarkStart) / timeSpanMs) * W;
+            ctx.fillStyle = "rgba(255,200,50,0.7)";
+            ctx.fillRect(xWriteStart, y, Math.max(xFlush - xWriteStart, 1), 1);
+            // Mutation wait (white) — slot wait + OCC retries + execution
+            ctx.fillStyle = "rgba(255,255,255,0.6)";
+            ctx.fillRect(xFlush, y, Math.max(x1 - xFlush, 1), 1);
+          } else {
+            // No flushCalledAt — show all as white
+            ctx.fillStyle = "rgba(255,255,255,0.6)";
+            ctx.fillRect(xWriteStart, y, Math.max(x1 - xWriteStart, 1), 1);
+          }
         }
       } else {
         // No queue info — full bar

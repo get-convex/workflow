@@ -232,7 +232,7 @@ export const standardResearchWorkflow = standardWorkflow.define({
 
 const executorWorkflow = new WorkflowManager(components.workflow, {
   workpoolOptions: { maxParallelism: 200 },
-  executorShards: 100,
+  executorShards: 60,
 });
 
 export const executorSimulateLLM = executorWorkflow.action(
@@ -498,7 +498,7 @@ export const diagnoseExecutor = internalQuery({
   }),
   handler: async (ctx) => {
     return await ctx.runQuery(components.workflow.taskQueue.diagnose, {
-      numShards: 100,
+      numShards: 60,
     });
   },
 });

@@ -272,6 +272,7 @@ export class WorkflowManager {
                 generationNumber: number;
                 workflowHandle: string;
               }>;
+              const flushCalledAt = Date.now();
               try {
                 candidates = await ctx.runMutation(
                   component.taskQueue.recordResultBatch,
@@ -281,6 +282,7 @@ export class WorkflowManager {
                       result: r.result,
                       generationNumber: r.generationNumber,
                       executorFinishedAt: r.executorFinishedAt,
+                      flushCalledAt,
                     })),
                   },
                 );

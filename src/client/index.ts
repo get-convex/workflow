@@ -196,17 +196,17 @@ export class WorkflowManager {
     const numShards = this.executorShards;
     const getExecutorRef = () => this.executorRef;
 
-    const CLAIM_LIMIT = 1500;
-    const MAX_CONCURRENCY = 500;
+    const CLAIM_LIMIT = 200;
+    const MAX_CONCURRENCY = 50;
     const POLL_BACKOFF_MS = 500;
     const POLL_BACKOFF_ACTIVE_MS = 100;
-    const RESCHEDULE_MS = 5 * 60 * 1000; // 5 minutes — leaves 5 min for drain+handoff before 10-min kill
+    const RESCHEDULE_MS = 5 * 60 * 1000; // 5 minutes
     const FLUSH_INTERVAL_MS = 100;
     const FLUSH_BATCH_SIZE = 50;
     const MAX_FLUSH_RETRIES = 5;
-    const HANDOFF_POLL_MS = 500;
-    const HANDOFF_SUCCESSOR_TIMEOUT_MS = 30_000;
-    const HANDOFF_PREDECESSOR_TIMEOUT_MS = 30_000;
+    // Handoff: schedule successor at startup, then just stop claiming
+    // when time's up. Brief overlap is safe (claimTasks is read-only,
+    // recordResultBatch is idempotent with generationNumber checks).
 
     return internalActionGeneric({
       handler: async (
@@ -253,34 +253,23 @@ export class WorkflowManager {
           executorFinishedAt: number;
         };
 
-        // --- Result batching with serialized replay ---
+        // --- Result batching with inline replay ---
         const pendingResults: PendingResult[] = [];
         const inFlightStepIds = new Set<string>();
         let flushing = false;
 
-        // Rescue queue: replay candidates that failed to commit.
-        // The flush loop retries these on every tick so workflows
-        // don't get permanently stranded by transient OCC failures.
-        type ReplayCandidate = {
-          workflowId: string;
-          generationNumber: number;
-          workflowHandle: string;
-        };
-        const replayRescueQueue: ReplayCandidate[] = [];
-
-        // Flush pending results, then replay candidates in a single batch.
-        // Serializing flush → replay keeps inter-step latency tight: the
-        // next step is enqueued immediately after recording the result.
+        // Flush pending results. Inline replay inside recordResultBatch
+        // handles the common case; the durable replayQueue table handles
+        // the concurrent-batch race. No client-side retry needed.
         const flush = async () => {
           if (flushing) return;
           flushing = true;
           try {
             while (pendingResults.length > 0) {
               const batch = pendingResults.splice(0, FLUSH_BATCH_SIZE);
-              let candidates: ReplayCandidate[];
               const flushCalledAt = Date.now();
               try {
-                candidates = await ctx.runMutation(
+                await ctx.runMutation(
                   component.taskQueue.recordResultBatch,
                   {
                     items: batch.map((r) => ({
@@ -290,7 +279,7 @@ export class WorkflowManager {
                       executorFinishedAt: r.executorFinishedAt,
                       flushCalledAt,
                     })),
-                    replayInline: true,
+                    shard,
                   },
                 );
               } catch {
@@ -300,40 +289,29 @@ export class WorkflowManager {
               for (const item of batch) {
                 inFlightStepIds.delete(item.stepId);
               }
-              // Replay all candidates in a single batched mutation
-              if (candidates.length > 0) {
-                try {
-                  await ctx.runMutation(
-                    component.taskQueue.replayBatchIfReady,
-                    { candidates },
-                  );
-                } catch {
-                  // Retry once after brief pause
-                  await new Promise((r) => setTimeout(r, 100));
-                  try {
-                    await ctx.runMutation(
-                      component.taskQueue.replayBatchIfReady,
-                      { candidates },
-                    );
-                  } catch {
-                    // Move to rescue queue — flush loop will keep retrying
-                    // so these workflows don't get permanently stranded.
-                    replayRescueQueue.push(...candidates);
-                  }
-                }
-              }
-            }
-            // Drain rescue queue: retry previously failed replays.
-            if (replayRescueQueue.length > 0) {
-              const rescue = replayRescueQueue.splice(0, replayRescueQueue.length);
+              // Process pending replays sequentially after recording results.
+              // Running here (not in the main loop) ensures processReplayBatch
+              // never runs concurrently with recordResultBatch, avoiding OCC
+              // on the replayQueue table.
               try {
-                await ctx.runMutation(
-                  component.taskQueue.replayBatchIfReady,
-                  { candidates: rescue },
+                const replays: Array<{
+                  _id: string;
+                  shard: number;
+                  workflowId: string;
+                  generationNumber: number;
+                  workflowHandle: string;
+                }> = await ctx.runQuery(
+                  component.taskQueue.claimReplays,
+                  { shard, limit: 50 },
                 );
+                if (replays.length > 0) {
+                  await ctx.runMutation(
+                    component.taskQueue.processReplayBatch,
+                    { entries: replays },
+                  );
+                }
               } catch {
-                // Still failing — put them back for next flush tick.
-                replayRescueQueue.push(...rescue);
+                // Non-fatal — replay entries persist and will be retried.
               }
             }
           } finally {
@@ -492,128 +470,38 @@ export class WorkflowManager {
               await new Promise((r) => setTimeout(r, 200));
             }
           }
-          // Drain rescue queue before shutting down so workflows
-          // aren't stranded by transient replay failures.
-          let rescueRetries = 0;
-          while (replayRescueQueue.length > 0 && rescueRetries < MAX_FLUSH_RETRIES) {
-            await flush();
-            if (replayRescueQueue.length > 0) {
-              rescueRetries++;
-              await new Promise((r) => setTimeout(r, 500));
-            }
-          }
+          // No rescue queue to drain — durable replayQueue handles replays.
         };
 
-        // --- Non-blocking handshake ---
-        // Move handoff cleanup into a background promise so the main
-        // claiming loop starts immediately. Brief overlap of two executors
-        // on the same shard is safe (claimTasks is read-only,
-        // recordResultBatch checks generationNumber + inProgress).
-        type Handoff = { ready: boolean; yielded: boolean } | null;
-        const handoffDoc: Handoff = await ctx.runQuery(
-          component.taskQueue.getHandoff,
-          { shard },
-        );
-        const handoffCleanup: Promise<void> = (async () => {
-          if (!handoffDoc || handoffDoc.yielded) {
-            if (handoffDoc) {
-              await ctx.runMutation(component.taskQueue.handoff, {
-                shard,
-                action: "clear",
-              });
-            }
-            return;
-          }
-          await ctx.runMutation(component.taskQueue.handoff, {
-            shard,
-            action: "ready",
-          });
-          // Poll for yield in background.
-          const predecessorDeadline =
-            Date.now() + HANDOFF_PREDECESSOR_TIMEOUT_MS;
-          while (Date.now() < predecessorDeadline) {
-            await new Promise((r) => setTimeout(r, HANDOFF_POLL_MS));
-            const state: Handoff = await ctx.runQuery(
-              component.taskQueue.getHandoff,
-              { shard },
-            );
-            if (!state || state.yielded) break;
-          }
-          await ctx.runMutation(component.taskQueue.handoff, {
-            shard,
-            action: "clear",
-          });
-        })().catch(() => {});
-        // Main loop starts IMMEDIATELY — zero gap.
+        // --- Schedule successor at startup ---
+        // No handshake protocol needed. The successor starts after
+        // RESCHEDULE_MS + jitter. Brief overlap is safe: claimTasks is
+        // read-only, recordResultBatch is idempotent. Both executors may
+        // process the same task, but only one recordResultBatch will win
+        // (the other is a no-op since the step is already complete).
+        const ref = getExecutorRef();
+        if (ref && (await checkEpoch())) {
+          await ctx.scheduler.runAfter(
+            RESCHEDULE_MS + jitterMs,
+            ref,
+            { shard, epoch },
+          );
+        }
+
+        // Helper: wait for all in-flight tasks to complete and flush.
+        // Does NOT claim new tasks — the successor handles those.
+        // This avoids OCC from two executors processing the same task.
+        const drainInFlight = async () => {
+          await waitUntilIdle();
+        };
 
         // --- Main loop ---
         try {
           while (true) {
+            // Time's up — stop claiming, drain, and exit. Successor
+            // is already scheduled (or about to start).
             if (Date.now() - startTime > RESCHEDULE_MS + jitterMs) {
-              // --- Old executor handoff ---
-              // Create handoff doc, schedule successor, keep claiming
-              // until successor is ready, then yield and drain.
-              if (await checkEpoch()) {
-                await ctx.runMutation(component.taskQueue.handoff, {
-                  shard,
-                  action: "init",
-                });
-                const ref = getExecutorRef();
-                if (ref) {
-                  await ctx.scheduler.runAfter(0, ref, { shard, epoch });
-                }
-                // Handoff claiming loop: keep processing tasks until
-                // the successor signals ready (or timeout).
-                const successorDeadline =
-                  Date.now() + HANDOFF_SUCCESSOR_TIMEOUT_MS;
-                while (Date.now() < successorDeadline) {
-                  if (!(await checkEpoch())) break;
-                  const state: Handoff = await ctx.runQuery(
-                    component.taskQueue.getHandoff,
-                    { shard },
-                  );
-                  if (state?.ready) {
-                    await ctx.runMutation(component.taskQueue.handoff, {
-                      shard,
-                      action: "yielded",
-                    });
-                    break;
-                  }
-                  // Continue claiming tasks (streaming) while waiting.
-                  const tasks: Task[] = await ctx.runQuery(
-                    component.taskQueue.claimTasks,
-                    { shard, limit: CLAIM_LIMIT },
-                  );
-                  const newTasks = tasks.filter(t => !inFlightStepIds.has(t.stepId));
-                  if (newTasks.length > 0) {
-                    for (const task of newTasks) {
-                      inFlightStepIds.add(task.stepId);
-                      feedTask(task);
-                    }
-                  } else {
-                    await new Promise((r) => setTimeout(r, POLL_BACKOFF_MS));
-                  }
-                }
-
-              }
-              // Drain: flush results may trigger replays that create new tasks.
-              // Loop until the shard is fully empty. Small delay lets
-              // replay sub-mutations commit before we check.
-              for (let drain = 0; drain < 10; drain++) {
-                await waitUntilIdle();
-                await new Promise((r) => setTimeout(r, 500));
-                const remaining: Task[] = await ctx.runQuery(
-                  component.taskQueue.claimTasks,
-                  { shard, limit: CLAIM_LIMIT },
-                );
-                const newRemaining = remaining.filter(t => !inFlightStepIds.has(t.stepId));
-                if (newRemaining.length === 0) break;
-                for (const task of newRemaining) {
-                  inFlightStepIds.add(task.stepId);
-                  feedTask(task);
-                }
-              }
-              await waitUntilIdle();
+              await drainInFlight();
               return null;
             }
 
@@ -621,23 +509,7 @@ export class WorkflowManager {
             // new work — but drain any tasks already in the shard first
             // so they aren't stranded without an executor.
             if (!(await checkEpoch())) {
-              // Drain all remaining tasks including any created by replays.
-              // Small delay lets replay sub-mutations commit before we check.
-              for (let drain = 0; drain < 10; drain++) {
-                await waitUntilIdle();
-                await new Promise((r) => setTimeout(r, 500));
-                const drainTasks: Task[] = await ctx.runQuery(
-                  component.taskQueue.claimTasks,
-                  { shard, limit: CLAIM_LIMIT },
-                );
-                const newDrainTasks = drainTasks.filter(t => !inFlightStepIds.has(t.stepId));
-                if (newDrainTasks.length === 0) break;
-                for (const task of newDrainTasks) {
-                  inFlightStepIds.add(task.stepId);
-                  feedTask(task);
-                }
-              }
-              await waitUntilIdle();
+              await drainInFlight();
               return null;
             }
 
@@ -663,26 +535,12 @@ export class WorkflowManager {
         } finally {
           flushLoopRunning = false;
           await flushLoop;
-          // Last-resort safety net: if the rescue queue still has items
-          // after all flush retries, durably schedule individual replay
-          // mutations so workflows aren't permanently stranded when the
-          // executor action exits.
-          for (const candidate of replayRescueQueue) {
-            try {
-              await ctx.scheduler.runAfter(
-                0,
-                component.taskQueue.replayIfReady,
-                candidate,
-              );
-            } catch {
-              // Best effort — scheduler may reject if at limit.
-            }
-          }
-          replayRescueQueue.length = 0;
-          await handoffCleanup;
+          // No rescue queue needed — the durable replayQueue inside
+          // recordResultBatch persists replay entries atomically with
+          // result recording, so replays survive executor exits.
         }
       },
-    }) as any;
+    }) as RegisteredAction<"internal", Record<string, never>, any>;
   }
 
   /**

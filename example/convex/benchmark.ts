@@ -147,9 +147,9 @@ async function callClaude(
   try {
     const response = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 512,
+      max_tokens: 16,
       messages: [
-        { role: "user", content: buildPrompt(task, index, input) },
+        { role: "user", content: "Reply with exactly: hello world" },
       ],
     });
     const text =
@@ -441,6 +441,16 @@ export const startExecutors = internalMutation({
   returns: v.null(),
   handler: async (ctx) => {
     await executorWorkflow.startExecutors(ctx);
+  },
+});
+
+// Stop all running executors by bumping the epoch without starting new ones.
+export const stopExecutors = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    await ctx.runMutation(components.workflow.taskQueue.bumpEpoch, {});
+    return null;
   },
 });
 
@@ -750,6 +760,56 @@ export const diagnoseTail = internalAction({
       // Show top 10 worst workflows with full detail.
       worstWorkflows: analyzed.slice(0, 10),
     };
+  },
+});
+
+// Diagnostic: find stuck workflows (no runResult) via component timeline.
+export const diagnoseStuck = internalAction({
+  args: {
+    name: v.string(),
+    createdAfter: v.number(),
+  },
+  handler: async (ctx, { name, createdAfter }) => {
+    const stuck: any[] = [];
+    let cursor: string | null = null;
+    let isDone = false;
+    while (!isDone && stuck.length < 10) {
+      const page: any = await ctx.runQuery(
+        components.workflow.workflow.timelinePage,
+        { name, createdAfter, paginationOpts: { cursor, numItems: 200 } },
+      );
+      for (const wf of page.page) {
+        if (!wf.runResult) {
+          // Get step details through admin query
+          const status: any = await ctx.runQuery(
+            components.workflow.workflow.getStatus,
+            { workflowId: wf.id },
+          );
+          stuck.push({
+            id: wf.id,
+            createdAt: wf.createdAt,
+            steps: wf.steps,
+            status,
+          });
+        }
+        if (stuck.length >= 10) break;
+      }
+      cursor = page.continueCursor;
+      isDone = page.isDone;
+    }
+    return { count: stuck.length, stuck };
+  },
+});
+
+// Manual replay for stuck workflows — calls component's replayIfReady.
+export const manualReplay = internalMutation({
+  args: {
+    workflowId: v.string(),
+    generationNumber: v.number(),
+    workflowHandle: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.runMutation(components.workflow.taskQueue.replayIfReady, args);
   },
 });
 

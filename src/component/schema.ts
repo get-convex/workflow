@@ -222,11 +222,14 @@ export default defineSchema({
   })
     .index("by_shard", ["shard"])
     .index("by_stepId", ["stepId"]),
-  executorHandoff: defineTable({
+  replayQueue: defineTable({
     shard: v.number(),
-    ready: v.boolean(),
-    yielded: v.boolean(),
-  }).index("by_shard", ["shard"]),
+    workflowId: v.id("workflows"),
+    generationNumber: v.number(),
+    workflowHandle: v.string(),
+  })
+    .index("by_shard", ["shard"])
+    .index("by_workflowId", ["workflowId"]),
   onCompleteFailures: defineTable(
     v.union(
       v.object({

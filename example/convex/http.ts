@@ -69,6 +69,7 @@ const BENCHMARK_VIZ_HTML = /* html */ `<!DOCTYPE html>
 <body>
 <div id="header">
   <div id="stats">
+    <span id="mode-badge" style="background:#333;padding:2px 8px;border-radius:3px;margin-right:12px;font-size:13px"></span>
     <span class="stat-total">Total: <b id="s-total">-</b></span>
     <span class="stat-running">Running: <b id="s-running">-</b></span>
     <span class="stat-completed">Completed: <b id="s-completed">-</b></span>
@@ -131,6 +132,17 @@ if (!params.has("after")) {
   throw new Error("Missing ?after= parameter");
 }
 const createdAfter = Number(params.get("after"));
+
+// ── Display mode badge ──
+{
+  const mode = params.get("mode") || "executor";
+  const bench = params.get("bench") || "simulated";
+  const count = params.get("count") || "?";
+  const badge = document.getElementById("mode-badge");
+  const isReal = bench === "real";
+  badge.style.background = isReal ? "#2a4" : "#555";
+  badge.textContent = Number(count).toLocaleString() + " × " + mode + " (" + bench + ")";
+}
 
 // ── Shard hash (matches server-side shardForWorkflow) ──
 const NUM_SHARDS = 100;

@@ -1,9 +1,13 @@
 import { v } from "convex/values";
 import { vResultValidator } from "@convex-dev/workpool";
-import { mutation, query } from "./_generated/server.js";
+import { internalMutation, mutation, query } from "./_generated/server.js";
+import { internal } from "./_generated/api.js";
 import type { Id } from "./_generated/dataModel.js";
 import { createLogger, DEFAULT_LOG_LEVEL } from "./logging.js";
 import type { FunctionHandle } from "convex/server";
+
+const WATCHDOG_INTERVAL_MS = 30_000; // check every 30s
+const WATCHDOG_STALE_MS = 60_000;    // task in queue >60s = shard is dead
 
 const taskResult = v.object({
   functionType: v.union(v.literal("query"), v.literal("mutation"), v.literal("action")),
@@ -180,10 +184,10 @@ export const startExecutors = mutation({
     let epoch: number;
     if (existing) {
       epoch = existing.epoch + 1;
-      await ctx.db.patch(existing._id, { epoch });
+      await ctx.db.patch(existing._id, { epoch, executorHandle, numShards, watchdogScheduled: true });
     } else {
       epoch = 1;
-      await ctx.db.insert("executorEpoch", { epoch });
+      await ctx.db.insert("executorEpoch", { epoch, executorHandle, numShards, watchdogScheduled: true });
     }
     for (let i = 0; i < numShards; i++) {
       await ctx.scheduler.runAfter(
@@ -192,6 +196,7 @@ export const startExecutors = mutation({
         { shard: i, epoch },
       );
     }
+    await ctx.scheduler.runAfter(WATCHDOG_INTERVAL_MS, internal.taskQueue.watchdog);
     return epoch;
   },
 });
@@ -208,7 +213,7 @@ export const bumpEpoch = mutation({
     let epoch: number;
     if (existing) {
       epoch = existing.epoch + 1;
-      await ctx.db.patch(existing._id, { epoch });
+      await ctx.db.patch(existing._id, { epoch, watchdogScheduled: false });
     } else {
       epoch = 1;
       await ctx.db.insert("executorEpoch", { epoch });
@@ -225,6 +230,55 @@ export const getExecutorEpoch = query({
       .query("executorEpoch")
       .first();
     return existing?.epoch ?? 0;
+  },
+});
+
+// Self-rescheduling watchdog that detects dead executor shards and reschedules them.
+// If a shard has tasks older than WATCHDOG_STALE_MS, the executor is likely dead.
+export const watchdog = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const console = createLogger(DEFAULT_LOG_LEVEL);
+    const config = await ctx.db.query("executorEpoch").first();
+    if (!config?.executorHandle || !config?.numShards || !config.watchdogScheduled) {
+      if (config && config.watchdogScheduled) {
+        await ctx.db.patch(config._id, { watchdogScheduled: false });
+      }
+      return null;
+    }
+    const { epoch, executorHandle, numShards } = config;
+    const now = Date.now();
+    let rescheduled = 0;
+
+    for (let shard = 0; shard < numShards; shard++) {
+      const oldest = await ctx.db
+        .query("taskQueue")
+        .withIndex("by_shard", (q) => q.eq("shard", shard))
+        .first();
+      if (oldest && now - oldest._creationTime > WATCHDOG_STALE_MS) {
+        await ctx.scheduler.runAfter(0, executorHandle as FunctionHandle<"action">, { shard, epoch });
+        rescheduled++;
+        continue; // skip replayQueue check — already rescheduling this shard
+      }
+
+      const oldestReplay = await ctx.db
+        .query("replayQueue")
+        .withIndex("by_shard", (q) => q.eq("shard", shard))
+        .first();
+      if (oldestReplay && now - oldestReplay._creationTime > WATCHDOG_STALE_MS) {
+        await ctx.scheduler.runAfter(0, executorHandle as FunctionHandle<"action">, { shard, epoch });
+        rescheduled++;
+      }
+    }
+
+    if (rescheduled > 0) {
+      console.warn(`watchdog: rescheduled ${rescheduled} dead shard(s)`);
+    }
+
+    // Reschedule self.
+    await ctx.scheduler.runAfter(WATCHDOG_INTERVAL_MS, internal.taskQueue.watchdog);
+    return null;
   },
 });
 

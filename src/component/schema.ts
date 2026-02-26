@@ -205,6 +205,9 @@ export default defineSchema({
   ]),
   executorEpoch: defineTable({
     epoch: v.number(),
+    executorHandle: v.optional(v.string()),
+    numShards: v.optional(v.number()),
+    watchdogScheduled: v.optional(v.boolean()),
   }),
   taskQueue: defineTable({
     shard: v.number(),

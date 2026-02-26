@@ -431,7 +431,7 @@ export const startBenchmark = internalMutation({
       await ctx.scheduler.runAfter(0, internal.benchmark.startExecutors, {});
     }
     const siteUrl = process.env.CONVEX_SITE_URL ?? process.env.CONVEX_CLOUD_URL?.replace(".convex.cloud", ".convex.site") ?? "";
-    const vizUrl = siteUrl + "/benchmark-viz?after=" + startedAt;
+    const vizUrl = siteUrl + "/benchmark-viz?after=" + startedAt + "&mode=" + mode + "&bench=" + benchmarkMode + "&count=" + count;
     return { startedAt, vizUrl };
   },
 });

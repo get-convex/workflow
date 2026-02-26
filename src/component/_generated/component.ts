@@ -294,25 +294,39 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         },
         Name
       >;
-      getExecutorEpoch: FunctionReference<
+      clearReplayQueue: FunctionReference<
+        "mutation",
+        "internal",
+        { shard: number; limit: number },
+        number,
+        Name
+      >;
+      clearTaskQueue: FunctionReference<
+        "mutation",
+        "internal",
+        { shard: number; limit: number },
+        number,
+        Name
+      >;
+      diagnoseStuck: FunctionReference<
         "query",
+        "internal",
+        { name: string; createdAfter: number; limit: number },
+        any,
+        Name
+      >;
+      bumpEpoch: FunctionReference<
+        "mutation",
         "internal",
         {},
         number,
         Name
       >;
-      getHandoff: FunctionReference<
+      getExecutorEpoch: FunctionReference<
         "query",
         "internal",
-        { shard: number },
-        { ready: boolean; yielded: boolean } | null,
-        Name
-      >;
-      handoff: FunctionReference<
-        "mutation",
-        "internal",
-        { action: "init" | "ready" | "yielded" | "clear"; shard: number },
-        null,
+        {},
+        number,
         Name
       >;
       recordResult: FunctionReference<
@@ -325,6 +339,34 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             | { error: string; kind: "failed" }
             | { kind: "canceled" };
           stepId: string;
+        },
+        null,
+        Name
+      >;
+      claimReplays: FunctionReference<
+        "query",
+        "internal",
+        { limit: number; shard: number },
+        Array<{
+          _id: string;
+          shard: number;
+          generationNumber: number;
+          workflowHandle: string;
+          workflowId: string;
+        }>,
+        Name
+      >;
+      processReplayBatch: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          entries: Array<{
+            _id: string;
+            shard: number;
+            generationNumber: number;
+            workflowHandle: string;
+            workflowId: string;
+          }>;
         },
         null,
         Name
@@ -343,24 +385,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
               | { kind: "canceled" };
             stepId: string;
           }>;
-          replayInline?: boolean;
-        },
-        Array<{
-          generationNumber: number;
-          workflowHandle: string;
-          workflowId: string;
-        }>,
-        Name
-      >;
-      replayBatchIfReady: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          candidates: Array<{
-            generationNumber: number;
-            workflowHandle: string;
-            workflowId: string;
-          }>;
+          shard: number;
         },
         null,
         Name
@@ -381,6 +406,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "internal",
         { executorHandle: string; numShards: number },
         number,
+        Name
+      >;
+      failPendingTasks: FunctionReference<
+        "mutation",
+        "internal",
+        { shard: number; limit: number },
+        { failed: number },
         Name
       >;
     };

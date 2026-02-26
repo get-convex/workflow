@@ -28,6 +28,8 @@ export const claimTasks = query({
   handler: async (ctx, { shard, limit }) => {
     // Read tasks without deleting — deletion happens in recordResultBatch
     // to ensure atomicity with step result recording.
+    // Ascending order: earlier workflows first → workflows created first
+    // finish before later ones start, improving time-to-first-completion.
     const tasks = await ctx.db
       .query("taskQueue")
       .withIndex("by_shard", (q) => q.eq("shard", shard))
@@ -572,6 +574,62 @@ export const clearTaskQueue = mutation({
       await ctx.db.delete(entry._id);
     }
     return entries.length;
+  },
+});
+
+// Fail all pending tasks in a shard: marks steps as failed, deletes task entries,
+// and triggers replay for affected workflows.
+export const failPendingTasks = mutation({
+  args: { shard: v.number(), limit: v.number() },
+  returns: v.object({ failed: v.number() }),
+  handler: async (ctx, { shard, limit }) => {
+    const console = createLogger(DEFAULT_LOG_LEVEL);
+    const tasks = await ctx.db
+      .query("taskQueue")
+      .withIndex("by_shard", (q) => q.eq("shard", shard))
+      .take(limit);
+
+    const replayCandidates = new Map<
+      string,
+      { workflowId: Id<"workflows">; workflowHandle: string; generationNumber: number }
+    >();
+
+    for (const task of tasks) {
+      // Mark step as failed.
+      const step = await ctx.db.get(task.stepId);
+      if (step && step.step.inProgress) {
+        step.step.inProgress = false;
+        step.step.completedAt = Date.now();
+        step.step.runResult = { kind: "failed", error: "Force-failed by failPendingTasks" };
+        await ctx.db.replace(step._id, step);
+      }
+
+      // Delete task queue entry.
+      await ctx.db.delete(task._id);
+
+      // Collect replay candidate.
+      const workflow = await ctx.db.get(task.workflowId);
+      if (workflow && !workflow.runResult) {
+        replayCandidates.set(task.workflowId, {
+          workflowId: task.workflowId,
+          workflowHandle: workflow.workflowHandle,
+          generationNumber: workflow.generationNumber,
+        });
+      }
+    }
+
+    // Insert durable replay entries for affected workflows.
+    for (const candidate of replayCandidates.values()) {
+      await ctx.db.insert("replayQueue", {
+        shard,
+        workflowId: candidate.workflowId,
+        generationNumber: candidate.generationNumber,
+        workflowHandle: candidate.workflowHandle,
+      });
+    }
+
+    console.info(`failPendingTasks shard=${shard}: failed ${tasks.length} tasks, ${replayCandidates.size} workflows need replay`);
+    return { failed: tasks.length };
   },
 });
 

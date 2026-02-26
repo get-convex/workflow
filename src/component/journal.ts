@@ -196,6 +196,7 @@ export const startSteps = mutation({
                 const shard = shardForWorkflow(workflow._id as string, workflow.executorShards);
                 await ctx.db.insert("taskQueue", {
                   shard,
+                  workflowCreatedAt: workflow._creationTime,
                   functionType: "query",
                   handle: step.handle,
                   args: step.args,
@@ -219,6 +220,7 @@ export const startSteps = mutation({
                 const shard = shardForWorkflow(workflow._id as string, workflow.executorShards);
                 await ctx.db.insert("taskQueue", {
                   shard,
+                  workflowCreatedAt: workflow._creationTime,
                   functionType: "mutation",
                   handle: step.handle,
                   args: step.args,
@@ -243,6 +245,7 @@ export const startSteps = mutation({
                 const shard = shardForWorkflow(workflow._id as string, workflow.executorShards);
                 await ctx.db.insert("taskQueue", {
                   shard,
+                  workflowCreatedAt: workflow._creationTime,
                   functionType: "action",
                   handle: stepArgs.batchActionName,
                   args: step.args,

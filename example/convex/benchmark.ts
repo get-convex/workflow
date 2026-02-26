@@ -454,6 +454,29 @@ export const stopExecutors = internalMutation({
   },
 });
 
+// Fail all pending tasks across all shards. Each shard's tasks get marked as
+// failed and replay entries inserted so workflows can complete.
+export const failAllPendingTasks = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const NUM_SHARDS = 100;
+    const BATCH_LIMIT = 500;
+    let totalFailed = 0;
+    for (let shard = 0; shard < NUM_SHARDS; shard++) {
+      let shardDone = false;
+      while (!shardDone) {
+        const result: { failed: number } = await ctx.runMutation(
+          components.workflow.taskQueue.failPendingTasks,
+          { shard, limit: BATCH_LIMIT },
+        );
+        totalFailed += result.failed;
+        if (result.failed < BATCH_LIMIT) shardDone = true;
+      }
+    }
+    console.log(`failAllPendingTasks: failed ${totalFailed} tasks across ${NUM_SHARDS} shards`);
+  },
+});
+
 // Cancel a batch of running workflows by name. Call repeatedly until running=0.
 export const cancelBatch = internalMutation({
   args: { name: v.string(), limit: v.number() },
@@ -798,6 +821,58 @@ export const diagnoseStuck = internalAction({
       isDone = page.isDone;
     }
     return { count: stuck.length, stuck };
+  },
+});
+
+// Priority analysis: check if earlier-created workflows complete before later ones.
+export const priorityAnalysis = internalAction({
+  args: {
+    name: v.string(),
+    createdAfter: v.number(),
+  },
+  handler: async (ctx, { name, createdAfter }) => {
+    // Paginate through all workflows, collect creation + completion times.
+    const data: Array<{ createdAt: number; completedAt: number }> = [];
+    let cursor: string | null = null;
+    let isDone = false;
+    while (!isDone) {
+      const page: any = await ctx.runQuery(
+        components.workflow.workflow.timelinePage,
+        { name, createdAfter, paginationOpts: { cursor, numItems: 200 } },
+      );
+      for (const wf of page.page) {
+        if (!wf.runResult) continue;
+        const lastStep = wf.steps[wf.steps.length - 1];
+        const completedAt = lastStep?.completedAt ?? 0;
+        if (completedAt) data.push({ createdAt: wf.createdAt, completedAt });
+      }
+      cursor = page.continueCursor;
+      isDone = page.isDone;
+    }
+
+    // Sort by creation time, split into deciles.
+    data.sort((a, b) => a.createdAt - b.createdAt);
+    const decileSize = Math.ceil(data.length / 10);
+    const deciles = [];
+    for (let i = 0; i < 10; i++) {
+      const slice = data.slice(i * decileSize, (i + 1) * decileSize);
+      if (slice.length === 0) continue;
+      const durations = slice.map(d => d.completedAt - d.createdAt);
+      const completedAts = slice.map(d => d.completedAt - createdAfter);
+      durations.sort((a, b) => a - b);
+      completedAts.sort((a, b) => a - b);
+      deciles.push({
+        decile: i,
+        count: slice.length,
+        createdRangeSec: `${((slice[0].createdAt - createdAfter) / 1000).toFixed(1)}-${((slice[slice.length - 1].createdAt - createdAfter) / 1000).toFixed(1)}`,
+        avgDurationSec: Math.round(durations.reduce((s, d) => s + d, 0) / durations.length / 1000),
+        medianDurationSec: Math.round(durations[Math.floor(durations.length / 2)] / 1000),
+        avgCompletedAtSec: Math.round(completedAts.reduce((s, d) => s + d, 0) / completedAts.length / 1000),
+        medianCompletedAtSec: Math.round(completedAts[Math.floor(completedAts.length / 2)] / 1000),
+      });
+    }
+
+    return { total: data.length, deciles };
   },
 });
 

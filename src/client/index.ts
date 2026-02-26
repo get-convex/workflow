@@ -196,7 +196,7 @@ export class WorkflowManager {
     const numShards = this.executorShards;
     const getExecutorRef = () => this.executorRef;
 
-    const CLAIM_LIMIT = 200;
+    const CLAIM_LIMIT = 50;
     const MAX_CONCURRENCY = 50;
     const POLL_BACKOFF_MS = 500;
     const POLL_BACKOFF_ACTIVE_MS = 100;
@@ -215,6 +215,7 @@ export class WorkflowManager {
       ) => {
         const { shard, epoch } = args;
         const startTime = Date.now();
+
         // Stagger restarts by shard index so at most 1 shard hands off at a time.
         const JITTER_WINDOW_MS = 60_000;
         const shardSlotMs = Math.floor((shard / numShards) * JITTER_WINDOW_MS);

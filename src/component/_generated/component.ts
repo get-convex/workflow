@@ -408,6 +408,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         number,
         Name
       >;
+      failPendingTasks: FunctionReference<
+        "mutation",
+        "internal",
+        { shard: number; limit: number },
+        { failed: number },
+        Name
+      >;
     };
     workflow: {
       cancel: FunctionReference<

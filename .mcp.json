@@ -4,7 +4,7 @@
       "type": "stdio",
       "command": "node",
       "args": [
-        "/Users/magicseth/Projects/claudemanager/release/mac-arm64/Hive.app/Contents/Resources/app.asar/dist/main/mcp-server.js"
+        "/Applications/Hive.app/Contents/Resources/app.asar/dist/main/mcp-server.js"
       ],
       "env": {
         "MCP_SOCKET_PATH": "/Users/magicseth/Library/Application Support/Hive/mcp.sock"

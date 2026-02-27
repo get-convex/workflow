@@ -490,6 +490,9 @@ export async function completeHandler(
   }
   // Write the workflow so the onComplete can observe the updated status.
   await ctx.db.replace(workflow._id, workflow);
+  // Replay queue entries are cleaned up lazily by processReplayBatch
+  // (checks workflow.runResult and skips/deletes). No eager cleanup needed,
+  // which avoids OCC conflicts with the executor's processReplayBatch.
   if (workflow.onComplete) {
     try {
       await ctx.runMutation(
@@ -548,6 +551,7 @@ export const cleanup = mutation({
       logger.debug("Deleting journal entry", journalEntry);
       await ctx.db.delete(journalEntry._id);
     }
+    // Replay queue entries are cleaned up lazily by processReplayBatch.
     return true;
   },
 });

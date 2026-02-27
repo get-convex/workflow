@@ -1,0 +1,36 @@
+Workflow benchmark results archive
+generated_at=2026-02-15 00:06:51 PST
+repo=/Users/magicseth/Projects/workflow
+branch=llm-simulation-demo
+commit=ad41795
+
+## files
+benchmark_results/workflow_benchmark_small_1000_2026-02-14.txt
+benchmark_results/workflow_benchmark_small_500_2026-02-14.txt
+benchmark_results/workflow_benchmark_small_50_2026-02-14.txt
+
+### benchmark_results/workflow_benchmark_small_1000_2026-02-14.txt
+=== workflow small benchmark ===
+section_count=1000
+
+### benchmark_results/workflow_benchmark_small_500_2026-02-14.txt
+=== workflow small benchmark ===
+section_count=500
+=== summary ===
+regular: status=completed elapsed_ms=303899 elapsed_s=307
+batched: status=completed elapsed_ms=39422 elapsed_s=42
+speedup=7.71x
+
+Note: persisted from completed terminal run output at 2026-02-14 23:12 local.
+
+### benchmark_results/workflow_benchmark_small_50_2026-02-14.txt
+=== workflow small benchmark ===
+section_count=50
+=== summary ===
+regular: status=completed elapsed_ms=30413 elapsed_s=31
+batched: status=completed elapsed_ms=36951 elapsed_s=38
+speedup=0.82x
+
+## notes
+- 1000-run artifact currently has header only; prior run was interrupted before summary was written.
+- No persisted soak results file was found in benchmark_results/; if needed we can rerun soak and append it here.

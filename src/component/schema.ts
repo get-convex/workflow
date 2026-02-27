@@ -205,9 +205,13 @@ export default defineSchema({
   ]),
   executorEpoch: defineTable({
     epoch: v.number(),
+    executorHandle: v.optional(v.string()),
+    numShards: v.optional(v.number()),
+    watchdogScheduled: v.optional(v.boolean()),
   }),
   taskQueue: defineTable({
     shard: v.number(),
+    workflowCreatedAt: v.number(),
     functionType: v.union(v.literal("query"), v.literal("mutation"), v.literal("action")),
     handle: v.string(),
     args: v.any(),
@@ -220,13 +224,16 @@ export default defineSchema({
       base: v.number(),
     })),
   })
-    .index("by_shard", ["shard"])
+    .index("by_shard", ["shard", "workflowCreatedAt"])
     .index("by_stepId", ["stepId"]),
-  executorHandoff: defineTable({
+  replayQueue: defineTable({
     shard: v.number(),
-    ready: v.boolean(),
-    yielded: v.boolean(),
-  }).index("by_shard", ["shard"]),
+    workflowId: v.id("workflows"),
+    generationNumber: v.number(),
+    workflowHandle: v.string(),
+  })
+    .index("by_shard", ["shard"])
+    .index("by_workflowId", ["workflowId"]),
   onCompleteFailures: defineTable(
     v.union(
       v.object({

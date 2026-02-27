@@ -1,10 +1,13 @@
 import { v } from "convex/values";
 import { vResultValidator } from "@convex-dev/workpool";
-import { mutation, query } from "./_generated/server.js";
-import { api } from "./_generated/api.js";
+import { internalMutation, mutation, query } from "./_generated/server.js";
+import { internal } from "./_generated/api.js";
 import type { Id } from "./_generated/dataModel.js";
 import { createLogger, DEFAULT_LOG_LEVEL } from "./logging.js";
 import type { FunctionHandle } from "convex/server";
+
+const WATCHDOG_INTERVAL_MS = 30_000; // check every 30s
+const WATCHDOG_STALE_MS = 60_000;    // task in queue >60s = shard is dead
 
 const taskResult = v.object({
   functionType: v.union(v.literal("query"), v.literal("mutation"), v.literal("action")),
@@ -29,6 +32,8 @@ export const claimTasks = query({
   handler: async (ctx, { shard, limit }) => {
     // Read tasks without deleting — deletion happens in recordResultBatch
     // to ensure atomicity with step result recording.
+    // Ascending order: earlier workflows first → workflows created first
+    // finish before later ones start, improving time-to-first-completion.
     const tasks = await ctx.db
       .query("taskQueue")
       .withIndex("by_shard", (q) => q.eq("shard", shard))
@@ -179,10 +184,10 @@ export const startExecutors = mutation({
     let epoch: number;
     if (existing) {
       epoch = existing.epoch + 1;
-      await ctx.db.patch(existing._id, { epoch });
+      await ctx.db.patch(existing._id, { epoch, executorHandle, numShards, watchdogScheduled: true });
     } else {
       epoch = 1;
-      await ctx.db.insert("executorEpoch", { epoch });
+      await ctx.db.insert("executorEpoch", { epoch, executorHandle, numShards, watchdogScheduled: true });
     }
     for (let i = 0; i < numShards; i++) {
       await ctx.scheduler.runAfter(
@@ -190,6 +195,28 @@ export const startExecutors = mutation({
         executorHandle as FunctionHandle<"action">,
         { shard: i, epoch },
       );
+    }
+    await ctx.scheduler.runAfter(WATCHDOG_INTERVAL_MS, internal.taskQueue.watchdog);
+    return epoch;
+  },
+});
+
+// Bump the executor epoch without starting new executors.
+// Running executors will see the stale epoch, drain in-flight tasks, and exit.
+export const bumpEpoch = mutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const existing = await ctx.db
+      .query("executorEpoch")
+      .first();
+    let epoch: number;
+    if (existing) {
+      epoch = existing.epoch + 1;
+      await ctx.db.patch(existing._id, { epoch, watchdogScheduled: false });
+    } else {
+      epoch = 1;
+      await ctx.db.insert("executorEpoch", { epoch });
     }
     return epoch;
   },
@@ -203,6 +230,66 @@ export const getExecutorEpoch = query({
       .query("executorEpoch")
       .first();
     return existing?.epoch ?? 0;
+  },
+});
+
+// Self-rescheduling watchdog that detects dead executor shards and reschedules them.
+// If a shard has tasks older than WATCHDOG_STALE_MS, the executor is likely dead.
+// Processes shards in batches to stay under Convex read limits (32k docs).
+export const watchdog = internalMutation({
+  args: { shardOffset: v.optional(v.number()) },
+  returns: v.null(),
+  handler: async (ctx, { shardOffset }) => {
+    const console = createLogger(DEFAULT_LOG_LEVEL);
+    const config = await ctx.db.query("executorEpoch").first();
+    if (!config?.executorHandle || !config?.numShards || !config.watchdogScheduled) {
+      if (config && config.watchdogScheduled) {
+        await ctx.db.patch(config._id, { watchdogScheduled: false });
+      }
+      return null;
+    }
+    const { epoch, executorHandle, numShards } = config;
+    const now = Date.now();
+    let rescheduled = 0;
+
+    // Process shards in batches of 25 to stay well under read limits.
+    const SHARDS_PER_TICK = 25;
+    const start = shardOffset ?? 0;
+    const end = Math.min(start + SHARDS_PER_TICK, numShards);
+
+    for (let shard = start; shard < end; shard++) {
+      const oldest = await ctx.db
+        .query("taskQueue")
+        .withIndex("by_shard", (q) => q.eq("shard", shard))
+        .first();
+      if (oldest && now - oldest._creationTime > WATCHDOG_STALE_MS) {
+        await ctx.scheduler.runAfter(0, executorHandle as FunctionHandle<"action">, { shard, epoch });
+        rescheduled++;
+        continue; // skip replayQueue check — already rescheduling this shard
+      }
+
+      const oldestReplay = await ctx.db
+        .query("replayQueue")
+        .withIndex("by_shard", (q) => q.eq("shard", shard))
+        .first();
+      if (oldestReplay && now - oldestReplay._creationTime > WATCHDOG_STALE_MS) {
+        await ctx.scheduler.runAfter(0, executorHandle as FunctionHandle<"action">, { shard, epoch });
+        rescheduled++;
+      }
+    }
+
+    if (rescheduled > 0) {
+      console.warn(`watchdog: rescheduled ${rescheduled} dead shard(s) (shards ${start}-${end - 1})`);
+    }
+
+    if (end < numShards) {
+      // More shards to check — continue immediately with next batch.
+      await ctx.scheduler.runAfter(0, internal.taskQueue.watchdog, { shardOffset: end });
+    } else {
+      // Full cycle done — wait before starting next sweep.
+      await ctx.scheduler.runAfter(WATCHDOG_INTERVAL_MS, internal.taskQueue.watchdog, { shardOffset: 0 });
+    }
+    return null;
   },
 });
 
@@ -223,10 +310,10 @@ export const recordResultBatch = mutation({
         flushCalledAt: v.optional(v.number()),
       }),
     ),
-    replayInline: v.optional(v.boolean()),
+    shard: v.number(),
   },
-  returns: v.array(replayCandidate),
-  handler: async (ctx, { items, replayInline }) => {
+  returns: v.null(),
+  handler: async (ctx, { items, shard }) => {
     const console = createLogger(DEFAULT_LOG_LEVEL);
     const candidates = new Map<
       string,
@@ -313,66 +400,58 @@ export const recordResultBatch = mutation({
       }
     }
 
-    // Durable safety net: schedule a delayed replayIfReady for each
-    // candidate. This is committed atomically with the result recording,
-    // so it survives executor crashes and hard timeouts. In the normal
-    // case inline replay handles it first and the scheduled call is a
-    // cheap no-op (checks runResult, returns early).
-    if (replayInline) {
-      for (const candidate of candidates.values()) {
-        await ctx.scheduler.runAfter(
-          10_000,
-          api.taskQueue.replayIfReady,
-          candidate,
+    // 1. Insert durable replay queue entry for each candidate (write-only,
+    //    no reads — cannot OCC with processReplayBatch).
+    const replayEntryIds = new Map<string, Id<"replayQueue">>();
+    for (const candidate of candidates.values()) {
+      const entryId = await ctx.db.insert("replayQueue", {
+        shard,
+        workflowId: candidate.workflowId,
+        generationNumber: candidate.generationNumber,
+        workflowHandle: candidate.workflowHandle,
+      });
+      replayEntryIds.set(candidate.workflowId, entryId);
+    }
+
+    // 2. Best-effort inline replay — fast path that eliminates a poll-cycle
+    //    round-trip. On success, delete the replay entry (same mutation, no
+    //    OCC risk). If this fails, the entry persists for processReplayBatch.
+    for (const candidate of candidates.values()) {
+      const { workflowId, generationNumber, workflowHandle } = candidate;
+      const workflow = await ctx.db.get(workflowId);
+      if (!workflow || workflow.runResult || workflow.generationNumber !== generationNumber) {
+        // Workflow already done — delete the replay entry.
+        const entryId = replayEntryIds.get(workflowId);
+        if (entryId) await ctx.db.delete(entryId);
+        continue;
+      }
+      const inProgress = await ctx.db
+        .query("steps")
+        .withIndex("inProgress", (q) =>
+          q.eq("step.inProgress", true).eq("workflowId", workflowId),
+        )
+        .first();
+      if (inProgress) continue; // Other steps running — keep replay entry.
+      try {
+        await ctx.runMutation(
+          workflowHandle as FunctionHandle<"mutation">,
+          { workflowId, generationNumber },
         );
+        // Replay succeeded — delete the replay entry.
+        const entryId = replayEntryIds.get(workflowId);
+        if (entryId) await ctx.db.delete(entryId);
+      } catch (e) {
+        const error = e instanceof Error ? e.message : `Unknown error: ${String(e)}`;
+        console.error(`Error running workflow ${workflowId}: ${error}`);
+        await ctx.db.patch(workflowId, {
+          runResult: { kind: "failed", error },
+        });
+        // Workflow marked failed — delete the replay entry.
+        const entryId = replayEntryIds.get(workflowId);
+        if (entryId) await ctx.db.delete(entryId);
       }
     }
-
-    // When replayInline is set, attempt replay within this same mutation.
-    // This eliminates OCC conflicts for the common case. Candidates where
-    // other steps are still in-progress are returned to the client so it
-    // can retry via replayBatchIfReady — this prevents the race where two
-    // concurrent batches each complete the "last" step but both skip replay
-    // because neither sees the other's commit (snapshot isolation).
-    if (replayInline) {
-      const unreplayed: Array<{ workflowId: Id<"workflows">; workflowHandle: string; generationNumber: number }> = [];
-      for (const candidate of candidates.values()) {
-        const { workflowId, generationNumber, workflowHandle } = candidate;
-        const workflow = await ctx.db.get(workflowId);
-        if (!workflow || workflow.runResult || workflow.generationNumber !== generationNumber) {
-          continue;
-        }
-        const inProgress = await ctx.db
-          .query("steps")
-          .withIndex("inProgress", (q) =>
-            q.eq("step.inProgress", true).eq("workflowId", workflowId),
-          )
-          .first();
-        if (inProgress) {
-          // Other steps still running in a concurrent batch — return to
-          // client for retry so the workflow isn't permanently stranded.
-          unreplayed.push(candidate);
-          continue;
-        }
-        try {
-          await ctx.runMutation(
-            workflowHandle as FunctionHandle<"mutation">,
-            { workflowId, generationNumber },
-          );
-        } catch (e) {
-          const error = e instanceof Error ? e.message : `Unknown error: ${String(e)}`;
-          console.error(`Error running workflow ${workflowId}: ${error}`);
-          await ctx.db.patch(workflowId, {
-            runResult: { kind: "failed", error },
-          });
-        }
-      }
-      return unreplayed;
-    }
-
-    // Return candidates — executor handles replay in a concurrent pipeline.
-    // No inProgress index reads here = minimal OCC surface.
-    return [...candidates.values()];
+    return null;
   },
 });
 
@@ -412,36 +491,85 @@ export const replayIfReady = mutation({
   },
 });
 
-// Batched replay: process multiple candidates in a single mutation call.
-// Reduces mutation count from N to 1, avoiding "too many concurrent commits".
-export const replayBatchIfReady = mutation({
-  args: { candidates: v.array(replayCandidate) },
+const replayEntry = v.object({
+  _id: v.id("replayQueue"),
+  shard: v.number(),
+  workflowId: v.id("workflows"),
+  generationNumber: v.number(),
+  workflowHandle: v.string(),
+});
+
+// Claim pending replays for a shard. Same pattern as claimTasks.
+export const claimReplays = query({
+  args: { shard: v.number(), limit: v.number() },
+  returns: v.array(replayEntry),
+  handler: async (ctx, { shard, limit }) => {
+    const entries = await ctx.db
+      .query("replayQueue")
+      .withIndex("by_shard", (q) => q.eq("shard", shard))
+      .take(limit);
+    return entries.map((e) => ({
+      _id: e._id,
+      shard: e.shard,
+      workflowId: e.workflowId,
+      generationNumber: e.generationNumber,
+      workflowHandle: e.workflowHandle,
+    }));
+  },
+});
+
+// Process replay queue entries. Deletes each entry by ID (no index scan)
+// so it cannot OCC with recordResultBatch's write-only inserts.
+// Re-inserts if steps are still in-progress.
+export const processReplayBatch = mutation({
+  args: { entries: v.array(replayEntry) },
   returns: v.null(),
-  handler: async (ctx, { candidates }) => {
+  handler: async (ctx, { entries }) => {
     const console = createLogger(DEFAULT_LOG_LEVEL);
-    for (const { workflowId, generationNumber, workflowHandle } of candidates) {
-      const workflow = await ctx.db.get(workflowId);
-      if (!workflow || workflow.runResult || workflow.generationNumber !== generationNumber) {
+    // Deduplicate by workflowId — keep only the first entry per workflow.
+    const seen = new Set<string>();
+    for (const entry of entries) {
+      // Delete this entry by ID (point read, no index scan).
+      const doc = await ctx.db.get(entry._id);
+      if (doc) await ctx.db.delete(entry._id);
+
+      // Skip duplicates — only process first entry per workflow.
+      if (seen.has(entry.workflowId)) continue;
+      seen.add(entry.workflowId);
+
+      // Check if replay still needed.
+      const workflow = await ctx.db.get(entry.workflowId);
+      if (!workflow || workflow.runResult || workflow.generationNumber !== entry.generationNumber) {
         continue;
       }
+
       const inProgress = await ctx.db
         .query("steps")
         .withIndex("inProgress", (q) =>
-          q.eq("step.inProgress", true).eq("workflowId", workflowId),
+          q.eq("step.inProgress", true).eq("workflowId", entry.workflowId),
         )
         .first();
       if (inProgress) {
+        // Steps still running — re-insert to try again later.
+        await ctx.db.insert("replayQueue", {
+          shard: entry.shard,
+          workflowId: entry.workflowId,
+          generationNumber: entry.generationNumber,
+          workflowHandle: entry.workflowHandle,
+        });
         continue;
       }
+
+      // Replay.
       try {
         await ctx.runMutation(
-          workflowHandle as FunctionHandle<"mutation">,
-          { workflowId, generationNumber },
+          entry.workflowHandle as FunctionHandle<"mutation">,
+          { workflowId: entry.workflowId, generationNumber: entry.generationNumber },
         );
       } catch (e) {
         const error = e instanceof Error ? e.message : `Unknown error: ${String(e)}`;
-        console.error(`Error running workflow ${workflowId}: ${error}`);
-        await ctx.db.patch(workflowId, {
+        console.error(`Error running workflow ${entry.workflowId}: ${error}`);
+        await ctx.db.patch(entry.workflowId, {
           runResult: { kind: "failed", error },
         });
       }
@@ -484,77 +612,150 @@ export const diagnose = query({
   },
 });
 
-export const handoff = mutation({
-  args: {
-    shard: v.number(),
-    action: v.union(
-      v.literal("init"),
-      v.literal("ready"),
-      v.literal("yielded"),
-      v.literal("clear"),
-    ),
-  },
-  returns: v.null(),
-  handler: async (ctx, { shard, action }) => {
-    const existing = await ctx.db
-      .query("executorHandoff")
+export const clearReplayQueue = mutation({
+  args: { shard: v.number(), limit: v.number() },
+  returns: v.number(),
+  handler: async (ctx, { shard, limit }) => {
+    const entries = await ctx.db
+      .query("replayQueue")
       .withIndex("by_shard", (q) => q.eq("shard", shard))
-      .unique();
-
-    switch (action) {
-      case "init": {
-        // Old executor creates the handoff doc (delete stale first).
-        if (existing) {
-          await ctx.db.delete(existing._id);
-        }
-        await ctx.db.insert("executorHandoff", {
-          shard,
-          ready: false,
-          yielded: false,
-        });
-        break;
-      }
-      case "ready": {
-        // New executor signals it's warmed up.
-        if (existing) {
-          await ctx.db.patch(existing._id, { ready: true });
-        }
-        break;
-      }
-      case "yielded": {
-        // Old executor confirms it has stopped claiming.
-        if (existing) {
-          await ctx.db.patch(existing._id, { yielded: true });
-        }
-        break;
-      }
-      case "clear": {
-        // New executor cleans up after handoff completes.
-        if (existing) {
-          await ctx.db.delete(existing._id);
-        }
-        break;
-      }
+      .take(limit);
+    for (const entry of entries) {
+      await ctx.db.delete(entry._id);
     }
-    return null;
+    return entries.length;
   },
 });
 
-export const getHandoff = query({
-  args: {
-    shard: v.number(),
-  },
-  returns: v.union(
-    v.object({ ready: v.boolean(), yielded: v.boolean() }),
-    v.null(),
-  ),
-  handler: async (ctx, { shard }) => {
-    const existing = await ctx.db
-      .query("executorHandoff")
+export const clearTaskQueue = mutation({
+  args: { shard: v.number(), limit: v.number() },
+  returns: v.number(),
+  handler: async (ctx, { shard, limit }) => {
+    const entries = await ctx.db
+      .query("taskQueue")
       .withIndex("by_shard", (q) => q.eq("shard", shard))
-      .unique();
-    if (!existing) return null;
-    return { ready: existing.ready, yielded: existing.yielded };
+      .take(limit);
+    for (const entry of entries) {
+      await ctx.db.delete(entry._id);
+    }
+    return entries.length;
+  },
+});
+
+// Fail all pending tasks in a shard: marks steps as failed, deletes task entries,
+// and triggers replay for affected workflows.
+export const failPendingTasks = mutation({
+  args: { shard: v.number(), limit: v.number() },
+  returns: v.object({ failed: v.number() }),
+  handler: async (ctx, { shard, limit }) => {
+    const console = createLogger(DEFAULT_LOG_LEVEL);
+    const tasks = await ctx.db
+      .query("taskQueue")
+      .withIndex("by_shard", (q) => q.eq("shard", shard))
+      .take(limit);
+
+    const replayCandidates = new Map<
+      string,
+      { workflowId: Id<"workflows">; workflowHandle: string; generationNumber: number }
+    >();
+
+    for (const task of tasks) {
+      // Mark step as failed.
+      const step = await ctx.db.get(task.stepId);
+      if (step && step.step.inProgress) {
+        step.step.inProgress = false;
+        step.step.completedAt = Date.now();
+        step.step.runResult = { kind: "failed", error: "Force-failed by failPendingTasks" };
+        await ctx.db.replace(step._id, step);
+      }
+
+      // Delete task queue entry.
+      await ctx.db.delete(task._id);
+
+      // Collect replay candidate.
+      const workflow = await ctx.db.get(task.workflowId);
+      if (workflow && !workflow.runResult) {
+        replayCandidates.set(task.workflowId, {
+          workflowId: task.workflowId,
+          workflowHandle: workflow.workflowHandle,
+          generationNumber: workflow.generationNumber,
+        });
+      }
+    }
+
+    // Insert durable replay entries for affected workflows.
+    for (const candidate of replayCandidates.values()) {
+      await ctx.db.insert("replayQueue", {
+        shard,
+        workflowId: candidate.workflowId,
+        generationNumber: candidate.generationNumber,
+        workflowHandle: candidate.workflowHandle,
+      });
+    }
+
+    console.info(`failPendingTasks shard=${shard}: failed ${tasks.length} tasks, ${replayCandidates.size} workflows need replay`);
+    return { failed: tasks.length };
+  },
+});
+
+export const diagnoseStuck = query({
+  args: {
+    name: v.string(),
+    createdAfter: v.number(),
+    limit: v.number(),
+  },
+  handler: async (ctx, { name, createdAfter, limit }) => {
+    const stuck: Array<{
+      id: string;
+      createdAt: number;
+      generationNumber: number;
+      steps: Array<{
+        id: string;
+        inProgress: boolean;
+        hasRunResult: boolean;
+        startedAt: number;
+        completedAt?: number;
+      }>;
+      tasksInQueue: number;
+    }> = [];
+
+    for await (const wf of ctx.db
+      .query("workflows")
+      .withIndex("name", (q) => q.eq("name", name))
+      .order("desc")) {
+      if (wf._creationTime < createdAfter) break;
+      if (wf.runResult) continue;
+      if (stuck.length >= limit) break;
+
+      const steps = await ctx.db
+        .query("steps")
+        .withIndex("workflow", (q) => q.eq("workflowId", wf._id))
+        .collect();
+
+      let tasksInQueue = 0;
+      for (const s of steps) {
+        const task = await ctx.db
+          .query("taskQueue")
+          .withIndex("by_stepId", (q) => q.eq("stepId", s._id))
+          .first();
+        if (task) tasksInQueue++;
+      }
+
+      stuck.push({
+        id: wf._id,
+        createdAt: wf._creationTime,
+        generationNumber: wf.generationNumber,
+        steps: steps.map((s) => ({
+          id: s._id,
+          inProgress: s.step.inProgress,
+          hasRunResult: !!s.step.runResult,
+          startedAt: s.step.startedAt,
+          completedAt: s.step.completedAt,
+        })),
+        tasksInQueue,
+      });
+    }
+    return { count: stuck.length, stuck };
   },
 });
 

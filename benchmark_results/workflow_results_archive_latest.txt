@@ -1,0 +1,40 @@
+Workflow benchmark results archive (latest)
+generated_at=2026-02-15 00:23:43 PST
+repo=/Users/magicseth/Projects/workflow
+branch=llm-simulation-demo
+commit=ad41795
+
+### benchmark_results/workflow_benchmark_small_50_2026-02-14.txt
+=== workflow small benchmark ===
+section_count=50
+=== summary ===
+regular: status=completed elapsed_ms=30413 elapsed_s=31
+batched: status=completed elapsed_ms=36951 elapsed_s=38
+speedup=0.82x
+
+### benchmark_results/workflow_benchmark_small_500_2026-02-14.txt
+=== workflow small benchmark ===
+section_count=500
+=== summary ===
+regular: status=completed elapsed_ms=303899 elapsed_s=307
+batched: status=completed elapsed_ms=39422 elapsed_s=42
+speedup=7.71x
+
+Note: persisted from completed terminal run output at 2026-02-14 23:12 local.
+
+### benchmark_results/workflow_benchmark_small_1000_2026-02-15_00-12-56_skipclear.txt
+=== workflow small benchmark ===
+section_count=1000
+=== summary ===
+regular: status=completed elapsed_ms=588035 elapsed_s=590
+batched: status=completed elapsed_ms=40433 elapsed_s=44
+speedup=14.54x
+
+### benchmark_results/workflow_benchmark_small_1000_2026-02-15_00-08-07.txt
+=== workflow small benchmark ===
+section_count=1000
+[CONVEX ?(llmSimulation:clearAll)] [ERROR] 'Simulation not found: j9712dprjeky0709w2098prf65816c0h'
+[CONVEX ?(llmSimulation:clearAll)] [ERROR] 'Simulation not found: j97507jy904tpv1erkkkzgt1yx8172qh'
+
+## note
+- Prefer the 1000 *skipclear* file for completed 1000 data; older 1000 non-skipclear artifacts were interrupted/hung.

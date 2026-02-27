@@ -235,10 +235,11 @@ export const getExecutorEpoch = query({
 
 // Self-rescheduling watchdog that detects dead executor shards and reschedules them.
 // If a shard has tasks older than WATCHDOG_STALE_MS, the executor is likely dead.
+// Processes shards in batches to stay under Convex read limits (32k docs).
 export const watchdog = internalMutation({
-  args: {},
+  args: { shardOffset: v.optional(v.number()) },
   returns: v.null(),
-  handler: async (ctx) => {
+  handler: async (ctx, { shardOffset }) => {
     const console = createLogger(DEFAULT_LOG_LEVEL);
     const config = await ctx.db.query("executorEpoch").first();
     if (!config?.executorHandle || !config?.numShards || !config.watchdogScheduled) {
@@ -251,7 +252,12 @@ export const watchdog = internalMutation({
     const now = Date.now();
     let rescheduled = 0;
 
-    for (let shard = 0; shard < numShards; shard++) {
+    // Process shards in batches of 25 to stay well under read limits.
+    const SHARDS_PER_TICK = 25;
+    const start = shardOffset ?? 0;
+    const end = Math.min(start + SHARDS_PER_TICK, numShards);
+
+    for (let shard = start; shard < end; shard++) {
       const oldest = await ctx.db
         .query("taskQueue")
         .withIndex("by_shard", (q) => q.eq("shard", shard))
@@ -273,11 +279,16 @@ export const watchdog = internalMutation({
     }
 
     if (rescheduled > 0) {
-      console.warn(`watchdog: rescheduled ${rescheduled} dead shard(s)`);
+      console.warn(`watchdog: rescheduled ${rescheduled} dead shard(s) (shards ${start}-${end - 1})`);
     }
 
-    // Reschedule self.
-    await ctx.scheduler.runAfter(WATCHDOG_INTERVAL_MS, internal.taskQueue.watchdog);
+    if (end < numShards) {
+      // More shards to check — continue immediately with next batch.
+      await ctx.scheduler.runAfter(0, internal.taskQueue.watchdog, { shardOffset: end });
+    } else {
+      // Full cycle done — wait before starting next sweep.
+      await ctx.scheduler.runAfter(WATCHDOG_INTERVAL_MS, internal.taskQueue.watchdog, { shardOffset: 0 });
+    }
     return null;
   },
 });

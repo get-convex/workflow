@@ -156,7 +156,9 @@ function shardForId(id) {
 let sortByShard = params.get("sort") === "shard";
 
 // ── State ──
-const WF_NAME = "benchmark:executorResearchWorkflow";
+const WF_NAME = params.get("mode") === "standard"
+  ? "benchmark:standardResearchWorkflow"
+  : "benchmark:executorResearchWorkflow";
 const ROW_H = 1;
 const LABEL_EVERY = 1000;
 let allWorkflows = [];

@@ -200,7 +200,7 @@ export class WorkflowManager {
     const MAX_CONCURRENCY = 50;
     const POLL_BACKOFF_MS = 500;
     const POLL_BACKOFF_ACTIVE_MS = 100;
-    const RESCHEDULE_MS = 5 * 60 * 1000; // 5 minutes
+    const RESCHEDULE_MS = 3 * 60 * 1000; // 3 minutes (leaves headroom under 10-min action timeout)
     const FLUSH_INTERVAL_MS = 100;
     const FLUSH_BATCH_SIZE = 50;
     const MAX_FLUSH_RETRIES = 5;
@@ -475,15 +475,15 @@ export class WorkflowManager {
         };
 
         // --- Schedule successor at startup ---
-        // No handshake protocol needed. The successor starts after
-        // RESCHEDULE_MS + jitter. Brief overlap is safe: claimTasks is
-        // read-only, recordResultBatch is idempotent. Both executors may
-        // process the same task, but only one recordResultBatch will win
-        // (the other is a no-op since the step is already complete).
+        // Schedule successor at RESCHEDULE_MS (no jitter) so it's already
+        // running before this executor stops claiming at RESCHEDULE_MS + jitter.
+        // Brief overlap is safe: claimTasks is read-only, recordResultBatch
+        // is idempotent. Both executors may process the same task, but only
+        // one recordResultBatch will win (the other is a no-op).
         const ref = getExecutorRef();
         if (ref && (await checkEpoch())) {
           await ctx.scheduler.runAfter(
-            RESCHEDULE_MS + jitterMs,
+            RESCHEDULE_MS,
             ref,
             { shard, epoch },
           );

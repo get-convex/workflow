@@ -1,5 +1,40 @@
 type GenerationState = { now: number; latest: boolean };
 
+type WorkflowEnvironment = {
+  math: typeof Math;
+  date: typeof Date;
+  console: Console;
+  fetch: typeof globalThis.fetch;
+  setTimeout: typeof globalThis.setTimeout;
+  setInterval: typeof globalThis.setInterval;
+};
+
+type AsyncLocalStorageLike<T> = {
+  run<R>(store: T, callback: () => R): R;
+  getStore(): T | undefined;
+};
+
+type AsyncLocalStorageConstructor = new <T>() => AsyncLocalStorageLike<T>;
+
+let workflowEnvironmentStorage: AsyncLocalStorageLike<WorkflowEnvironment> | undefined;
+let globalsPatched = false;
+
+function ensureWorkflowEnvironmentStorage() {
+  if (workflowEnvironmentStorage !== undefined) {
+    return;
+  }
+
+  const global = globalThis as {
+    AsyncLocalStorage?: AsyncLocalStorageConstructor;
+  };
+  if (global.AsyncLocalStorage === undefined) {
+    throw new Error(
+      "AsyncLocalStorage is not available in this runtime. Update convex-backend to a build with async_hooks support.",
+    );
+  }
+  workflowEnvironmentStorage = new global.AsyncLocalStorage<WorkflowEnvironment>();
+}
+
 // Simple hash function to convert a string to a 32-bit seed
 function hashString(str: string): number {
   let hash = 0;
@@ -82,41 +117,107 @@ export function createDeterministicDate(
   return DeterministicDate as typeof Date;
 }
 
-export function setupEnvironment(
+const unsupportedFetch: typeof globalThis.fetch = (
+  _input: RequestInfo | URL,
+  _init?: RequestInit,
+) => {
+  throw new Error(
+    `Fetch isn't currently supported within workflows. Perform the fetch within an action and call it with step.runAction().`,
+  );
+};
+
+const unsupportedSetTimeout = ((..._args: any[]) => {
+  throw new Error("setTimeout isn't supported within workflows yet");
+}) as unknown as typeof globalThis.setTimeout;
+
+const unsupportedSetInterval = ((..._args: any[]) => {
+  throw new Error("setInterval isn't supported within workflows yet");
+}) as unknown as typeof globalThis.setInterval;
+
+function defineWorkflowAwareGlobal<T>(
+  globalObject: Record<string, unknown>,
+  key: string,
+  getWorkflowValue: (environment: WorkflowEnvironment) => T,
+): void {
+  const descriptor = Object.getOwnPropertyDescriptor(globalObject, key);
+  if (descriptor?.configurable === false) {
+    return;
+  }
+
+  let outsideValue = globalObject[key] as T;
+  Object.defineProperty(globalObject, key, {
+    configurable: true,
+    enumerable: descriptor?.enumerable ?? true,
+    get() {
+      const environment = workflowEnvironmentStorage?.getStore();
+      if (environment !== undefined) {
+        return getWorkflowValue(environment);
+      }
+      return outsideValue;
+    },
+    set(value: T) {
+      outsideValue = value;
+    },
+  });
+}
+
+function createWorkflowEnvironment(
   getGenerationState: () => GenerationState,
   workflowId: string,
-): void {
+): WorkflowEnvironment {
   const global = globalThis as Record<string, unknown>;
-
-  // Patch Math with seeded random based on workflowId
-  global.Math = patchMath(global.Math as typeof Math, workflowId);
-
-  // Patch Date
-  const originalDate = global.Date as typeof Date;
-  global.Date = createDeterministicDate(originalDate, getGenerationState);
-
-  // Patch console
-  global.console = createConsole(global.console as Console, getGenerationState);
-
-  // Patch fetch
-  global.fetch = (_input: RequestInfo | URL, _init?: RequestInit) => {
-    throw new Error(
-      `Fetch isn't currently supported within workflows. Perform the fetch within an action and call it with step.runAction().`,
-    );
+  return {
+    math: patchMath(global.Math as typeof Math, workflowId),
+    date: createDeterministicDate(global.Date as typeof Date, getGenerationState),
+    console: createConsole(global.console as Console, getGenerationState),
+    fetch: unsupportedFetch,
+    setTimeout: unsupportedSetTimeout,
+    setInterval: unsupportedSetInterval,
   };
+}
 
-  // Remove non-deterministic globals
-  delete global.process;
-  delete global.Crypto;
-  delete global.crypto;
-  delete global.CryptoKey;
-  delete global.SubtleCrypto;
-  global.setTimeout = () => {
-    throw new Error("setTimeout isn't supported within workflows yet");
-  };
-  global.setInterval = () => {
-    throw new Error("setInterval isn't supported within workflows yet");
-  };
+export function setupEnvironment(): void {
+  if (globalsPatched) {
+    return;
+  }
+
+  ensureWorkflowEnvironmentStorage();
+
+  const global = globalThis as Record<string, unknown>;
+  defineWorkflowAwareGlobal(global, "Math", (environment) => environment.math);
+  defineWorkflowAwareGlobal(global, "Date", (environment) => environment.date);
+  defineWorkflowAwareGlobal(global, "console", (environment) => environment.console);
+  defineWorkflowAwareGlobal(global, "fetch", (environment) => environment.fetch);
+  defineWorkflowAwareGlobal(global, "setTimeout", (environment) => environment.setTimeout);
+  defineWorkflowAwareGlobal(global, "setInterval", (environment) => environment.setInterval);
+
+  const restrictedGlobals = [
+    "process",
+    "Crypto",
+    "crypto",
+    "CryptoKey",
+    "SubtleCrypto",
+  ];
+  for (const key of restrictedGlobals) {
+    defineWorkflowAwareGlobal(global, key, () => undefined);
+  }
+
+  globalsPatched = true;
+}
+
+export function runWithWorkflowEnvironment<T>(
+  getGenerationState: () => GenerationState,
+  workflowId: string,
+  run: () => T,
+): T {
+  setupEnvironment();
+  if (workflowEnvironmentStorage === undefined) {
+    throw new Error("AsyncLocalStorage is not initialized");
+  }
+  return workflowEnvironmentStorage.run(
+    createWorkflowEnvironment(getGenerationState, workflowId),
+    run,
+  );
 }
 
 function noop() {}

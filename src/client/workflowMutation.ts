@@ -15,7 +15,7 @@ import {
 } from "convex/values";
 import { createLogger } from "../component/logging.js";
 import { type JournalEntry } from "../component/schema.js";
-import { setupEnvironment } from "./environment.js";
+import { runWithWorkflowEnvironment } from "./environment.js";
 import type { WorkflowDefinition } from "./index.js";
 import { StepExecutor, type StepRequest, type WorkerResult } from "./step.js";
 import { createWorkflowCtx } from "./workflowContext.js";
@@ -128,8 +128,6 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         Date.now(),
         workpoolOptions,
       );
-      setupEnvironment(executor.getGenerationState.bind(executor), workflowId);
-
       const handlerWorker = async (): Promise<WorkerResult> => {
         let runResult: RunResult;
         try {
@@ -167,7 +165,11 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
       const executorWorker = async (): Promise<WorkerResult> => {
         return await executor.run();
       };
-      const result = await Promise.race([handlerWorker(), executorWorker()]);
+      const result = await runWithWorkflowEnvironment(
+        executor.getGenerationState.bind(executor),
+        workflowId,
+        () => Promise.race([handlerWorker(), executorWorker()]),
+      );
       switch (result.type) {
         case "handlerDone": {
           await ctx.runMutation(component.workflow.complete, {

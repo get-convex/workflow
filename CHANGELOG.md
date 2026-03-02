@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.5-alpha.1
+
+- Support the latest Workpool (0.4.0)
+
 ## 0.3.5-alpha.0
 
 - Uses getConvexSize instead of bespoke sizing logic (requires convex ^1.31.7)

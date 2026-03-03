@@ -1,6 +1,7 @@
 import {
   defineEvent,
   vWorkflowId,
+  WorkflowId,
   WorkflowManager,
 } from "@convex-dev/workflow";
 import { v } from "convex/values";
@@ -55,5 +56,27 @@ export const chooseProposal = internalMutation({
       value: { approved: true, choice: args.choice },
     });
     return true;
+  },
+});
+
+/**
+ * Test this from the CLI:
+ * ```sh
+ * npx convex run userConfirmation:startConfirmationWorkflow
+ * ```
+ * Copy the ID it returns, then run:
+ * ```sh
+ * npx convex run userConfirmation:chooseProposal '{workflowId:"...", choice:1}'
+ * ```
+ * Watch the logs from `npx convex dev` or `npx convex logs` to see progress.
+ */
+export const startConfirmationWorkflow = internalMutation({
+  args: { prompt: v.optional(v.string()) },
+  handler: async (ctx, args): Promise<WorkflowId> => {
+    return await workflow.start(
+      ctx,
+      internal.userConfirmation.confirmationWorkflow,
+      { prompt: args.prompt ?? "Generate a recipe for me" },
+    );
   },
 });

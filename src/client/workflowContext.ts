@@ -163,7 +163,7 @@ async function runFunction<
   sender: BaseChannel<StepRequest>,
   functionType: FunctionType,
   f: F,
-  args: unknown,
+  args: Record<string, unknown> | undefined,
   opts?: RunOptions & RetryOption,
 ): Promise<unknown> {
   const { name, retry, ...schedulerOptions } = opts ?? {};
@@ -173,7 +173,7 @@ async function runFunction<
       kind: "function",
       functionType,
       function: f,
-      args,
+      args: args ?? {},
     },
     retry,
     schedulerOptions,

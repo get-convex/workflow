@@ -12,16 +12,12 @@ import {
   type GenericDataModel,
   type GenericMutationCtx,
 } from "convex/server";
-import { convexToJson, type Value } from "convex/values";
-import {
-  type JournalEntry,
-  journalEntrySize,
-  type Step,
-  valueSize,
-} from "../component/schema.js";
+import { convexToJson, getConvexSize, type Value } from "convex/values";
+import { type JournalEntry, type Step } from "../component/schema.js";
 import type { WorkflowComponent } from "./types.js";
 import { MAX_JOURNAL_SIZE } from "../shared.js";
 import type { EventId, SchedulerOptions } from "../types.js";
+import { pick } from "convex-helpers";
 
 export type WorkerResult =
   | { type: "handlerDone"; runResult: RunResult }
@@ -34,7 +30,7 @@ export type StepRequest = {
         kind: "function";
         functionType: FunctionType;
         function: FunctionReference<FunctionType, FunctionVisibility>;
-        args: unknown;
+        args: Record<string, unknown>;
       }
     | {
         kind: "event";
@@ -43,7 +39,7 @@ export type StepRequest = {
     | {
         kind: "workflow";
         function: FunctionReference<"mutation", "internal">;
-        args: unknown;
+        args: Record<string, unknown>;
       };
   retry: RetryBehavior | boolean | undefined;
   schedulerOptions: SchedulerOptions;
@@ -66,7 +62,7 @@ export class StepExecutor {
     private workpoolOptions: WorkpoolOptions | undefined,
   ) {
     this.journalEntrySize = journalEntries.reduce(
-      (size, entry) => size + journalEntrySize(entry),
+      (size, entry) => size + getConvexSize(entry),
       0,
     );
 
@@ -126,14 +122,18 @@ export class StepExecutor {
         `Assertion failed: not blocked but have in-progress journal entry`,
       );
     }
-    const stepArgsJson = JSON.stringify(convexToJson(entry.step.args));
-    const messageArgsJson = JSON.stringify(
-      convexToJson(message.target.args as Value),
+    const stepJson = JSON.stringify(
+      convexToJson(pick(entry.step, ["name", "args", "kind"])),
     );
-    if (stepArgsJson !== messageArgsJson) {
-      throw new Error(
-        `Journal entry mismatch: ${entry.step.args} !== ${message.target.args}`,
-      );
+    const messageJson = JSON.stringify(
+      convexToJson({
+        name: message.name,
+        args: message.target.args as Value,
+        kind: message.target.kind,
+      }),
+    );
+    if (stepJson !== messageJson) {
+      throw new Error(`Journal entry mismatch: ${stepJson} !== ${messageJson}`);
     }
     if (entry.step.runResult === undefined) {
       throw new Error(
@@ -156,11 +156,12 @@ export class StepExecutor {
   async startSteps(messages: StepRequest[]): Promise<JournalEntry[]> {
     const steps = await Promise.all(
       messages.map(async (message) => {
+        const args = message.target.args ?? {};
         const commonFields = {
           inProgress: true,
           name: message.name,
-          args: message.target.args,
-          argsSize: valueSize(message.target.args as Value),
+          args,
+          argsSize: getConvexSize(args as Value),
           runResult: undefined,
           startedAt: this.now,
           completedAt: undefined,
@@ -203,7 +204,7 @@ export class StepExecutor {
       },
     )) as JournalEntry[];
     for (const entry of entries) {
-      this.journalEntrySize += journalEntrySize(entry);
+      this.journalEntrySize += getConvexSize(entry);
       if (this.journalEntrySize > MAX_JOURNAL_SIZE) {
         throw new Error(
           journalSizeError(this.journalEntrySize, this.workflowId) +

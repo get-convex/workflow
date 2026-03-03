@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.5-alpha.0
+
+- Uses getConvexSize instead of bespoke sizing logic (requires convex ^1.31.7)
+- Improves error messaging for journal entry mismatches
+
 ## 0.3.4
 
 - Adds `list` and `listByName` APIs (credit: dantman) to list workflows with

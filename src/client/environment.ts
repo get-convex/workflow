@@ -19,6 +19,14 @@ type AsyncLocalStorageConstructor = new <T>() => AsyncLocalStorageLike<T>;
 let workflowEnvironmentStorage: AsyncLocalStorageLike<WorkflowEnvironment> | undefined;
 let globalsPatched = false;
 
+// Capture original globals before any patching occurs so createWorkflowEnvironment
+// always wraps the true originals, even if called from within an active workflow context.
+const originalGlobals = {
+  Math: globalThis.Math,
+  Date: globalThis.Date,
+  console: globalThis.console,
+};
+
 function ensureWorkflowEnvironmentStorage() {
   if (workflowEnvironmentStorage !== undefined) {
     return;
@@ -165,11 +173,10 @@ function createWorkflowEnvironment(
   getGenerationState: () => GenerationState,
   workflowId: string,
 ): WorkflowEnvironment {
-  const global = globalThis as Record<string, unknown>;
   return {
-    math: patchMath(global.Math as typeof Math, workflowId),
-    date: createDeterministicDate(global.Date as typeof Date, getGenerationState),
-    console: createConsole(global.console as Console, getGenerationState),
+    math: patchMath(originalGlobals.Math, workflowId),
+    date: createDeterministicDate(originalGlobals.Date, getGenerationState),
+    console: createConsole(originalGlobals.console, getGenerationState),
     fetch: unsupportedFetch,
     setTimeout: unsupportedSetTimeout,
     setInterval: unsupportedSetInterval,

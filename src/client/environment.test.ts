@@ -8,6 +8,8 @@ import {
   runWithWorkflowEnvironment,
 } from "./environment.js";
 
+// The workflow environment expects AsyncLocalStorage on globalThis (as provided by
+// convex-backend's async_hooks runtime). Polyfill it here so tests run in Node.js.
 if (
   (globalThis as { AsyncLocalStorage?: typeof AsyncLocalStorage })
     .AsyncLocalStorage === undefined

@@ -1,9 +1,10 @@
 # Changelog
 
-## 0.3.5-alpha.0
+## 0.3.5
 
 - Uses getConvexSize instead of bespoke sizing logic (requires convex ^1.31.7)
 - Improves error messaging for journal entry mismatches
+- Supports the latest Workpool (peer dep semver - no code changes needed)
 
 ## 0.3.4
 

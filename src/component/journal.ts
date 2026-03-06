@@ -72,7 +72,7 @@ export const load = query({
 
 export const startSteps = mutation({
   args: {
-    workflowId: v.string(),
+    workflowId: v.id("workflows"),
     generationNumber: v.number(),
     steps: v.array(
       v.object({

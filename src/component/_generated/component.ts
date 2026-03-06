@@ -272,7 +272,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
       cleanup: FunctionReference<
         "mutation",
         "internal",
-        { workflowId: string },
+        { force?: boolean; workflowId: string },
         boolean,
         Name
       >;
@@ -484,6 +484,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           pageStatus?: "SplitRecommended" | "SplitRequired" | null;
           splitCursor?: string | null;
         },
+        Name
+      >;
+      retry: FunctionReference<
+        "mutation",
+        "internal",
+        { from?: number | string; startAsync?: boolean; workflowId: string },
+        null,
         Name
       >;
     };

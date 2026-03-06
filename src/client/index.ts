@@ -208,6 +208,44 @@ export class WorkflowManager {
   }
 
   /**
+   * Retry a previously-failed workflow, optionally from a specific step.
+   *
+   * @param ctx - The Convex context.
+   * @param workflowId - The workflow ID.
+   * @param options - Options for the retry.
+   * @param options.from - The step to retry from. Can be a step number,
+   *   a step name, or the function / workflow `internal.foo.bar`.
+   *   Steps from this point onwards will be deleted before restarting.
+   * @param options.startAsync - If true, the workflow will be enqueued
+   *   via the workpool instead of running immediately.
+   */
+  async retry(
+    ctx: RunMutationCtx,
+    workflowId: WorkflowId,
+    options?: {
+      from?: number | string | FunctionReference<any, any>;
+      startAsync?: boolean;
+    },
+  ): Promise<void> {
+    let from: number | string | undefined;
+    if (options?.from !== undefined) {
+      if (
+        typeof options.from === "number" ||
+        typeof options.from === "string"
+      ) {
+        from = options.from;
+      } else {
+        from = safeFunctionName(options.from);
+      }
+    }
+    await ctx.runMutation(this.component.workflow.retry, {
+      workflowId,
+      from,
+      startAsync: options?.startAsync,
+    });
+  }
+
+  /**
    * Cancel a running workflow.
    *
    * @param ctx - The Convex context.

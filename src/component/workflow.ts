@@ -217,6 +217,107 @@ export const listSteps = query({
   },
 });
 
+const retryArgs = v.object({
+  workflowId: v.id("workflows"),
+  from: v.optional(v.union(v.number(), v.string())),
+  startAsync: v.optional(v.boolean()),
+});
+
+export const retry = mutation({
+  args: retryArgs,
+  returns: v.null(),
+  handler: retryHandler,
+});
+
+export async function retryHandler(
+  ctx: MutationCtx,
+  args: Infer<typeof retryArgs>,
+) {
+  const workflow = await ctx.db.get(args.workflowId);
+  assert(workflow, `Workflow not found: ${args.workflowId}`);
+  const console = await getDefaultLogger(ctx);
+
+  if (!workflow.runResult) {
+    throw new Error(`Workflow is still running: ${args.workflowId}`);
+  }
+
+  // Delete steps from the specified point
+  if (args.from !== undefined) {
+    if (typeof args.from === "number") {
+      const stepsToDelete = await ctx.db
+        .query("steps")
+        .withIndex("workflow", (q) =>
+          q
+            .eq("workflowId", args.workflowId)
+            .gte("stepNumber", args.from as number),
+        )
+        .collect();
+      if (stepsToDelete.length === 0) {
+        throw new Error(
+          `Step number ${args.from} not found in workflow ${args.workflowId}`,
+        );
+      }
+      await deleteSteps(ctx, stepsToDelete);
+    } else {
+      // Walk backwards to find step by name, collecting steps to delete
+      const stepsDesc = ctx.db
+        .query("steps")
+        .withIndex("workflow", (q) => q.eq("workflowId", args.workflowId))
+        .order("desc");
+      let found = false;
+      const toDelete: Doc<"steps">[] = [];
+      for await (const step of stepsDesc) {
+        toDelete.push(step);
+        if (step.step.name === args.from) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        throw new Error(
+          `Step "${args.from}" not found in workflow ${args.workflowId}`,
+        );
+      }
+      await deleteSteps(ctx, toDelete);
+    }
+  }
+
+  // Increment generation number and clear result
+  const generationNumber = workflow.generationNumber + 1;
+  await ctx.db.patch(args.workflowId, {
+    generationNumber,
+    runResult: undefined,
+  });
+
+  console.event("retry", {
+    workflowId: args.workflowId,
+    name: workflow.name,
+    from: args.from,
+  });
+
+  if (args.startAsync) {
+    const workpool = await getWorkpool(ctx, {});
+    await workpool.enqueueMutation(
+      ctx,
+      workflow.workflowHandle as FunctionHandle<"mutation">,
+      { workflowId: args.workflowId, generationNumber },
+      {
+        name: workflow.name,
+        onComplete: internal.pool.handlerOnComplete,
+        context: { workflowId: args.workflowId, generationNumber },
+      },
+    );
+  } else {
+    await ctx.runMutation(
+      workflow.workflowHandle as FunctionHandle<"mutation">,
+      {
+        workflowId: args.workflowId,
+        generationNumber,
+      },
+    );
+  }
+}
+
 export const cancel = mutation({
   args: {
     workflowId: v.id("workflows"),
@@ -325,6 +426,7 @@ export async function completeHandler(
 export const cleanup = mutation({
   args: {
     workflowId: v.string(),
+    force: v.optional(v.boolean()),
   },
   returns: v.boolean(),
   handler: async (ctx, args) => {
@@ -339,10 +441,13 @@ export const cleanup = mutation({
     const logger = await getDefaultLogger(ctx);
     // TODO: allow cleaning up a workflow from inside it / in the onComplete hook
     if (!workflow.runResult) {
-      logger.debug(
-        `Can't clean up workflow ${workflowId} since it hasn't completed.`,
-      );
-      return false;
+      if (!args.force) {
+        logger.debug(
+          `Can't clean up workflow ${workflowId} since it hasn't completed.`,
+        );
+        return false;
+      }
+      logger.debug(`Workflow ${workflowId} is not completed, forcing anyways`);
     }
     logger.debug(`Cleaning up workflow ${workflowId}`, workflow);
     await ctx.db.delete(workflowId);
@@ -350,21 +455,7 @@ export const cleanup = mutation({
       .query("steps")
       .withIndex("workflow", (q) => q.eq("workflowId", workflowId))
       .collect();
-    for (const journalEntry of journalEntries) {
-      logger.debug("Deleting journal entry", journalEntry);
-      await ctx.db.delete(journalEntry._id);
-      if (journalEntry.step.kind === "event" && journalEntry.step.eventId) {
-        await ctx.db.delete(journalEntry.step.eventId);
-      } else if (
-        journalEntry.step.kind === "workflow" &&
-        journalEntry.step.workflowId
-      ) {
-        const workpool = await getWorkpool(ctx, {});
-        await workpool.enqueueMutation(ctx, api.workflow.cleanup, {
-          workflowId: journalEntry.step.workflowId,
-        });
-      }
-    }
+    await deleteSteps(ctx, journalEntries);
     return true;
   },
 });
@@ -382,6 +473,21 @@ async function updateMaxParallelism(
     }
   } else {
     await ctx.db.insert("config", { maxParallelism });
+  }
+}
+
+async function deleteSteps(ctx: MutationCtx, steps: Doc<"steps">[]) {
+  for (const entry of steps) {
+    await ctx.db.delete(entry._id);
+    if (entry.step.kind === "event" && entry.step.eventId) {
+      await ctx.db.delete(entry.step.eventId);
+    } else if (entry.step.kind === "workflow" && entry.step.workflowId) {
+      const workpool = await getWorkpool(ctx, {});
+      await workpool.enqueueMutation(ctx, api.workflow.cleanup, {
+        workflowId: entry.step.workflowId,
+        force: true,
+      });
+    }
   }
 }
 

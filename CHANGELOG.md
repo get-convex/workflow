@@ -1,10 +1,17 @@
 # Changelog
 
+## 0.3.6
+
+- Allow restarting a workflow from a given step with `workflow.restart`
+- Tightens the types to not allow passing `runAfter` and `runAt` at the same
+  time
+
 ## 0.3.5
 
 - Uses getConvexSize instead of bespoke sizing logic (requires convex ^1.31.7)
 - Improves error messaging for journal entry mismatches
 - Supports the latest Workpool (peer dep semver - no code changes needed)
+- Fix: cleans up nested workflows and events
 
 ## 0.3.4
 

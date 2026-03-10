@@ -44,8 +44,7 @@ export type StepRequest = {
   retry: RetryBehavior | boolean | undefined;
   schedulerOptions: SchedulerOptions;
 
-  resolve: (result: unknown) => void;
-  reject: (error: unknown) => void;
+  resolve: (result: RunResult) => void;
 };
 
 export class StepExecutor {
@@ -140,17 +139,7 @@ export class StepExecutor {
         `Assertion failed: no outcome for completed function call`,
       );
     }
-    switch (entry.step.runResult.kind) {
-      case "success":
-        message.resolve(entry.step.runResult.returnValue);
-        break;
-      case "failed":
-        message.reject(new Error(entry.step.runResult.error));
-        break;
-      case "canceled":
-        message.reject(new Error("Canceled"));
-        break;
-    }
+    message.resolve(entry.step.runResult);
   }
 
   async startSteps(messages: StepRequest[]): Promise<JournalEntry[]> {

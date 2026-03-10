@@ -184,14 +184,14 @@ async function run(
   sender: BaseChannel<StepRequest>,
   request: Omit<StepRequest, "resolve">,
 ): Promise<unknown> {
-  let send: unknown;
+  let send: Promise<void>;
   const p = new Promise<RunResult>((resolve) => {
     send = sender.push({
       ...request,
       resolve,
     });
   });
-  await send;
+  await send!;
   const result = await p;
   switch (result.kind) {
     case "success":

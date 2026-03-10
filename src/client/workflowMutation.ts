@@ -117,7 +117,9 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
       const channel = new BaseChannel<StepRequest>(
         workpoolOptions.maxParallelism ?? 10,
       );
-      const step = createWorkflowCtx(workflowId, channel);
+      const step = createWorkflowCtx(workflowId, channel, {
+        shareTransaction: registered.shareTransaction,
+      });
       const executor = new StepExecutor(
         workflowId,
         generationNumber,

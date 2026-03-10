@@ -88,6 +88,13 @@ export type WorkflowDefinition<
   ) => Promise<ReturnValueForOptionalValidator<ReturnsValidator>>;
   returns?: ReturnsValidator;
   workpoolOptions?: WorkpoolRetryOptions;
+  /**
+   * When true, queries and mutations called via `ctx.runQuery` / `ctx.runMutation`
+   * will run inline within the workflow's transaction by default, instead of
+   * being dispatched through the work pool. Individual calls can override
+   * this with `{ inline: true/false }` in their options.
+   */
+  shareTransaction?: boolean;
 };
 
 export type WorkflowStatus =

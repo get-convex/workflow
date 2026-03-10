@@ -20,6 +20,13 @@ export type RunOptions = {
    * it will use the function handle directly.
    */
   name?: string;
+  /**
+   * Run the query or mutation inline within the workflow's transaction,
+   * instead of dispatching it through the work pool.
+   * This avoids the round-trip overhead but means the function shares the
+   * workflow's transaction (reads and writes are part of the same commit).
+   */
+  inline?: boolean;
 } & SchedulerOptions;
 
 export type WorkflowCtx = {
@@ -110,19 +117,21 @@ export type OptionalRestArgs<
 export function createWorkflowCtx(
   workflowId: WorkflowId,
   sender: BaseChannel<StepRequest>,
+  options?: { shareTransaction?: boolean },
 ) {
+  const defaultInline = options?.shareTransaction ?? false;
   return {
     workflowId,
     runQuery: async (query, args, opts?) => {
-      return runFunction(sender, "query", query, args, opts);
+      return runFunction(sender, "query", query, args, opts, defaultInline);
     },
 
     runMutation: async (mutation, args, opts?) => {
-      return runFunction(sender, "mutation", mutation, args, opts);
+      return runFunction(sender, "mutation", mutation, args, opts, defaultInline);
     },
 
     runAction: async (action, args, opts?) => {
-      return runFunction(sender, "action", action, args, opts);
+      return runFunction(sender, "action", action, args, opts, false);
     },
 
     runWorkflow: async (workflow, args, opts?) => {
@@ -135,6 +144,7 @@ export function createWorkflowCtx(
           args,
         },
         retry: undefined,
+        inline: false,
         schedulerOptions,
       });
     },
@@ -147,6 +157,7 @@ export function createWorkflowCtx(
           args: { eventId: event.id },
         },
         retry: undefined,
+        inline: false,
         schedulerOptions: {},
       });
       if (event.validator) {
@@ -165,8 +176,9 @@ async function runFunction<
   f: F,
   args: Record<string, unknown> | undefined,
   opts?: RunOptions & RetryOption,
+  defaultInline?: boolean,
 ): Promise<unknown> {
-  const { name, retry, ...schedulerOptions } = opts ?? {};
+  const { name, retry, inline, ...schedulerOptions } = opts ?? {};
   return run(sender, {
     name: name ?? safeFunctionName(f),
     target: {
@@ -176,6 +188,7 @@ async function runFunction<
       args: args ?? {},
     },
     retry,
+    inline: inline ?? defaultInline ?? false,
     schedulerOptions,
   });
 }

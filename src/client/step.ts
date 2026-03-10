@@ -42,6 +42,7 @@ export type StepRequest = {
         args: Record<string, unknown>;
       };
   retry: RetryBehavior | boolean | undefined;
+  inline: boolean;
   schedulerOptions: SchedulerOptions;
 
   resolve: (result: RunResult) => void;
@@ -76,7 +77,6 @@ export class StepExecutor {
       // In the future we can correlate the calls to entries by handle, args,
       // etc. instead of just ordering. As is, the fn order can't change.
       const entry = this.journalEntries.shift();
-      // why not to run queries inline: they fetch too much data internally
       if (entry) {
         this.completeMessage(message, entry);
         continue;
@@ -87,7 +87,10 @@ export class StepExecutor {
         const message = await this.receiver.get();
         messages.push(message);
       }
-      const entries = await this.startSteps(messages);
+      // Only submit inline steps if all messages in the batch are inline.
+      // This ensures we only write journal entries when we have all responses.
+      const allInline = messages.every((m) => m.inline);
+      const entries = await this.startSteps(messages, allInline);
       if (entries.every((entry) => entry.step.runResult)) {
         for (let i = 0; i < entries.length; i++) {
           const entry = entries[i];
@@ -142,7 +145,10 @@ export class StepExecutor {
     message.resolve(entry.step.runResult);
   }
 
-  async startSteps(messages: StepRequest[]): Promise<JournalEntry[]> {
+  async startSteps(
+    messages: StepRequest[],
+    inline: boolean,
+  ): Promise<JournalEntry[]> {
     const steps = await Promise.all(
       messages.map(async (message) => {
         const args = message.target.args ?? {};
@@ -189,6 +195,7 @@ export class StepExecutor {
         workflowId: this.workflowId,
         generationNumber: this.generationNumber,
         steps,
+        inline,
         workpoolOptions: this.workpoolOptions,
       },
     )) as JournalEntry[];

@@ -24,7 +24,7 @@ Welcome to the world of Convex workflows.
 - Specify retry behavior on a per-step basis, along with a default policy.
 - Specify how many workflow steps can run in parallel to manage load.
 - Cancel long-running workflows.
-- Retry previously-failed workflows from a specific step.
+- Restart previously-failed workflows from a specific step.
 - Clean up workflows after they're done.
 
 ```ts
@@ -370,54 +370,51 @@ export const kickoffWorkflow = action({
 });
 ```
 
-### Retrying a failed workflow
+### Restart a failed workflow
 
 If you want to re-run a workflow from a specific point, you can do so with
-`workflow.retry(...)`.
-
-If a certain step failed, you can retry from that step onwards by providing the
-step number, name, or function reference (`internal.foo.bar` e.g.). Events are
-named after the event name or event ID if no name is given. You can get the step
-number by listing the steps and using the `stepNumber`.
+`workflow.restart(...)`. By default it will retry the handler using the existing
+history of steps.
 
 ```ts
-// Retry from a step number (0-indexed)
-await workflow.retry(ctx, workflowId, { from: 2 });
+// Re-executes the handler with the existing history of steps.
+// This is useful if you had a bug in the handler code itself.
+await workflow.restart(ctx, args.workflowId);
+```
 
-// Retry from a step by name
-await workflow.retry(ctx, workflowId, { from: "eventName" });
+If a certain step failed, you can restart from that step onwards by providing
+the step number, name, or function reference (`internal.foo.bar` e.g.). Events
+are named after the event name or event ID if no name is given. You can get the
+step number by listing the steps and using the `stepNumber`.
 
-// Retry from a step by function reference
-await workflow.retry(ctx, workflowId, {
+```ts
+// Restart from a step number (0-indexed)
+await workflow.restart(ctx, workflowId, { from: 2 });
+
+// Restart from a step by name
+await workflow.restart(ctx, workflowId, { from: "eventName" });
+
+// Restart from a step by function reference
+await workflow.restart(ctx, workflowId, {
   from: internal.example.myAction,
 });
 ```
 
-If a name or function reference is provided, it will be used to find the last
-step with that name or function reference, and delete all subsequent steps, so
-the workflow will start from that step when re-executing.
-
-If the failure was from the workflow handler itself and you don't want to drop
-any previous steps, you don't have to specify a step to retry from.
-
-```ts
-await workflow.retry(ctx, args.workflowId);
-```
-
-Like `workflow.start()`, you can pass `startAsync: true` to enqueue the retry
-via the workpool instead of running it immediately:
-
-```ts
-await workflow.retry(ctx, workflowId, { startAsync: true });
-```
+It will find the step by number, or the last step with the given name or
+function reference and delete all subsequent steps, so the workflow will start
+from that step when re-executing.
 
 By default it will execute the handler in the same transaction so any errors
 will be immediately visible. However, this means that on a handler error, the
 restart itself will also be rolled back and the workflow will be unchanged.
 
 If you want to retry the workflow in a separate transaction, you can do so by
-passing `startAsync: true`. This will enqueue the retry via the workpool instead
-of running it immediately.
+passing `startAsync: true`. This will enqueue the handler via the workpool to
+run asynchronously.
+
+```ts
+await workflow.restart(ctx, workflowId, { startAsync: true });
+```
 
 ### Cleaning up a workflow
 

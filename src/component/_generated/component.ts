@@ -486,7 +486,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         },
         Name
       >;
-      retry: FunctionReference<
+      restart: FunctionReference<
         "mutation",
         "internal",
         { from?: number | string; startAsync?: boolean; workflowId: string },

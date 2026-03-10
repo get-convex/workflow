@@ -208,7 +208,15 @@ export class WorkflowManager {
   }
 
   /**
-   * Retry a previously-failed workflow, optionally from a specific step.
+   * Restart a previously-failed workflow.
+   *
+   * By default it will retry the handler using the existing history of steps.
+   * To restart from the beginning, pass `{from: 0}`.
+   * To restart from a named step or event: `{from: "myName"}`.
+   * To restart from a function call: `{from: internal.foo.bar}`.
+   *
+   * If the function or name were called multiple times, it will restart from
+   * the last invocation.
    *
    * @param ctx - The Convex context.
    * @param workflowId - The workflow ID.
@@ -216,10 +224,12 @@ export class WorkflowManager {
    * @param options.from - The step to retry from. Can be a step number,
    *   a step name, or the function / workflow `internal.foo.bar`.
    *   Steps from this point onwards will be deleted before restarting.
+   *   If not provided, the handler will be re-executed using the existing
+   *   history of steps.
    * @param options.startAsync - If true, the workflow will be enqueued
    *   via the workpool instead of running immediately.
    */
-  async retry(
+  async restart(
     ctx: RunMutationCtx,
     workflowId: WorkflowId,
     options?: {
@@ -238,7 +248,7 @@ export class WorkflowManager {
         from = safeFunctionName(options.from);
       }
     }
-    await ctx.runMutation(this.component.workflow.retry, {
+    await ctx.runMutation(this.component.workflow.restart, {
       workflowId,
       from,
       startAsync: options?.startAsync,

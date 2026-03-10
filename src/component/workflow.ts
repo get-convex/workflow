@@ -217,21 +217,21 @@ export const listSteps = query({
   },
 });
 
-const retryArgs = v.object({
+const restartArgs = v.object({
   workflowId: v.id("workflows"),
   from: v.optional(v.union(v.number(), v.string())),
   startAsync: v.optional(v.boolean()),
 });
 
-export const retry = mutation({
-  args: retryArgs,
+export const restart = mutation({
+  args: restartArgs,
   returns: v.null(),
-  handler: retryHandler,
+  handler: restartHandler,
 });
 
-export async function retryHandler(
+export async function restartHandler(
   ctx: MutationCtx,
-  args: Infer<typeof retryArgs>,
+  args: Infer<typeof restartArgs>,
 ) {
   const workflow = await ctx.db.get(args.workflowId);
   assert(workflow, `Workflow not found: ${args.workflowId}`);

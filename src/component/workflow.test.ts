@@ -63,7 +63,7 @@ describe("workflow", () => {
     expect(before.workflow.generationNumber).toBe(0);
 
     // Retry
-    await t.mutation(api.workflow.retry, {
+    await t.mutation(api.workflow.restart, {
       workflowId: id,
       startAsync: true,
     });
@@ -81,7 +81,7 @@ describe("workflow", () => {
       startAsync: true,
     });
     await expect(
-      t.mutation(api.workflow.retry, { workflowId: id, startAsync: true }),
+      t.mutation(api.workflow.restart, { workflowId: id, startAsync: true }),
     ).rejects.toThrow("still running");
   });
 
@@ -122,7 +122,7 @@ describe("workflow", () => {
     });
 
     // Retry from step 1
-    await t.mutation(api.workflow.retry, {
+    await t.mutation(api.workflow.restart, {
       workflowId: id,
       from: 1,
       startAsync: true,
@@ -177,7 +177,7 @@ describe("workflow", () => {
     });
 
     // Retry from "process"
-    await t.mutation(api.workflow.retry, {
+    await t.mutation(api.workflow.restart, {
       workflowId: id,
       from: "process",
       startAsync: true,
@@ -208,7 +208,7 @@ describe("workflow", () => {
       runResult: { kind: "failed", error: "oops" },
     });
     await expect(
-      t.mutation(api.workflow.retry, {
+      t.mutation(api.workflow.restart, {
         workflowId: id,
         from: "nonexistent",
         startAsync: true,
@@ -230,7 +230,7 @@ describe("workflow", () => {
       runResult: { kind: "failed", error: "oops" },
     });
     await expect(
-      t.mutation(api.workflow.retry, {
+      t.mutation(api.workflow.restart, {
         workflowId: id,
         from: -1,
         startAsync: true,
@@ -277,7 +277,7 @@ describe("workflow", () => {
     });
 
     // Retry from step 0 — should delete the event too
-    await t.mutation(api.workflow.retry, {
+    await t.mutation(api.workflow.restart, {
       workflowId: id,
       from: 0,
       startAsync: true,

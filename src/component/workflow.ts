@@ -244,6 +244,9 @@ export async function retryHandler(
   // Delete steps from the specified point
   if (args.from !== undefined) {
     if (typeof args.from === "number") {
+      if (args.from < 0) {
+        throw new Error(`Step number cannot be negative: ${args.from}`);
+      }
       const stepsToDelete = await ctx.db
         .query("steps")
         .withIndex("workflow", (q) =>
@@ -253,7 +256,7 @@ export async function retryHandler(
         )
         .collect();
       if (stepsToDelete.length === 0) {
-        throw new Error(
+        console.warn(
           `Step number ${args.from} not found in workflow ${args.workflowId}`,
         );
       }

@@ -216,7 +216,7 @@ describe("workflow", () => {
     ).rejects.toThrow('Step "nonexistent" not found');
   });
 
-  test("retry from nonexistent step number throws", async () => {
+  test("retry from negative step number throws", async () => {
     const t = initConvexTest();
     const id = await t.mutation(api.workflow.create, {
       workflowName: "test",
@@ -232,10 +232,10 @@ describe("workflow", () => {
     await expect(
       t.mutation(api.workflow.retry, {
         workflowId: id,
-        from: 5,
+        from: -1,
         startAsync: true,
       }),
-    ).rejects.toThrow("Step number 5 not found");
+    ).rejects.toThrow("Step number cannot be negative: -1");
   });
 
   test("retry deletes associated event steps", async () => {

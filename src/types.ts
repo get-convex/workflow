@@ -91,6 +91,7 @@ export type SchedulerOptions =
        * Note: this is advisory only. It may run later.
        */
       runAt?: number;
+      runAfter?: never;
     }
   | {
       /**
@@ -99,6 +100,7 @@ export type SchedulerOptions =
        * Note: this is advisory only. It may run later.
        */
       runAfter?: number;
+      runAt?: never;
     };
 
 export type OnCompleteArgs = {

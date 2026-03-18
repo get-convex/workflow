@@ -148,7 +148,7 @@ export class StepExecutor {
         const args = message.target.args ?? {};
         const target = message.target;
 
-        // Run inline if shareTransaction is set, it's a query/mutation,
+        // Run inline if requested, it's a query/mutation,
         // and no scheduler options (runAt/runAfter) are specified.
         const canInline =
           message.inline &&

@@ -117,7 +117,6 @@ export type OptionalRestArgs<
 export function createWorkflowCtx(
   workflowId: WorkflowId,
   sender: BaseChannel<StepRequest>,
-  options?: { shareTransaction?: boolean },
 ) {
   return {
     workflowId,

@@ -86,6 +86,10 @@ export function setupEnvironment(
   getGenerationState: () => GenerationState,
   workflowId: string,
 ): void {
+  // If we're in a test, don't patch the global environment
+  if (process.env.VITEST === "true") {
+    return;
+  }
   const global = globalThis as Record<string, unknown>;
 
   // Patch Math with seeded random based on workflowId
@@ -119,7 +123,7 @@ export function setupEnvironment(
   };
 }
 
-function noop() {}
+function noop() { }
 
 // exported for testing
 export function createConsole(

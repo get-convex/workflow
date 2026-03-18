@@ -9,7 +9,8 @@ import { assert } from "convex-helpers";
 
 vi.useFakeTimers();
 
-describe("inline queries and mutations", () => {
+// TODO: When we have tests running without messing with globals, enable these
+describe.skip("inline queries and mutations", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });

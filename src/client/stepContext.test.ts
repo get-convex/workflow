@@ -38,7 +38,10 @@ function journalEntry(
     inProgress: false,
     argsSize: 10,
     args: overrides.args ?? {},
-    runResult: overrides.runResult ?? { kind: "success" as const, returnValue: "ok" },
+    runResult: overrides.runResult ?? {
+      kind: "success" as const,
+      returnValue: "ok",
+    },
     startedAt: 1000,
     completedAt: 2000,
   };
@@ -83,7 +86,9 @@ async function replayFromJournal(
     const message = await receiver.get();
     // Mirrors StepExecutor.completeMessage
     if (entry.step.runResult === undefined) {
-      throw new Error("Assertion failed: no outcome for completed function call");
+      throw new Error(
+        "Assertion failed: no outcome for completed function call",
+      );
     }
     message.resolve(entry.step.runResult);
   }
@@ -122,7 +127,7 @@ describe("StepExecutor + WorkflowCtx integration", () => {
     ]);
 
     expect(error).toBeInstanceOf(Error);
-    expect(error.message).toBe("something broke");
+    expect((error as Error).message).toBe("something broke");
   });
 
   it("throws on a canceled step", async () => {
@@ -140,7 +145,7 @@ describe("StepExecutor + WorkflowCtx integration", () => {
     ]);
 
     expect(error).toBeInstanceOf(Error);
-    expect(error.message).toBe("Canceled");
+    expect((error as Error).message).toBe("Canceled");
   });
 
   it("handles sequential steps", async () => {
@@ -279,7 +284,7 @@ describe("StepExecutor + WorkflowCtx integration", () => {
     ]);
 
     expect(error).toBeInstanceOf(Error);
-    expect(error.message).toBe("partial failure");
+    expect((error as Error).message).toBe("partial failure");
   });
 
   it("error is thrown from run(), not from completeMessage", async () => {
@@ -297,12 +302,12 @@ describe("StepExecutor + WorkflowCtx integration", () => {
     ]);
 
     expect(error).toBeInstanceOf(Error);
-    expect(error.message).toBe("validation error");
+    expect((error as Error).message).toBe("validation error");
     // The error should originate from run() in workflowContext, not from
     // completeMessage in step.ts — this is the key change that gives users
     // their code in the stack trace.
-    expect(error.stack).toContain("workflowContext");
-    expect(error.stack).not.toContain("completeMessage");
+    expect((error as Error).stack).toContain("workflowContext");
+    expect((error as Error).stack).not.toContain("completeMessage");
   });
 
   it("runMutation works the same as runAction", async () => {

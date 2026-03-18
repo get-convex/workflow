@@ -8,7 +8,7 @@ import {
   internalAction,
 } from "./_generated/server.js";
 
-const workflow = new WorkflowManager(components.workflow);
+export const workflow = new WorkflowManager(components.workflow);
 
 // ── Status helper ─────────────────────────────
 
@@ -69,27 +69,18 @@ export const slowAction = internalAction({
 export const sequentialInlineQueries = workflow.define({
   args: { key: v.string() },
   returns: v.object({ a: v.number(), b: v.number() }),
-  shareTransaction: true,
-  handler: async (step, args) => {
-    const a = await step.runQuery(internal.inlineTest.getCounter, {
-      key: args.key,
-    });
-    const b = await step.runQuery(internal.inlineTest.getCounter, {
-      key: args.key + "_other",
-    });
-    return { a, b };
-  },
-});
-
-export const startSequential = internalMutation({
-  args: { key: v.string() },
-  returns: vWorkflowId,
-  handler: async (ctx, args) => {
-    return await workflow.start(
-      ctx,
-      internal.inlineTest.sequentialInlineQueries,
-      args,
+  handler: async (step, args): Promise<{ a: number; b: number }> => {
+    const a = await step.runQuery(
+      internal.inlineTest.getCounter,
+      { key: args.key },
+      { inline: true },
     );
+    const b = await step.runQuery(
+      internal.inlineTest.getCounter,
+      { key: args.key + "_other" },
+      { inline: true },
+    );
+    return { a, b };
   },
 });
 
@@ -105,19 +96,27 @@ export const parallelInlineQueries = workflow.define({
     b: v.number(),
     resolveOrder: v.array(v.string()),
   }),
-  shareTransaction: true,
-  handler: async (step, args) => {
+  handler: async (
+    step,
+    args,
+  ): Promise<{ a: number; b: number; resolveOrder: string[] }> => {
     const resolveOrder: string[] = [];
     const aPromise = step
-      .runQuery(internal.inlineTest.getCounter, { key: args.key })
+      .runQuery(
+        internal.inlineTest.getCounter,
+        { key: args.key },
+        { inline: true },
+      )
       .then((val) => {
         resolveOrder.push("a");
         return val;
       });
     const bPromise = step
-      .runQuery(internal.inlineTest.getCounter, {
-        key: args.key + "_other",
-      })
+      .runQuery(
+        internal.inlineTest.getCounter,
+        { key: args.key + "_other" },
+        { inline: true },
+      )
       .then((val) => {
         resolveOrder.push("b");
         return val;
@@ -127,47 +126,28 @@ export const parallelInlineQueries = workflow.define({
   },
 });
 
-export const startParallel = internalMutation({
-  args: { key: v.string() },
-  returns: vWorkflowId,
-  handler: async (ctx, args) => {
-    return await workflow.start(
-      ctx,
-      internal.inlineTest.parallelInlineQueries,
-      args,
-    );
-  },
-});
-
 // ── Test 3: Promise.race between inline queries ──
 // Checks which promise resolves first.
 // Should be "a" in both first-run and replay paths.
 export const raceInlineQueries = workflow.define({
   args: { key: v.string() },
   returns: v.object({ winner: v.string(), value: v.number() }),
-  shareTransaction: true,
-  handler: async (step, args) => {
+  handler: async (step, args): Promise<{ winner: string; value: number }> => {
     const aPromise = step
-      .runQuery(internal.inlineTest.getCounter, { key: args.key })
+      .runQuery(
+        internal.inlineTest.getCounter,
+        { key: args.key },
+        { inline: true },
+      )
       .then((val) => ({ winner: "a", value: val }));
     const bPromise = step
-      .runQuery(internal.inlineTest.getCounter, {
-        key: args.key + "_other",
-      })
+      .runQuery(
+        internal.inlineTest.getCounter,
+        { key: args.key + "_other" },
+        { inline: true },
+      )
       .then((val) => ({ winner: "b", value: val }));
     return await Promise.race([aPromise, bPromise]);
-  },
-});
-
-export const startRace = internalMutation({
-  args: { key: v.string() },
-  returns: vWorkflowId,
-  handler: async (ctx, args) => {
-    return await workflow.start(
-      ctx,
-      internal.inlineTest.raceInlineQueries,
-      args,
-    );
   },
 });
 
@@ -176,72 +156,39 @@ export const startRace = internalMutation({
 export const inlineMutations = workflow.define({
   args: { key: v.string() },
   returns: v.object({ first: v.number(), second: v.number() }),
-  shareTransaction: true,
-  handler: async (step, args) => {
+  handler: async (step, args): Promise<{ first: number; second: number }> => {
     const first = await step.runMutation(
       internal.inlineTest.incrementCounter,
       { key: args.key },
+      { inline: true },
     );
     const second = await step.runMutation(
       internal.inlineTest.incrementCounter,
       { key: args.key },
+      { inline: true },
     );
     return { first, second };
   },
 });
 
-export const startMutations = internalMutation({
-  args: { key: v.string() },
-  returns: vWorkflowId,
-  handler: async (ctx, args) => {
-    return await workflow.start(
-      ctx,
-      internal.inlineTest.inlineMutations,
-      args,
-    );
-  },
-});
-
-// ── Test 5: Per-call inline override ──────────
-// No shareTransaction on workflow, but { inline: true } per-call.
-export const perCallInline = workflow.define({
-  args: { key: v.string() },
-  returns: v.number(),
-  handler: async (step, args) => {
-    return await step.runQuery(
-      internal.inlineTest.getCounter,
-      { key: args.key },
-      { inline: true },
-    );
-  },
-});
-
-export const startPerCall = internalMutation({
-  args: { key: v.string() },
-  returns: vWorkflowId,
-  handler: async (ctx, args) => {
-    return await workflow.start(
-      ctx,
-      internal.inlineTest.perCallInline,
-      args,
-    );
-  },
-});
-
 // ── Test 6: Mixed inline + action ─────────────
-// When batch has non-inline messages, allInline=false
-// so all go through workpool. Both still complete.
+// The query runs inline (shareTransaction), while the action goes through
+// workpool. Since not all steps complete inline, executor blocks.
 export const mixedInlineAndAction = workflow.define({
   args: { key: v.string() },
   returns: v.object({
     queryResult: v.number(),
     actionResult: v.string(),
   }),
-  shareTransaction: true,
-  handler: async (step, args) => {
-    const queryPromise = step.runQuery(internal.inlineTest.getCounter, {
-      key: args.key,
-    });
+  handler: async (
+    step,
+    args,
+  ): Promise<{ queryResult: number; actionResult: string }> => {
+    const queryPromise = step.runQuery(
+      internal.inlineTest.getCounter,
+      { key: args.key },
+      { inline: true },
+    );
     const actionPromise = step.runAction(internal.inlineTest.slowAction, {
       label: args.key,
     });
@@ -253,43 +200,22 @@ export const mixedInlineAndAction = workflow.define({
   },
 });
 
-export const startMixed = internalMutation({
-  args: { key: v.string() },
-  returns: vWorkflowId,
-  handler: async (ctx, args) => {
-    return await workflow.start(
-      ctx,
-      internal.inlineTest.mixedInlineAndAction,
-      args,
-    );
-  },
-});
-
 // ── Test 7: Dependent inline queries ──────────
 // Second query uses result of first.
 export const dependentInlineQueries = workflow.define({
   args: { key: v.string() },
   returns: v.object({ first: v.number(), second: v.number() }),
-  shareTransaction: true,
-  handler: async (step, args) => {
-    const first = await step.runQuery(internal.inlineTest.getCounter, {
-      key: args.key,
-    });
-    const second = await step.runQuery(internal.inlineTest.getCounter, {
-      key: first === 0 ? args.key + "_zero" : args.key + "_nonzero",
-    });
-    return { first, second };
-  },
-});
-
-export const startDependent = internalMutation({
-  args: { key: v.string() },
-  returns: vWorkflowId,
-  handler: async (ctx, args) => {
-    return await workflow.start(
-      ctx,
-      internal.inlineTest.dependentInlineQueries,
-      args,
+  handler: async (step, args): Promise<{ first: number; second: number }> => {
+    const first = await step.runQuery(
+      internal.inlineTest.getCounter,
+      { key: args.key },
+      { inline: true },
     );
+    const second = await step.runQuery(
+      internal.inlineTest.getCounter,
+      { key: first === 0 ? args.key + "_zero" : args.key + "_nonzero" },
+      { inline: true },
+    );
+    return { first, second };
   },
 });

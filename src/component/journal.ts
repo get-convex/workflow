@@ -18,7 +18,7 @@ import { internal } from "./_generated/api.js";
 import { createFunctionHandle, type FunctionHandle } from "convex/server";
 import { getDefaultLogger } from "./utils.js";
 import { assert } from "convex-helpers";
-import { MAX_JOURNAL_SIZE, formatErrorWithStack } from "../shared.js";
+import { MAX_JOURNAL_SIZE } from "../shared.js";
 import { awaitEvent } from "./event.js";
 import { createHandler } from "./workflow.js";
 
@@ -86,14 +86,10 @@ export const startSteps = mutation({
         ),
       }),
     ),
-    inline: v.optional(v.boolean()),
     workpoolOptions: v.optional(workpoolOptions),
   },
   returns: v.array(journalDocument),
   handler: async (ctx, args): Promise<JournalEntry[]> => {
-    if (!args.steps.every((step) => step.step.inProgress)) {
-      throw new Error(`Assertion failed: not in progress`);
-    }
     const { generationNumber } = args;
     const workflow = await getWorkflow(ctx, args.workflowId, generationNumber);
     const console = await getDefaultLogger(ctx);
@@ -158,41 +154,14 @@ export const startSteps = mutation({
             startAsync: true,
           });
           step.workflowId = workflowId;
-        } else if (
-          args.inline &&
-          (step.functionType === "query" || step.functionType === "mutation")
-        ) {
-          // Run inline within this transaction.
-          try {
-            const result =
-              step.functionType === "query"
-                ? await ctx.runQuery(
-                    step.handle as FunctionHandle<"query">,
-                    step.args,
-                  )
-                : await ctx.runMutation(
-                    step.handle as FunctionHandle<"mutation">,
-                    step.args,
-                  );
-            step.runResult = {
-              kind: "success",
-              returnValue: result ?? null,
-            };
-          } catch (error: unknown) {
-            step.runResult = {
-              kind: "failed",
-              error: formatErrorWithStack(error),
-            };
-          }
-          step.inProgress = false;
-          step.completedAt = Date.now();
+        } else if (step.runResult) {
+          // Already completed inline by the caller — nothing to enqueue.
           console.event("stepCompleted", {
             workflowId: entry.workflowId,
             workflowName: workflow.name,
             status: step.runResult.kind,
             stepName: step.name,
             stepNumber: stepNumber,
-            durationMs: step.completedAt - step.startedAt,
           });
         } else {
           const context: OnCompleteContext = {

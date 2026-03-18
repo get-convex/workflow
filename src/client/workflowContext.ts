@@ -21,7 +21,7 @@ export type RunOptions = {
    */
   name?: string;
   /**
-   * Run the query or mutation inline within the workflow's transaction,
+   * Run the query or mutation within the workflow's transaction,
    * instead of dispatching it through the work pool.
    * This avoids the round-trip overhead but means the function shares the
    * workflow's transaction (reads and writes are part of the same commit).
@@ -119,19 +119,18 @@ export function createWorkflowCtx(
   sender: BaseChannel<StepRequest>,
   options?: { shareTransaction?: boolean },
 ) {
-  const defaultInline = options?.shareTransaction ?? false;
   return {
     workflowId,
     runQuery: async (query, args, opts?) => {
-      return runFunction(sender, "query", query, args, opts, defaultInline);
+      return runFunction(sender, "query", query, args, opts);
     },
 
     runMutation: async (mutation, args, opts?) => {
-      return runFunction(sender, "mutation", mutation, args, opts, defaultInline);
+      return runFunction(sender, "mutation", mutation, args, opts);
     },
 
     runAction: async (action, args, opts?) => {
-      return runFunction(sender, "action", action, args, opts, false);
+      return runFunction(sender, "action", action, args, opts);
     },
 
     runWorkflow: async (workflow, args, opts?) => {
@@ -176,7 +175,6 @@ async function runFunction<
   f: F,
   args: Record<string, unknown> | undefined,
   opts?: RunOptions & RetryOption,
-  defaultInline?: boolean,
 ): Promise<unknown> {
   const { name, retry, inline, ...schedulerOptions } = opts ?? {};
   return run(sender, {
@@ -188,7 +186,7 @@ async function runFunction<
       args: args ?? {},
     },
     retry,
-    inline: inline ?? defaultInline ?? false,
+    inline: inline ?? false,
     schedulerOptions,
   });
 }

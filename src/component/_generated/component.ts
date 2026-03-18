@@ -142,7 +142,6 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "internal",
         {
           generationNumber: number;
-          inline?: boolean;
           steps: Array<{
             retry?:
               | boolean

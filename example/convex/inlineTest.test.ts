@@ -1,43 +1,52 @@
 /// <reference types="vite/client" />
 
-import { expect, describe, test, vi } from "vitest";
+import { expect, describe, test, vi, beforeEach, afterEach } from "vitest";
 import { initConvexTest } from "./setup.test";
 import { internal } from "./_generated/api";
-import { WorkflowManager } from "@convex-dev/workflow";
+import {} from "@convex-dev/workflow";
+import { workflow } from "./inlineTest";
+import { assert } from "convex-helpers";
+
+vi.useFakeTimers();
 
 describe("inline queries and mutations", () => {
-  test("sequential inline queries complete in one poll", async () => {
+  beforeEach(() => {
     vi.useFakeTimers();
-    const t = initConvexTest();
-    const workflowId = await t.mutation(
-      internal.inlineTest.startSequential,
-      { key: "seq_test" },
-    );
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.run(async (ctx) => {
-      const wf = await ctx.db.get(workflowId as any);
-      return wf?.runResult;
-    });
-    expect(status).toBeDefined();
-    expect(status?.kind).toBe("success");
-    expect(status?.returnValue).toEqual({ a: 0, b: 0 });
+  });
+  afterEach(() => {
     vi.useRealTimers();
   });
 
-  test("parallel inline queries resolve in push order", async () => {
-    vi.useFakeTimers();
+  test("sequential inline queries complete in one poll", async () => {
     const t = initConvexTest();
-    const workflowId = await t.mutation(
-      internal.inlineTest.startParallel,
-      { key: "par_test" },
+    const workflowId = await t.run((ctx) =>
+      workflow.start(ctx, internal.inlineTest.sequentialInlineQueries, {
+        key: "seq_test",
+      }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.run(async (ctx) => {
-      const wf = await ctx.db.get(workflowId as any);
-      return wf?.runResult;
+    const status = await t.query(internal.inlineTest.checkStatus, {
+      workflowId,
     });
-    expect(status?.kind).toBe("success");
-    const result = status?.returnValue as {
+    expect(status.type).toBe("completed");
+    assert(status.type === "completed");
+    expect(status.result).toEqual({ a: 0, b: 0 });
+  });
+
+  test("parallel inline queries resolve in push order", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.run((ctx) =>
+      workflow.start(ctx, internal.inlineTest.parallelInlineQueries, {
+        key: "par_test",
+      }),
+    );
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const status = await t.query(internal.inlineTest.checkStatus, {
+      workflowId,
+    });
+    expect(status.type).toBe("completed");
+    assert(status.type === "completed");
+    const result = status.result as {
       a: number;
       b: number;
       resolveOrder: string[];
@@ -45,98 +54,76 @@ describe("inline queries and mutations", () => {
     // 'a' was pushed first, so it should resolve first in both
     // first-run (batched inline) and replay paths
     expect(result.resolveOrder).toEqual(["a", "b"]);
-    vi.useRealTimers();
   });
 
   test("Promise.race picks first-pushed query", async () => {
-    vi.useFakeTimers();
     const t = initConvexTest();
-    const workflowId = await t.mutation(
-      internal.inlineTest.startRace,
-      { key: "race_test" },
+    const workflowId = await t.run((ctx) =>
+      workflow.start(ctx, internal.inlineTest.raceInlineQueries, {
+        key: "race_test",
+      }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.run(async (ctx) => {
-      const wf = await ctx.db.get(workflowId as any);
-      return wf?.runResult;
+    const status = await t.query(internal.inlineTest.checkStatus, {
+      workflowId,
     });
-    expect(status?.kind).toBe("success");
+    expect(status.type).toBe("completed");
     // 'a' was pushed to channel first → completeMessage called first
-    expect((status?.returnValue as any).winner).toBe("a");
-    vi.useRealTimers();
+    assert(status.type === "completed");
+    expect((status.result as any).winner).toBe("a");
   });
 
   test("inline mutations execute and return sequentially", async () => {
-    vi.useFakeTimers();
     const t = initConvexTest();
-    const workflowId = await t.mutation(
-      internal.inlineTest.startMutations,
-      { key: "mut_test" },
+    const workflowId = await t.run((ctx) =>
+      workflow.start(ctx, internal.inlineTest.inlineMutations, {
+        key: "mut_test",
+      }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.run(async (ctx) => {
-      const wf = await ctx.db.get(workflowId as any);
-      return wf?.runResult;
+    const status = await t.query(internal.inlineTest.checkStatus, {
+      workflowId,
     });
-    expect(status?.kind).toBe("success");
+    expect(status.type).toBe("completed");
+    assert(status.type === "completed");
     // Mutations run inline in sequence, incrementing a counter
-    expect(status?.returnValue).toEqual({ first: 1, second: 2 });
-    vi.useRealTimers();
+    expect(status.result).toEqual({ first: 1, second: 2 });
   });
 
-  test("per-call inline override works without shareTransaction", async () => {
-    vi.useFakeTimers();
+  test("mixed inline + action: query runs inline, action via workpool", async () => {
     const t = initConvexTest();
-    const workflowId = await t.mutation(
-      internal.inlineTest.startPerCall,
-      { key: "percall_test" },
+    const workflowId = await t.run((ctx) =>
+      workflow.start(ctx, internal.inlineTest.mixedInlineAndAction, {
+        key: "mixed_test",
+      }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.run(async (ctx) => {
-      const wf = await ctx.db.get(workflowId as any);
-      return wf?.runResult;
+    const status = await t.query(internal.inlineTest.checkStatus, {
+      workflowId,
     });
-    expect(status?.kind).toBe("success");
-    expect(status?.returnValue).toBe(0);
-    vi.useRealTimers();
-  });
-
-  test("mixed inline + action: all-or-nothing sends all to workpool", async () => {
-    vi.useFakeTimers();
-    const t = initConvexTest();
-    const workflowId = await t.mutation(
-      internal.inlineTest.startMixed,
-      { key: "mixed_test" },
-    );
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.run(async (ctx) => {
-      const wf = await ctx.db.get(workflowId as any);
-      return wf?.runResult;
-    });
-    expect(status?.kind).toBe("success");
-    const result = status?.returnValue as {
+    expect(status.type).toBe("completed");
+    assert(status.type === "completed");
+    const result = status.result as {
       queryResult: number;
       actionResult: string;
     };
     expect(result.queryResult).toBe(0);
     expect(result.actionResult).toBe("action:mixed_test");
-    vi.useRealTimers();
   });
 
   test("dependent inline queries: second uses result of first", async () => {
-    vi.useFakeTimers();
     const t = initConvexTest();
-    const workflowId = await t.mutation(
-      internal.inlineTest.startDependent,
-      { key: "dep_test" },
+    const workflowId = await t.run((ctx) =>
+      workflow.start(ctx, internal.inlineTest.dependentInlineQueries, {
+        key: "dep_test",
+      }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.run(async (ctx) => {
-      const wf = await ctx.db.get(workflowId as any);
-      return wf?.runResult;
+    const status = await t.query(internal.inlineTest.checkStatus, {
+      workflowId,
     });
-    expect(status?.kind).toBe("success");
-    expect(status?.returnValue).toEqual({ first: 0, second: 0 });
-    vi.useRealTimers();
+    expect(status.type).toBe("completed");
+    assert(status.type === "completed");
+    expect(status.result).toEqual({ first: 0, second: 0 });
   });
 });

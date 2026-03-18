@@ -15,7 +15,7 @@ import {
 import { convexToJson, getConvexSize, type Value } from "convex/values";
 import { type JournalEntry, type Step } from "../component/schema.js";
 import type { WorkflowComponent } from "./types.js";
-import { MAX_JOURNAL_SIZE } from "../shared.js";
+import { MAX_JOURNAL_SIZE, formatErrorWithStack } from "../shared.js";
 import type { EventId, SchedulerOptions } from "../types.js";
 import { pick } from "convex-helpers";
 
@@ -87,10 +87,7 @@ export class StepExecutor {
         const message = await this.receiver.get();
         messages.push(message);
       }
-      // Only submit inline steps if all messages in the batch are inline.
-      // This ensures we only write journal entries when we have all responses.
-      const allInline = messages.every((m) => m.inline);
-      const entries = await this.startSteps(messages, allInline);
+      const entries = await this.startSteps(messages);
       if (entries.every((entry) => entry.step.runResult)) {
         for (let i = 0; i < entries.length; i++) {
           const entry = entries[i];
@@ -145,23 +142,46 @@ export class StepExecutor {
     message.resolve(entry.step.runResult);
   }
 
-  async startSteps(
-    messages: StepRequest[],
-    inline: boolean,
-  ): Promise<JournalEntry[]> {
+  async startSteps(messages: StepRequest[]): Promise<JournalEntry[]> {
     const steps = await Promise.all(
       messages.map(async (message) => {
         const args = message.target.args ?? {};
+        const target = message.target;
+
+        // Run inline if shareTransaction is set, it's a query/mutation,
+        // and no scheduler options (runAt/runAfter) are specified.
+        const canInline =
+          message.inline &&
+          target.kind === "function" &&
+          (target.functionType === "query" ||
+            target.functionType === "mutation") &&
+          Object.keys(message.schedulerOptions).length === 0;
+
+        let runResult: RunResult | undefined;
+        if (canInline) {
+          try {
+            const result =
+              target.functionType === "query"
+                ? await this.ctx.runQuery(target.function as any, target.args)
+                : await this.ctx.runMutation(
+                    target.function as any,
+                    target.args,
+                  );
+            runResult = { kind: "success", returnValue: result ?? null };
+          } catch (error: unknown) {
+            runResult = { kind: "failed", error: formatErrorWithStack(error) };
+          }
+        }
+
         const commonFields = {
-          inProgress: true,
+          inProgress: !runResult,
           name: message.name,
           args,
           argsSize: getConvexSize(args as Value),
-          runResult: undefined,
+          runResult,
           startedAt: this.now,
-          completedAt: undefined,
+          completedAt: runResult ? this.now : undefined,
         } satisfies Omit<Step, "kind">;
-        const target = message.target;
         const step =
           target.kind === "function"
             ? {
@@ -195,7 +215,6 @@ export class StepExecutor {
         workflowId: this.workflowId,
         generationNumber: this.generationNumber,
         steps,
-        inline,
         workpoolOptions: this.workpoolOptions,
       },
     )) as JournalEntry[];

@@ -1,0 +1,341 @@
+import { describe, it, expect } from "vitest";
+import { BaseChannel } from "async-channel";
+import type { RunResult } from "@convex-dev/workpool";
+import type { StepRequest } from "./step.js";
+import type { JournalEntry } from "../component/schema.js";
+import { createWorkflowCtx } from "./workflowContext.js";
+
+// Fake function reference that satisfies the type constraints.
+function fakeFuncRef(name: string) {
+  return Object.assign(() => {}, {
+    _type: "function" as const,
+    _args: {} as Record<string, never>,
+    _returnType: undefined as unknown,
+    _visibility: "internal" as const,
+    [Symbol.for("functionName")]: name,
+  });
+}
+
+// Build a completed journal entry for replay.
+function journalEntry(
+  overrides: {
+    name?: string;
+    kind?: "function" | "workflow" | "event";
+    args?: Record<string, unknown>;
+    runResult?: RunResult;
+    stepNumber?: number;
+  } = {},
+): JournalEntry {
+  const kind = overrides.kind ?? "function";
+  const base = {
+    _id: `step-${Math.random().toString(36).slice(2)}`,
+    _creationTime: Date.now(),
+    workflowId: "wf-test" as any,
+    stepNumber: overrides.stepNumber ?? 0,
+  };
+  const stepCommon = {
+    name: overrides.name ?? "test",
+    inProgress: false,
+    argsSize: 10,
+    args: overrides.args ?? {},
+    runResult: overrides.runResult ?? { kind: "success" as const, returnValue: "ok" },
+    startedAt: 1000,
+    completedAt: 2000,
+  };
+  if (kind === "function") {
+    return {
+      ...base,
+      step: {
+        kind: "function",
+        functionType: "action",
+        handle: "handle",
+        ...stepCommon,
+      },
+    } as unknown as JournalEntry;
+  }
+  if (kind === "event") {
+    return {
+      ...base,
+      step: {
+        kind: "event",
+        ...stepCommon,
+        args: overrides.args ?? { eventId: undefined },
+      },
+    } as unknown as JournalEntry;
+  }
+  return {
+    ...base,
+    step: {
+      kind: "workflow",
+      handle: "handle",
+      ...stepCommon,
+    },
+  } as unknown as JournalEntry;
+}
+
+// Simulate the StepExecutor replay loop: read messages from the channel and
+// resolve them from the journal, without needing a real Convex ctx.
+async function replayFromJournal(
+  receiver: BaseChannel<StepRequest>,
+  entries: JournalEntry[],
+) {
+  for (const entry of entries) {
+    const message = await receiver.get();
+    // Mirrors StepExecutor.completeMessage
+    if (entry.step.runResult === undefined) {
+      throw new Error("Assertion failed: no outcome for completed function call");
+    }
+    message.resolve(entry.step.runResult);
+  }
+}
+
+describe("StepExecutor + WorkflowCtx integration", () => {
+  it("resolves a successful step", async () => {
+    const channel = new BaseChannel<StepRequest>(0);
+    const ctx = createWorkflowCtx("wf-1" as any, channel);
+
+    const entry = journalEntry({
+      name: "test",
+      runResult: { kind: "success", returnValue: 42 },
+    });
+
+    const [result] = await Promise.all([
+      ctx.runAction(fakeFuncRef("test") as any, {}),
+      replayFromJournal(channel, [entry]),
+    ]);
+
+    expect(result).toBe(42);
+  });
+
+  it("throws on a failed step and the error is catchable", async () => {
+    const channel = new BaseChannel<StepRequest>(0);
+    const ctx = createWorkflowCtx("wf-2" as any, channel);
+
+    const entry = journalEntry({
+      name: "test",
+      runResult: { kind: "failed", error: "something broke" },
+    });
+
+    const [error] = await Promise.all([
+      ctx.runAction(fakeFuncRef("test") as any, {}).catch((e: Error) => e),
+      replayFromJournal(channel, [entry]),
+    ]);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe("something broke");
+  });
+
+  it("throws on a canceled step", async () => {
+    const channel = new BaseChannel<StepRequest>(0);
+    const ctx = createWorkflowCtx("wf-3" as any, channel);
+
+    const entry = journalEntry({
+      name: "test",
+      runResult: { kind: "canceled" },
+    });
+
+    const [error] = await Promise.all([
+      ctx.runAction(fakeFuncRef("test") as any, {}).catch((e: Error) => e),
+      replayFromJournal(channel, [entry]),
+    ]);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe("Canceled");
+  });
+
+  it("handles sequential steps", async () => {
+    const channel = new BaseChannel<StepRequest>(0);
+    const ctx = createWorkflowCtx("wf-4" as any, channel);
+
+    const entries = [
+      journalEntry({
+        name: "step1",
+        args: { x: 1 },
+        runResult: { kind: "success", returnValue: "first" },
+        stepNumber: 0,
+      }),
+      journalEntry({
+        name: "step2",
+        args: { x: 2 },
+        runResult: { kind: "success", returnValue: "second" },
+        stepNumber: 1,
+      }),
+    ];
+
+    const handler = async () => {
+      const a = await ctx.runAction(fakeFuncRef("step1") as any, { x: 1 });
+      const b = await ctx.runAction(fakeFuncRef("step2") as any, { x: 2 });
+      return [a, b];
+    };
+
+    const [results] = await Promise.all([
+      handler(),
+      replayFromJournal(channel, entries),
+    ]);
+
+    expect(results).toEqual(["first", "second"]);
+  });
+
+  it("catches an error mid-workflow and continues", async () => {
+    const channel = new BaseChannel<StepRequest>(0);
+    const ctx = createWorkflowCtx("wf-5" as any, channel);
+
+    const entries = [
+      journalEntry({
+        name: "failing",
+        runResult: { kind: "failed", error: "boom" },
+        stepNumber: 0,
+      }),
+      journalEntry({
+        name: "recovery",
+        runResult: { kind: "success", returnValue: "recovered" },
+        stepNumber: 1,
+      }),
+    ];
+
+    const handler = async () => {
+      let caught: string | undefined;
+      try {
+        await ctx.runAction(fakeFuncRef("failing") as any, {});
+      } catch (e) {
+        caught = (e as Error).message;
+      }
+      const result = await ctx.runAction(fakeFuncRef("recovery") as any, {});
+      return { caught, result };
+    };
+
+    const [outcome] = await Promise.all([
+      handler(),
+      replayFromJournal(channel, entries),
+    ]);
+
+    expect(outcome.caught).toBe("boom");
+    expect(outcome.result).toBe("recovered");
+  });
+
+  it("handles parallel steps via Promise.all", async () => {
+    const channel = new BaseChannel<StepRequest>(0);
+    const ctx = createWorkflowCtx("wf-6" as any, channel);
+
+    const entries = [
+      journalEntry({
+        name: "a",
+        args: { v: "a" },
+        runResult: { kind: "success", returnValue: 1 },
+        stepNumber: 0,
+      }),
+      journalEntry({
+        name: "b",
+        args: { v: "b" },
+        runResult: { kind: "success", returnValue: 2 },
+        stepNumber: 1,
+      }),
+    ];
+
+    const handler = async () => {
+      return Promise.all([
+        ctx.runAction(fakeFuncRef("a") as any, { v: "a" }),
+        ctx.runAction(fakeFuncRef("b") as any, { v: "b" }),
+      ]);
+    };
+
+    const [results] = await Promise.all([
+      handler(),
+      replayFromJournal(channel, entries),
+    ]);
+
+    expect(results).toEqual([1, 2]);
+  });
+
+  it("one failure in Promise.all rejects the batch", async () => {
+    const channel = new BaseChannel<StepRequest>(0);
+    const ctx = createWorkflowCtx("wf-7" as any, channel);
+
+    const entries = [
+      journalEntry({
+        name: "ok",
+        args: { v: "ok" },
+        runResult: { kind: "success", returnValue: "fine" },
+        stepNumber: 0,
+      }),
+      journalEntry({
+        name: "bad",
+        args: { v: "bad" },
+        runResult: { kind: "failed", error: "partial failure" },
+        stepNumber: 1,
+      }),
+    ];
+
+    const handler = async () => {
+      return Promise.all([
+        ctx.runAction(fakeFuncRef("ok") as any, { v: "ok" }),
+        ctx.runAction(fakeFuncRef("bad") as any, { v: "bad" }),
+      ]);
+    };
+
+    const [error] = await Promise.all([
+      handler().catch((e: Error) => e),
+      replayFromJournal(channel, entries),
+    ]);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe("partial failure");
+  });
+
+  it("error is thrown from run(), not from completeMessage", async () => {
+    const channel = new BaseChannel<StepRequest>(0);
+    const ctx = createWorkflowCtx("wf-8" as any, channel);
+
+    const entry = journalEntry({
+      name: "test",
+      runResult: { kind: "failed", error: "validation error" },
+    });
+
+    const [error] = await Promise.all([
+      ctx.runAction(fakeFuncRef("test") as any, {}).catch((e: Error) => e),
+      replayFromJournal(channel, [entry]),
+    ]);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe("validation error");
+    // The error should originate from run() in workflowContext, not from
+    // completeMessage in step.ts — this is the key change that gives users
+    // their code in the stack trace.
+    expect(error.stack).toContain("workflowContext");
+    expect(error.stack).not.toContain("completeMessage");
+  });
+
+  it("runMutation works the same as runAction", async () => {
+    const channel = new BaseChannel<StepRequest>(0);
+    const ctx = createWorkflowCtx("wf-9" as any, channel);
+
+    const entry = journalEntry({
+      name: "mut",
+      runResult: { kind: "success", returnValue: "mutated" },
+    });
+
+    const [result] = await Promise.all([
+      ctx.runMutation(fakeFuncRef("mut") as any, {}),
+      replayFromJournal(channel, [entry]),
+    ]);
+
+    expect(result).toBe("mutated");
+  });
+
+  it("runQuery works the same as runAction", async () => {
+    const channel = new BaseChannel<StepRequest>(0);
+    const ctx = createWorkflowCtx("wf-10" as any, channel);
+
+    const entry = journalEntry({
+      name: "qry",
+      runResult: { kind: "success", returnValue: [1, 2, 3] },
+    });
+
+    const [result] = await Promise.all([
+      ctx.runQuery(fakeFuncRef("qry") as any, {}),
+      replayFromJournal(channel, [entry]),
+    ]);
+
+    expect(result).toEqual([1, 2, 3]);
+  });
+});

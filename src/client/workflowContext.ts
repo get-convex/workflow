@@ -1,4 +1,4 @@
-import type { RetryOption } from "@convex-dev/workpool";
+import type { RetryOption, RunResult } from "@convex-dev/workpool";
 import { BaseChannel } from "async-channel";
 import { parse } from "convex-helpers/validators";
 import type {
@@ -182,16 +182,25 @@ async function runFunction<
 
 async function run(
   sender: BaseChannel<StepRequest>,
-  request: Omit<StepRequest, "resolve" | "reject">,
+  request: Omit<StepRequest, "resolve">,
 ): Promise<unknown> {
-  let send: unknown;
-  const p = new Promise<unknown>((resolve, reject) => {
+  let send: Promise<void>;
+  const p = new Promise<RunResult>((resolve) => {
     send = sender.push({
       ...request,
       resolve,
-      reject,
     });
   });
-  await send;
-  return p;
+  await send!;
+  const result = await p;
+  switch (result.kind) {
+    case "success":
+      return result.returnValue;
+    case "failed":
+      throw new Error(result.error);
+    case "canceled":
+      throw new Error("Canceled");
+    default:
+      throw new Error("Unknown result kind: " + (result as any).kind);
+  }
 }

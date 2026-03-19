@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.7-alpha.0
+
+- Introduces { inline: true } for step.runQuery/runMutation, that skips using
+  the Workpool in favor of calling them from the workflow's handler directly.
+  This is more efficient, provided you're ok sharing the transaction limits with
+  surrounding steps/ loading the workflow history. This means that workId is no
+  longer guaranteed to be set for a function step
+- Improve exception stack traces to include handler code.
+- Updates the docs to use `step` instead of `ctx` (just a convention!)
+
 ## 0.3.6
 
 - Allow restarting a workflow from a given step with `workflow.restart`

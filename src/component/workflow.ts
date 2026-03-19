@@ -154,7 +154,7 @@ function publicStep(step: JournalEntry): WorkflowStep {
           }
         : {
             kind: "function",
-            workId: step.step.workId,
+            workId: step.step.workId!,
           }),
   } satisfies WorkflowStep;
 }

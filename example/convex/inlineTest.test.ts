@@ -3,11 +3,8 @@
 import { expect, describe, test, vi, beforeEach, afterEach } from "vitest";
 import { initConvexTest } from "./setup.test";
 import { internal } from "./_generated/api";
-import {} from "@convex-dev/workflow";
 import { workflow } from "./inlineTest";
 import { assert } from "convex-helpers";
-
-vi.useFakeTimers();
 
 // TODO: When we have tests running without messing with globals, enable these
 describe.skip("inline queries and mutations", () => {

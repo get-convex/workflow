@@ -148,14 +148,12 @@ export class StepExecutor {
         const args = message.target.args ?? {};
         const target = message.target;
 
-        // Run inline if requested, it's a query/mutation,
-        // and no scheduler options (runAt/runAfter) are specified.
+        // Run inline if requested and it's a query/mutation.
         const canInline =
           message.inline &&
           target.kind === "function" &&
           (target.functionType === "query" ||
-            target.functionType === "mutation") &&
-          Object.keys(message.schedulerOptions).length === 0;
+            target.functionType === "mutation");
 
         let runResult: RunResult | undefined;
         if (canInline) {

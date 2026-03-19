@@ -327,6 +327,38 @@ const workflow = new WorkflowManager(components.workflow, {
 });
 ```
 
+### Running queries and mutations inline
+
+By default, every `step.runQuery()` and `step.runMutation()` call is dispatched
+through the workpool, which run the function in an independently transaction.
+You can opt in to running a query or mutation **inline**, sharing the workflow's transaction by passing `{ inline: true }`:
+
+```ts
+export const myWorkflow = workflow.define({
+  args: { userId: v.id("users") },
+  handler: async (step, args): Promise<string> => {
+    const user = await step.runQuery(
+      internal.example.getUser,
+      { userId: args.userId },
+      { inline: true },
+    );
+    const updated = await step.runMutation(
+      internal.example.updateUser,
+      { userId: args.userId, name: user.name + "!" },
+      { inline: true },
+    );
+    return updated;
+  },
+});
+```
+
+Because inline functions share the workflow's transaction, their reads and
+writes count toward the same
+[transaction limits](https://docs.convex.dev/production/state/limits#transactions).
+If a step reads or writes a large amount of data, it's better to leave it
+running through the work pool (the default) so it gets its own transaction
+budget.
+
 ### Checking a workflow's status
 
 The `workflow.start()` method returns a `WorkflowId`, which can then be used for

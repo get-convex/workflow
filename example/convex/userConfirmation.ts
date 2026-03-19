@@ -21,15 +21,15 @@ const workflow = new WorkflowManager(components.workflow);
 export const confirmationWorkflow = workflow.define({
   args: { prompt: v.string() },
   returns: v.string(),
-  handler: async (ctx, args): Promise<string> => {
+  handler: async (step, args): Promise<string> => {
     console.log("Starting confirmation workflow");
-    const proposals = await ctx.runAction(
+    const proposals = await step.runAction(
       internal.userConfirmation.generateProposals,
       { prompt: args.prompt },
       { retry: true },
     );
     console.log("Proposals generated", proposals);
-    const approval = await ctx.awaitEvent(approvalEvent);
+    const approval = await step.awaitEvent(approvalEvent);
     if (!approval.approved) {
       return "rejected: " + approval.reason;
     }

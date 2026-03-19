@@ -119,6 +119,12 @@ export const startSteps = mutation({
         assert(entry, "Step not found");
         const step = entry.step;
         const { name } = step;
+        console.event("started", {
+          workflowId: workflow._id,
+          workflowName: workflow.name,
+          stepName: name,
+          stepNumber,
+        });
         if (step.kind === "event") {
           // Note: This modifies entry in place as well.
           entry = await awaitEvent(ctx, entry, {
@@ -203,12 +209,6 @@ export const startSteps = mutation({
         }
         await ctx.db.replace(entry._id, entry);
 
-        console.event("started", {
-          workflowId: workflow._id,
-          workflowName: workflow.name,
-          stepName: name,
-          stepNumber,
-        });
         return entry;
       }),
     );

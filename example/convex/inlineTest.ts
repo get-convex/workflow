@@ -60,6 +60,7 @@ export const slowAction = internalAction({
   args: { label: v.string() },
   returns: v.string(),
   handler: async (_ctx, { label }) => {
+    await new Promise((resolve) => setTimeout(resolve, 500));
     return `action:${label}`;
   },
 });

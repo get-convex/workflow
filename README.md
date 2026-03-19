@@ -37,17 +37,17 @@ export const userOnboarding = workflow.define({
   args: {
     userId: v.id("users"),
   },
-  handler: async (ctx, args): Promise<void> => {
-    const status = await ctx.runMutation(
+  handler: async (step, args): Promise<void> => {
+    const status = await step.runMutation(
       internal.emails.sendVerificationEmail,
       { storageId: args.storageId },
     );
 
     if (status === "needsVerification") {
       // Waits until verification is completed asynchronously.
-      await ctx.awaitEvent({ name: "verificationEmail" });
+      await step.awaitEvent({ name: "verificationEmail" });
     }
-    const result = await ctx.runAction(
+    const result = await step.runAction(
       internal.llm.generateCustomContent,
       { userId: args.userId },
       // Retry this on transient errors with the default retry policy.
@@ -55,12 +55,12 @@ export const userOnboarding = workflow.define({
     );
     if (result.needsHumanInput) {
       // Run a whole workflow as a single step.
-      await ctx.runWorkflow(internal.llm.refineContentWorkflow, {
+      await step.runWorkflow(internal.llm.refineContentWorkflow, {
         userId: args.userId,
       });
     }
 
-    await ctx.runMutation(
+    await step.runMutation(
       internal.emails.sendFollowUpEmailMaybe,
       { userId: args.userId },
       // Runs one day after the previous step.
@@ -497,7 +497,7 @@ export const exampleWorkflow = workflow.define({
 
 ### Waiting for external events
 
-Use `ctx.awaitEvent` inside a workflow handler to pause until an external event
+Use `step.awaitEvent` inside a workflow handler to pause until an external event
 is triggered. This is useful for human-in-the-loop flows or coordinating with
 other asynchronous flows. Wait for an indefinite amount of time and continue
 when the event is triggered.
@@ -505,7 +505,7 @@ when the event is triggered.
 At its simplest, you can wait for an event **by name**:
 
 ```ts
-await ctx.awaitEvent({ name: "eventName" });
+await step.awaitEvent({ name: "eventName" });
 ```
 
 This will wait for the first un-consumed event with the name "eventName", and
@@ -531,13 +531,13 @@ and runtime validation, provide a validator on the sending and receiving sides.
 const sharedValidator = v.number();
 
 // In the workflow:
-const event = await ctx.awaitEvent({ name, validator: sharedValidator });
+const event = await step.awaitEvent({ name, validator: sharedValidator });
 
 // From elsewhere:
 await workflow.sendEvent(ctx, { name, workflowId, value: 42 });
 ```
 
-To send an error, use the `error` property. This will cause `ctx.awaitEvent` to
+To send an error, use the `error` property. This will cause `step.awaitEvent` to
 throw an error.
 
 ```ts
@@ -556,7 +556,7 @@ const approvalEvent = defineEvent({
 });
 
 // In the workflow:
-const approval = await ctx.awaitEvent(approvalEvent);
+const approval = await step.awaitEvent(approvalEvent);
 
 // From a mutation:
 const value = { approved: true };
@@ -582,7 +582,7 @@ const eventId = await workflow.createEvent(ctx, {
 Then wait for it by ID in the workflow:
 
 ```ts
-await ctx.awaitEvent({ id: eventId });
+await step.awaitEvent({ id: eventId });
 ```
 
 This works well when there are dynamically defined events, for instance a tool
@@ -599,12 +599,12 @@ See [`example/convex/passingSignals.ts`](./example/convex/passingSignals.ts) for
 a complete example of creating events, passing their IDs around, and sending
 signals.
 
-### Running nested workflows with `ctx.runWorkflow`
+### Running nested workflows with `step.runWorkflow`
 
-Use `ctx.runWorkflow` to run another workflow as a single step in the current
+Use `step.runWorkflow` to run another workflow as a single step in the current
 one. The parent workflow waits for the nested workflow to finish and receives
 its return value:
-`const result = await ctx.runWorkflow(internal.example.childWorkflow, { args });`
+`const result = await step.runWorkflow(internal.example.childWorkflow, { args });`
 
 You can also specify scheduling options like `{ runAfter: 5000 }` to delay the
 nested workflow. See
@@ -612,7 +612,7 @@ nested workflow. See
 complete parent/child workflow example.
 
 To associate the child workflow with the parent in your own tables, you can pass
-the `ctx.workflowId` to the child workflow as an argument, and/or return the
+the `step.workflowId` to the child workflow as an argument, and/or return the
 child's workflowId to the parent.
 
 The status of the parent workflow will include any active child workflowIds.

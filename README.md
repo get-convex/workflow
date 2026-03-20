@@ -61,12 +61,12 @@ export const userOnboarding = workflow.define({
         currentResult: result,
       });
     }
-    const email = await step.runMutation(internal.emails.sendWelcomeEmail, {
-      userId: args.userId,
-      content: result.content,
+    const email = await step.runMutation(
+      internal.emails.sendWelcomeEmail,
+      { userId: args.userId, content: result.content, },
       // Optimization: run the mutation synchronously from this transaction.
-      { inline: true }
-    });
+      { inline: true },
+    );
 
     if (email.status === "needsVerification") {
       // Waits until verification is completed asynchronously.
@@ -152,7 +152,7 @@ Note: To help avoid type cycles, always annotate the return type of the
 
 ```ts
 export const exampleWorkflow = workflow.define({
-  args: { name: v.string() },
+  args: { exampleArg: v.string() },
   returns: v.string(),
   handler: async (step, args): Promise<string> => {
     //                         ^ Specify the return type of the handler
@@ -169,9 +169,9 @@ export const exampleWorkflow = workflow.define({
 });
 
 export const exampleQuery = internalQuery({
-  args: { name: v.string() },
+  args: { exampleArg: v.string() },
   handler: async (ctx, args) => {
-    return `The query says... Hi ${args.name}!`;
+    return `The query says... Hi ${args.exampleArg}!`;
   },
 });
 

@@ -119,13 +119,10 @@ export type WorkflowCtx = {
   ): Promise<T>;
 
   /**
-   * Sleep for the given duration.
-   *
-   * Schedules a no-op query in the future using the workpool. When the query
-   * completes, the workflow will be re-executed and continue past this step.
+   * Suspend execution for the given duration.
    *
    * @param duration - The number of milliseconds to sleep.
-   * @param opts - Options for naming the sleep step.
+   * @param opts - Optionally name the step. Default: "sleep"
    */
   sleep(duration: number, opts?: { name?: string }): Promise<void>;
 };
@@ -213,7 +210,10 @@ async function runFunction<
   opts?: RunOptions & RetryOption,
 ): Promise<unknown> {
   const { name, retry, inline, ...schedulerOptions } = opts ?? {};
-  if (inline && ("runAt" in schedulerOptions || "runAfter" in schedulerOptions)) {
+  if (
+    inline &&
+    ("runAt" in schedulerOptions || "runAfter" in schedulerOptions)
+  ) {
     throw new Error("Cannot combine `inline` with `runAt` or `runAfter`.");
   }
   return run(sender, {

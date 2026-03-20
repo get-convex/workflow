@@ -73,12 +73,17 @@ export const userOnboarding = workflow.define({
       await step.awaitEvent({ name: "emailHasBeenVerified" });
     }
 
+    // Wait 3 days before starting follow-ups.
+    const DAY = 24 * 60 * 60 * 1000;
+    await step.sleep(3 * DAY);
+
     for (let i = 0; i < 3; i++) {
+      const sendTime = await getNextBestEmailTime(step, args.userId);
       const status = await step.runMutation(
         internal.emails.sendFollowUpEmailMaybe,
         { userId: args.userId },
-        // Runs one day after the previous step.
-        { runAfter: 24 * 60 * 60 * 1000 },
+        // Waits until this time to run this step.
+        { runAt: sendTime },
       );
       if (!status.ok) break;
     }
@@ -271,6 +276,32 @@ Note: The workflow will not proceed until all steps fired off at once have
 completed. Note: if you are starting many tasks at once, it will only start the
 first 10 (or maxParallelism) at once, to prevent one workflow from starving
 others. It will start the next batch when all 10 have finished.
+
+### Sleeping and running steps after a delay
+
+Use `step.sleep` to pause a workflow for a given duration in milliseconds. The
+workflow consumes no resources while sleeping.
+
+```ts
+// Wait one day before continuing
+await step.sleep(24 * 60 * 60 * 1000);
+```
+
+Tip: You can name the sleep step for clarity with a second `{ name }` argument.
+
+If you want to defer a specific step, you can use
+`runAfter` or `runAt` as scheduling options on any step. This delays that
+particular step's execution:
+
+```ts
+// Run this action 10 seconds from now.
+await step.runAction(internal.example.myAction, args, { runAfter: 10_000 });
+```
+
+This is roughly equivalent to doing a sleep first, with the difference being
+that the "myAction" step is considered "in progress" while it is waiting, and
+it only enqueues one item into the Workpool (myAction@delay), instead of two
+(sleep@delay, myAction@now).
 
 ### Specifying retry behavior
 
@@ -538,7 +569,7 @@ restarting from a given step to be more clear. By default it uses the
 
 Note: The workflow will fail if the name of the function changes between when
 the workflow is started and when it is resumed after some step (potentially much
-later if it waited on an event or had a long `runAfter` delay).
+later if it waited on an event or a `sleep`).
 
 ```ts
 export const exampleWorkflow = workflow.define({

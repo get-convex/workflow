@@ -48,6 +48,8 @@ export const exampleWorkflow = workflow.define({
       `Weather in ${name}: ${temp}, ${windSpeed} km/h, ${windGust} km/h`,
     );
     console.timeLog("weather", temperature);
+    // Wait a beat before writing the result.
+    await step.sleep(100, { name: "cooldown" });
     await step.runMutation(internal.example.updateFlow, {
       workflowId: step.workflowId,
       out: { name, celsius, farenheit, windSpeed, windGust },

@@ -117,6 +117,17 @@ export type WorkflowCtx = {
       validator?: Validator<T, any, any>;
     },
   ): Promise<T>;
+
+  /**
+   * Sleep for the given duration.
+   *
+   * Schedules a no-op query in the future using the workpool. When the query
+   * completes, the workflow will be re-executed and continue past this step.
+   *
+   * @param duration - The number of milliseconds to sleep.
+   * @param opts - Options for naming the sleep step.
+   */
+  sleep(duration: number, opts?: { name?: string }): Promise<void>;
 };
 
 export type OptionalRestArgs<
@@ -157,6 +168,19 @@ export function createWorkflowCtx(
         retry: undefined,
         inline: false,
         schedulerOptions,
+      });
+    },
+
+    sleep: async (duration, opts?) => {
+      await run(sender, {
+        name: opts?.name ?? "sleep",
+        target: {
+          kind: "sleep",
+          args: {},
+        },
+        retry: undefined,
+        inline: false,
+        schedulerOptions: { runAfter: duration },
       });
     },
 

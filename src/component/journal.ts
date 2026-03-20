@@ -169,6 +169,18 @@ export const startSteps = mutation({
             stepName: step.name,
             stepNumber: stepNumber,
           });
+        } else if (step.kind === "sleep") {
+          const context: OnCompleteContext = {
+            generationNumber,
+            stepId,
+            workpoolOptions: args.workpoolOptions,
+          };
+          step.workId = await workpool.enqueueQuery(
+            ctx,
+            internal.workflow.sleep,
+            {},
+            { context, onComplete, name, ...schedulerOptions },
+          );
         } else {
           const context: OnCompleteContext = {
             generationNumber,

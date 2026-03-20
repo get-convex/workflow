@@ -62,6 +62,11 @@ export const step = v.union(
     eventId: v.optional(v.id("events")),
     args: v.object({ eventId: v.optional(v.id("events")) }),
   }),
+  v.object({
+    kind: v.literal("sleep"),
+    workId: v.optional(vWorkIdValidator),
+    ...stepCommonFields,
+  }),
 );
 export type Step = Infer<typeof step>;
 

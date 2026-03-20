@@ -6,7 +6,12 @@ import {
   type PaginationResult,
 } from "convex/server";
 import { type Infer, v } from "convex/values";
-import { mutation, type MutationCtx, query } from "./_generated/server.js";
+import {
+  internalQuery,
+  mutation,
+  type MutationCtx,
+  query,
+} from "./_generated/server.js";
 import { type Logger, logLevel } from "./logging.js";
 import { getWorkflow } from "./model.js";
 import { getWorkpool } from "./pool.js";
@@ -152,10 +157,15 @@ function publicStep(step: JournalEntry): WorkflowStep {
             kind: "workflow",
             nestedWorkflowId: publicWorkflowId(step.step.workflowId!),
           }
-        : {
-            kind: "function",
-            workId: step.step.workId,
-          }),
+        : step.step.kind === "function"
+          ? {
+              kind: "function",
+              workId: step.step.workId,
+            }
+          : {
+              kind: "sleep",
+              workId: step.step.workId!,
+            }),
   } satisfies WorkflowStep;
 }
 
@@ -383,7 +393,7 @@ export async function completeHandler(
     if (inProgress.length > 0) {
       const workpool = await getWorkpool(ctx, {});
       for (const { step } of inProgress) {
-        if (!step.kind || step.kind === "function") {
+        if (!step.kind || step.kind === "function" || step.kind === "sleep") {
           if (step.workId) {
             await workpool.cancel(ctx, step.workId);
           }
@@ -493,6 +503,12 @@ async function deleteSteps(ctx: MutationCtx, steps: Doc<"steps">[]) {
     }
   }
 }
+
+export const sleep = internalQuery({
+  args: {},
+  returns: v.null(),
+  handler: async () => null,
+});
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const console = "THIS IS A REMINDER TO USE getDefaultLogger";

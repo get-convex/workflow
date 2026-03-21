@@ -158,9 +158,16 @@ export class StepExecutor {
           try {
             const result =
               target.functionType === "query"
-                ? await this.ctx.runQuery(target.function as any, target.args)
+                ? await this.ctx.runQuery(
+                    target.function as FunctionReference<
+                      typeof target.functionType
+                    >,
+                    target.args,
+                  )
                 : await this.ctx.runMutation(
-                    target.function as any,
+                    target.function as FunctionReference<
+                      typeof target.functionType
+                    >,
                     target.args,
                   );
             runResult = { kind: "success", returnValue: result ?? null };

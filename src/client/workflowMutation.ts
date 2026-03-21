@@ -128,59 +128,65 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         Date.now(),
         workpoolOptions,
       );
-      setupEnvironment(executor.getGenerationState.bind(executor), workflowId);
-
-      const handlerWorker = async (): Promise<WorkerResult> => {
-        let runResult: RunResult;
-        try {
-          checkArgs(workflow.args, registered.args);
-          const returnValue =
-            (await registered.handler(step, workflow.args)) ?? null;
-          runResult = { kind: "success", returnValue };
-          if (registered.returns) {
-            try {
-              validate(asObjectValidator(registered.returns), returnValue, {
-                throw: true,
-              });
-            } catch (error) {
-              const message =
-                error instanceof ValidationError
-                  ? error.message
-                  : formatErrorWithStack(error);
-              console.error(
-                "Workflow handler returned invalid return value: ",
-                message,
-              );
-              runResult = {
-                kind: "failed",
-                error: "Invalid return value: " + message,
-              };
+      const restoreEnvironment = setupEnvironment(
+        executor.getGenerationState.bind(executor),
+        workflowId,
+      );
+      try {
+        const handlerWorker = async (): Promise<WorkerResult> => {
+          let runResult: RunResult;
+          try {
+            checkArgs(workflow.args, registered.args);
+            const returnValue =
+              (await registered.handler(step, workflow.args)) ?? null;
+            runResult = { kind: "success", returnValue };
+            if (registered.returns) {
+              try {
+                validate(asObjectValidator(registered.returns), returnValue, {
+                  throw: true,
+                });
+              } catch (error) {
+                const message =
+                  error instanceof ValidationError
+                    ? error.message
+                    : formatErrorWithStack(error);
+                console.error(
+                  "Workflow handler returned invalid return value: ",
+                  message,
+                );
+                runResult = {
+                  kind: "failed",
+                  error: "Invalid return value: " + message,
+                };
+              }
             }
+          } catch (error) {
+            const message = formatErrorWithStack(error);
+            console.error(message);
+            runResult = { kind: "failed", error: message };
           }
-        } catch (error) {
-          const message = formatErrorWithStack(error);
-          console.error(message);
-          runResult = { kind: "failed", error: message };
+          return { type: "handlerDone", runResult };
+        };
+        const executorWorker = async (): Promise<WorkerResult> => {
+          return await executor.run();
+        };
+        const result = await Promise.race([handlerWorker(), executorWorker()]);
+        switch (result.type) {
+          case "handlerDone": {
+            await ctx.runMutation(component.workflow.complete, {
+              workflowId,
+              generationNumber,
+              runResult: result.runResult,
+            });
+            break;
+          }
+          case "executorBlocked": {
+            // Nothing to do, we already started steps in the StepExecutor.
+            break;
+          }
         }
-        return { type: "handlerDone", runResult };
-      };
-      const executorWorker = async (): Promise<WorkerResult> => {
-        return await executor.run();
-      };
-      const result = await Promise.race([handlerWorker(), executorWorker()]);
-      switch (result.type) {
-        case "handlerDone": {
-          await ctx.runMutation(component.workflow.complete, {
-            workflowId,
-            generationNumber,
-            runResult: result.runResult,
-          });
-          break;
-        }
-        case "executorBlocked": {
-          // Nothing to do, we already started steps in the StepExecutor.
-          break;
-        }
+      } finally {
+        restoreEnvironment();
       }
     },
   }) as any;

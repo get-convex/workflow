@@ -14,7 +14,8 @@ describe("catchError workflow", () => {
     vi.useRealTimers();
   });
 
-  test("catches action error and retries", async () => {
+  // TODO: stop skipping after https://github.com/get-convex/convex-test/pull/76
+  test.skip("catches action error and retries", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
       workflow.start(
@@ -32,7 +33,8 @@ describe("catchError workflow", () => {
     expect(status.result).toBe(4);
   });
 
-  test("zero retries returns 1", async () => {
+  // TODO: stop skipping after https://github.com/get-convex/convex-test/pull/76
+  test.skip("zero retries returns 1", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
       workflow.start(
@@ -176,4 +178,3 @@ describe("workflow cancellation", () => {
     expect(status.type).toBe("canceled");
   });
 });
-

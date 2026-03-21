@@ -11,6 +11,7 @@
 import type * as admin from "../admin.js";
 import type * as catchError from "../catchError.js";
 import type * as example from "../example.js";
+import type * as inlineTest from "../inlineTest.js";
 import type * as nestedWorkflow from "../nestedWorkflow.js";
 import type * as passingSignals from "../passingSignals.js";
 import type * as transcription from "../transcription.js";
@@ -26,6 +27,7 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   catchError: typeof catchError;
   example: typeof example;
+  inlineTest: typeof inlineTest;
   nestedWorkflow: typeof nestedWorkflow;
   passingSignals: typeof passingSignals;
   transcription: typeof transcription;

@@ -15,7 +15,7 @@ import {
 import { convexToJson, getConvexSize, type Value } from "convex/values";
 import { type JournalEntry, type Step } from "../component/schema.js";
 import type { WorkflowComponent } from "./types.js";
-import { MAX_JOURNAL_SIZE } from "../shared.js";
+import { MAX_JOURNAL_SIZE, formatErrorWithStack } from "../shared.js";
 import type { EventId, SchedulerOptions } from "../types.js";
 import { pick } from "convex-helpers";
 
@@ -42,6 +42,7 @@ export type StepRequest = {
         args: Record<string, unknown>;
       };
   retry: RetryBehavior | boolean | undefined;
+  inline: boolean;
   schedulerOptions: SchedulerOptions;
 
   resolve: (result: RunResult) => void;
@@ -76,7 +77,6 @@ export class StepExecutor {
       // In the future we can correlate the calls to entries by handle, args,
       // etc. instead of just ordering. As is, the fn order can't change.
       const entry = this.journalEntries.shift();
-      // why not to run queries inline: they fetch too much data internally
       if (entry) {
         this.completeMessage(message, entry);
         continue;
@@ -146,16 +146,45 @@ export class StepExecutor {
     const steps = await Promise.all(
       messages.map(async (message) => {
         const args = message.target.args ?? {};
+        const target = message.target;
+
+        let runResult: RunResult | undefined;
+        if (message.inline) {
+          if (target.kind !== "function" || target.functionType === "action") {
+            throw new Error(
+              "Inline execution is only supported for queries and mutations.",
+            );
+          }
+          try {
+            const result =
+              target.functionType === "query"
+                ? await this.ctx.runQuery(
+                    target.function as FunctionReference<
+                      typeof target.functionType
+                    >,
+                    target.args,
+                  )
+                : await this.ctx.runMutation(
+                    target.function as FunctionReference<
+                      typeof target.functionType
+                    >,
+                    target.args,
+                  );
+            runResult = { kind: "success", returnValue: result ?? null };
+          } catch (error: unknown) {
+            runResult = { kind: "failed", error: formatErrorWithStack(error) };
+          }
+        }
+
         const commonFields = {
-          inProgress: true,
+          inProgress: !runResult,
           name: message.name,
           args,
           argsSize: getConvexSize(args as Value),
-          runResult: undefined,
+          runResult,
           startedAt: this.now,
-          completedAt: undefined,
+          completedAt: runResult ? this.now : undefined,
         } satisfies Omit<Step, "kind">;
-        const target = message.target;
         const step =
           target.kind === "function"
             ? {

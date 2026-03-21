@@ -20,7 +20,27 @@ export type RunOptions = {
    * it will use the function handle directly.
    */
   name?: string;
-} & SchedulerOptions;
+} & (
+  | {
+      /**
+       * Run the query or mutation inline within the workflow's transaction,
+       * instead of dispatching it through the work pool.
+       *
+       * This avoids the round-trip overhead of scheduling through the work
+       * pool, but means the function shares the workflow's transaction —
+       * reads and writes are part of the same commit. Avoid using this for
+       * functions that read or write large amounts of data, since they will
+       * count toward the workflow transaction's limits.
+       *
+       * Only applies to queries and mutations. Actions always run via the
+       * work pool. Cannot be combined with `runAfter` or `runAt`.
+       */
+      inline?: boolean;
+      runAt?: never;
+      runAfter?: never;
+    }
+  | (SchedulerOptions & { inline?: never })
+);
 
 export type WorkflowCtx = {
   /**
@@ -135,6 +155,7 @@ export function createWorkflowCtx(
           args,
         },
         retry: undefined,
+        inline: false,
         schedulerOptions,
       });
     },
@@ -147,6 +168,7 @@ export function createWorkflowCtx(
           args: { eventId: event.id },
         },
         retry: undefined,
+        inline: false,
         schedulerOptions: {},
       });
       if (event.validator) {
@@ -166,7 +188,10 @@ async function runFunction<
   args: Record<string, unknown> | undefined,
   opts?: RunOptions & RetryOption,
 ): Promise<unknown> {
-  const { name, retry, ...schedulerOptions } = opts ?? {};
+  const { name, retry, inline, ...schedulerOptions } = opts ?? {};
+  if (inline && ("runAt" in schedulerOptions || "runAfter" in schedulerOptions)) {
+    throw new Error("Cannot combine `inline` with `runAt` or `runAfter`.");
+  }
   return run(sender, {
     name: name ?? safeFunctionName(f),
     target: {
@@ -176,6 +201,7 @@ async function runFunction<
       args: args ?? {},
     },
     retry,
+    inline: inline ?? false,
     schedulerOptions,
   });
 }

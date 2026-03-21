@@ -5,14 +5,14 @@ import { internalMutation } from "./_generated/server";
 
 export const parentWorkflow = workflow.define({
   args: { prompt: v.string() },
-  handler: async (ctx, args) => {
+  handler: async (step, args) => {
     console.log("Starting confirmation workflow");
-    const length = await ctx.runWorkflow(
+    const length = await step.runWorkflow(
       internal.nestedWorkflow.childWorkflow,
       { foo: args.prompt },
     );
     console.log("Length:", length);
-    const stepResult = await ctx.runMutation(internal.nestedWorkflow.step, {
+    const stepResult = await step.runMutation(internal.nestedWorkflow.step, {
       foo: args.prompt,
     });
     console.log("Step result:", stepResult);
@@ -22,7 +22,7 @@ export const parentWorkflow = workflow.define({
 export const childWorkflow = workflow.define({
   args: { foo: v.string() },
   returns: v.number(),
-  handler: async (_ctx, args) => {
+  handler: async (_step, args) => {
     console.log("Starting nested workflow");
     return args.foo.length;
   },

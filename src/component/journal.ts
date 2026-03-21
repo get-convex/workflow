@@ -90,9 +90,6 @@ export const startSteps = mutation({
   },
   returns: v.array(journalDocument),
   handler: async (ctx, args): Promise<JournalEntry[]> => {
-    if (!args.steps.every((step) => step.step.inProgress)) {
-      throw new Error(`Assertion failed: not in progress`);
-    }
     const { generationNumber } = args;
     const workflow = await getWorkflow(ctx, args.workflowId, generationNumber);
     const console = await getDefaultLogger(ctx);
@@ -122,6 +119,12 @@ export const startSteps = mutation({
         assert(entry, "Step not found");
         const step = entry.step;
         const { name } = step;
+        console.event("started", {
+          workflowId: workflow._id,
+          workflowName: workflow.name,
+          stepName: name,
+          stepNumber,
+        });
         if (step.kind === "event") {
           // Note: This modifies entry in place as well.
           entry = await awaitEvent(ctx, entry, {
@@ -157,6 +160,15 @@ export const startSteps = mutation({
             startAsync: true,
           });
           step.workflowId = workflowId;
+        } else if (step.runResult) {
+          // Already completed inline by the caller — nothing to enqueue.
+          console.event("stepCompleted", {
+            workflowId: entry.workflowId,
+            workflowName: workflow.name,
+            status: step.runResult.kind,
+            stepName: step.name,
+            stepNumber: stepNumber,
+          });
         } else {
           const context: OnCompleteContext = {
             generationNumber,
@@ -197,12 +209,6 @@ export const startSteps = mutation({
         }
         await ctx.db.replace(entry._id, entry);
 
-        console.event("started", {
-          workflowId: workflow._id,
-          workflowName: workflow.name,
-          stepName: name,
-          stepNumber,
-        });
         return entry;
       }),
     );

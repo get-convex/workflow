@@ -54,7 +54,7 @@ export type WorkflowStep = {
   startedAt: number;
   completedAt?: number;
 } & (
-  | { kind: "function"; workId: WorkId }
+  | { kind: "function"; workId?: WorkId }
   | { kind: "workflow"; nestedWorkflowId: WorkflowId }
   | { kind: "event"; eventId: EventId }
 );

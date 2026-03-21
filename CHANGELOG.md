@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.7-alpha.0
+## 0.3.7
 
 - Introduces { inline: true } for step.runQuery/runMutation, that skips using
   the Workpool in favor of calling them from the workflow's handler directly.

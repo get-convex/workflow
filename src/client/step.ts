@@ -148,15 +148,13 @@ export class StepExecutor {
         const args = message.target.args ?? {};
         const target = message.target;
 
-        // Run inline if requested and it's a query/mutation.
-        const canInline =
-          message.inline &&
-          target.kind === "function" &&
-          (target.functionType === "query" ||
-            target.functionType === "mutation");
-
         let runResult: RunResult | undefined;
-        if (canInline) {
+        if (message.inline) {
+          if (target.kind !== "function" || target.functionType === "action") {
+            throw new Error(
+              "Inline execution is only supported for queries and mutations.",
+            );
+          }
           try {
             const result =
               target.functionType === "query"

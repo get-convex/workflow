@@ -23,7 +23,7 @@ steps or local variables. The overall workflow and each step has type-safe and
 runtime-validated **arguments** and **return value**.
 
 Workflows can be canceled and **restarted** from an arbitrary step, allowing you
-to recover failed workflows after third party outages or fixing code bugs.
+to recover failed workflows after third party outages or fixing your code.
 
 The **status** can be observed by many users simultaneously via regular
 **reactive-by-default** Convex queries, and the history of each step's execution
@@ -31,7 +31,7 @@ is likewise live-updating.
 
 **Retry behavior** for each action step is configurable, mutations have
 **exactly-once** execution (ignoring rollbacks due to database conflicts, which
-are automatically retried), and the overall workflow guaranteed to run to
+are automatically retried), and the overall workflow is guaranteed to run to
 completion, with exactly-once execution of an `onComplete` handler.
 
 Uses a Workpool under the hood to enable **parallelism limits** for steps, to
@@ -85,10 +85,6 @@ export const userOnboarding = workflow.define({
   },
 });
 ```
-
-This component adds durably executed _workflows_ to Convex. Combine Convex
-queries, mutations, and actions into long-lived workflows, and the system will
-always fully execute a workflow to completion.
 
 ## How it works
 

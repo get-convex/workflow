@@ -173,7 +173,7 @@ export const inlineMutations = workflow.define({
 });
 
 // ── Test 6: Mixed inline + action ─────────────
-// The query runs inline (shareTransaction), while the action goes through
+// The query runs inline, while the action goes through
 // workpool. Since not all steps complete inline, executor blocks.
 export const mixedInlineAndAction = workflow.define({
   args: { key: v.string() },

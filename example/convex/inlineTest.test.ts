@@ -94,7 +94,7 @@ describe("inline queries and mutations", () => {
         key: "mixed_test",
       }),
     );
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    await t.finishAllScheduledFunctions(vi.runAllTimersAsync);
     const status = await t.query(internal.inlineTest.checkStatus, {
       workflowId,
     });

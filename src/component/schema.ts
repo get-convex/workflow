@@ -66,6 +66,23 @@ export const step = v.union(
     workId: v.optional(vWorkIdValidator),
     ...stepCommonFields,
   }),
+  v.object({
+    kind: v.literal("race"),
+    ...stepCommonFields,
+    events: v.optional(
+      v.array(
+        v.object({
+          id: v.id("events"),
+          name: v.string(),
+        }),
+      ),
+    ),
+    timeout: v.optional(
+      v.object({ ms: v.number(), workId: v.optional(vWorkIdValidator) }),
+    ),
+    failure: v.optional(literals("fail", "retry", "discard")),
+    raceWinnerEventId: v.optional(v.id("events")),
+  }),
 );
 export type Step = Infer<typeof step>;
 

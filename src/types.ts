@@ -59,6 +59,11 @@ export type WorkflowStep = {
   | { kind: "workflow"; nestedWorkflowId: WorkflowId }
   | { kind: "event"; eventId: EventId }
   | { kind: "sleep"; workId: WorkId }
+  | {
+      kind: "race";
+      events: Array<{ id: EventId; name: string }>;
+      raceWinnerEventId?: EventId;
+    }
 );
 
 export const vWorkflowStep = v.object({
@@ -78,10 +83,13 @@ export const vWorkflowStep = v.object({
     v.literal("workflow"),
     v.literal("event"),
     v.literal("sleep"),
+    v.literal("race"),
   ),
   workId: v.optional(vWorkIdValidator),
   nestedWorkflowId: v.optional(vWorkflowId),
   eventId: v.optional(vEventId()),
+  events: v.optional(v.array(v.object({ id: vEventId(), name: v.string() }))),
+  raceWinnerEventId: v.optional(vEventId()),
 });
 // type assertion to keep us in check
 const _workflowStep: Infer<typeof vWorkflowStep> = {} as WorkflowStep;
@@ -127,6 +135,16 @@ export type OnCompleteArgs<Context = unknown> = {
    */
   result: RunResult;
 };
+
+export function vOnComplete<T extends Validator<Value, "required", string>>(
+  ctx: T,
+) {
+  return v.object({
+    workflowId: vWorkflowId,
+    context: ctx,
+    result: vResultValidator,
+  });
+}
 
 export function vPaginationResult<
   T extends Validator<Value, "required", string>,

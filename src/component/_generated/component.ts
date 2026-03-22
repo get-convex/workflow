@@ -126,6 +126,23 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | { kind: "canceled" };
                   startedAt: number;
                   workId?: string;
+                }
+              | {
+                  args: any;
+                  argsSize: number;
+                  completedAt?: number;
+                  events?: Array<{ id: string; name: string }>;
+                  failure?: "fail" | "retry" | "discard";
+                  inProgress: boolean;
+                  kind: "race";
+                  name: string;
+                  raceWinnerEventId?: string;
+                  runResult?:
+                    | { kind: "success"; returnValue: any }
+                    | { error: string; kind: "failed" }
+                    | { kind: "canceled" };
+                  startedAt: number;
+                  timeout?: { ms: number; workId?: string };
                 };
             stepNumber: number;
             workflowId: string;
@@ -220,6 +237,23 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | { kind: "canceled" };
                   startedAt: number;
                   workId?: string;
+                }
+              | {
+                  args: any;
+                  argsSize: number;
+                  completedAt?: number;
+                  events?: Array<{ id: string; name: string }>;
+                  failure?: "fail" | "retry" | "discard";
+                  inProgress: boolean;
+                  kind: "race";
+                  name: string;
+                  raceWinnerEventId?: string;
+                  runResult?:
+                    | { kind: "success"; returnValue: any }
+                    | { error: string; kind: "failed" }
+                    | { kind: "canceled" };
+                  startedAt: number;
+                  timeout?: { ms: number; workId?: string };
                 };
           }>;
           workflowId: string;
@@ -296,6 +330,23 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   | { kind: "canceled" };
                 startedAt: number;
                 workId?: string;
+              }
+            | {
+                args: any;
+                argsSize: number;
+                completedAt?: number;
+                events?: Array<{ id: string; name: string }>;
+                failure?: "fail" | "retry" | "discard";
+                inProgress: boolean;
+                kind: "race";
+                name: string;
+                raceWinnerEventId?: string;
+                runResult?:
+                  | { kind: "success"; returnValue: any }
+                  | { error: string; kind: "failed" }
+                  | { kind: "canceled" };
+                startedAt: number;
+                timeout?: { ms: number; workId?: string };
               };
           stepNumber: number;
           workflowId: string;
@@ -414,6 +465,23 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | { kind: "canceled" };
                   startedAt: number;
                   workId?: string;
+                }
+              | {
+                  args: any;
+                  argsSize: number;
+                  completedAt?: number;
+                  events?: Array<{ id: string; name: string }>;
+                  failure?: "fail" | "retry" | "discard";
+                  inProgress: boolean;
+                  kind: "race";
+                  name: string;
+                  raceWinnerEventId?: string;
+                  runResult?:
+                    | { kind: "success"; returnValue: any }
+                    | { error: string; kind: "failed" }
+                    | { kind: "canceled" };
+                  startedAt: number;
+                  timeout?: { ms: number; workId?: string };
                 };
             stepNumber: number;
             workflowId: string;
@@ -525,9 +593,11 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             args: any;
             completedAt?: number;
             eventId?: string;
-            kind: "function" | "workflow" | "event" | "sleep";
+            events?: Array<{ id: string; name: string }>;
+            kind: "function" | "workflow" | "event" | "sleep" | "race";
             name: string;
             nestedWorkflowId?: string;
+            raceWinnerEventId?: string;
             runResult?:
               | { kind: "success"; returnValue: any }
               | { error: string; kind: "failed" }

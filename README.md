@@ -697,6 +697,122 @@ See [`example/convex/passingSignals.ts`](./example/convex/passingSignals.ts) for
 a complete example of creating events, passing their IDs around, and sending
 signals.
 
+### Racing multiple events with `step.raceEvents`
+
+Use `step.raceEvents` to wait for whichever of several events fires first, then
+continue based on which one won. This is useful for approval flows (approve or
+reject), user choices, or any "first-of-many" scenario.
+
+Pass an array of the events to wait for, and the workflow pauses until one
+arrives. The result tells you which event won, and its value is typed to match:
+
+```ts
+const approvalEvent = defineEvent({
+  name: "approval",
+  validator: v.object({ proposal: v.string() }),
+});
+const rejectionEvent = defineEvent({
+  name: "rejection",
+  validator: v.object({ reason: v.string() }),
+});
+
+export const myWorkflow = workflow.define({
+  args: {},
+  returns: v.string(),
+  handler: async (step): Promise<string> => {
+    const result = await step.raceEvents([approvalEvent, rejectionEvent]);
+
+    if (result.name === "approval") {
+      return `Approved: ${result.value.proposal}`;
+    } else {
+      return `Rejected: ${result.value.reason}`;
+    }
+  },
+});
+```
+
+Fire the winning event from a mutation or action with `sendEvent`, exactly as
+you would for a single `awaitEvent`:
+
+```ts
+await sendEvent(ctx, components.workflow, {
+  ...approvalEvent,
+  workflowId,
+  value: { proposal: "A" },
+});
+```
+
+The result is a discriminated union on `result.name`, so once you check the
+name, TypeScript narrows `result.value` to that event's validator type (events
+without a validator give `unknown`). `result.id` holds the id of the winning
+event.
+
+#### Identifying the events in a race
+
+Each event in the race must be distinguishable, so they each need either a
+unique `name` or a unique `id`. If you don't need validators, plain `{ name }`
+objects work too:
+
+```ts
+const result = await step.raceEvents([{ name: "go" }, { name: "stop" }]);
+if (result.name === "go") {
+  // proceed
+}
+```
+
+To race over events you created ahead of time with `createEvent` (see
+[waiting for events by id](#waiting-for-dynamically-created-events-by-id)), pass
+their ids:
+
+```ts
+const result = await step.raceEvents([{ id: approvalId }, { id: rejectionId }]);
+// result.id is the id of whichever event fired first
+```
+
+Once a race resolves, consider every id you passed into it spent — don't await
+or race those ids again. Any events sent _after_ the winner are left untouched
+and stay available for a later `awaitEvent` or `raceEvents`.
+
+#### Timeout
+
+Without a timeout, a race waits indefinitely. Add a `timeout` (in milliseconds)
+to fail the step if no event arrives in time:
+
+```ts
+const result = await step.raceEvents(
+  [approvalEvent, rejectionEvent],
+  { timeout: 15 * 60 * 1000 }, // 15 minutes
+);
+```
+
+When the timeout fires, the step throws in your handler, which you can catch
+like any other step failure.
+
+#### Handling error events
+
+An event can carry an error instead of a value. The `failure` option controls
+what the race does with those:
+
+- **`"fail"` (default)** — the first event wins, value or error. An error event
+  makes the step throw.
+- **`"retry"`** — error events are ignored and the race keeps waiting for a
+  successful one. Pair this with a `timeout` so it can't wait forever.
+- **`"discard"`** — error events are consumed and the race keeps waiting on the
+  remaining events. If every event ends up erroring, the step fails.
+
+```ts
+const result = await step.raceEvents([approvalEvent, rejectionEvent], {
+  failure: "retry",
+  timeout: 60_000,
+});
+```
+
+You can also pass a `name` to label the step in your logs (it defaults to
+`"race(name1, name2, ...)"`).
+
+See [`example/convex/raceEvents.ts`](./example/convex/raceEvents.ts) for a
+complete example.
+
 ### Running nested workflows with `step.runWorkflow`
 
 Use `step.runWorkflow` to run another workflow as a single step in the current

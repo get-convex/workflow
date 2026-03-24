@@ -7,6 +7,7 @@ import {
   internalMutationGeneric,
   makeFunctionReference,
   type FunctionHandle,
+  type GenericDataModel,
   type RegisteredMutation,
 } from "convex/server";
 import {
@@ -29,7 +30,7 @@ import {
   type WorkflowComponent,
   type WorkflowMutationResult,
 } from "./types.js";
-import { createWorkflowCtx } from "./workflowContext.js";
+import { createWorkflowCtx, type WorkflowCtx } from "./workflowContext.js";
 
 export type WorkflowArgs<V extends PropertyValidators, Context = unknown> = {
   /**
@@ -106,9 +107,10 @@ const vWorkflowReturns = (
 export function workflowMutation<
   ArgsValidator extends PropertyValidators,
   ReturnsValidator extends Validator<any, "required", any> | void,
+  DataModel extends GenericDataModel = GenericDataModel,
 >(
   component: WorkflowComponent,
-  registered: WorkflowDefinition<ArgsValidator, ReturnsValidator> & {
+  registered: WorkflowDefinition<ArgsValidator, ReturnsValidator, DataModel> & {
     handler: WorkflowHandler<ArgsValidator, ReturnsValidator>;
   },
   defaultWorkpoolOptions?: WorkpoolOptions,
@@ -121,7 +123,9 @@ export function workflowMutation<
     ...defaultWorkpoolOptions,
     ...registered.workpoolOptions,
   };
-  return internalMutationGeneric({
+  const mutationBuilder = (registered.internalMutation ??
+    internalMutationGeneric) as typeof internalMutationGeneric;
+  return mutationBuilder({
     args: v.object({
       // Declared on the mutation itself, so that anything deriving types from the
       // validators (static codegen, function specs) sees the real shape.
@@ -227,7 +231,10 @@ export function workflowMutation<
       const channel = new BaseChannel<StepRequest>(
         workpoolOptions.maxParallelism ?? 10,
       );
-      const step = createWorkflowCtx(workflowId, channel);
+      const step = createWorkflowCtx(
+        workflowId,
+        channel,
+      ) as unknown as WorkflowCtx<DataModel>;
       const executor = new StepExecutor(
         workflowId,
         generationNumber,

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.8
+
+- Introduces an explicit `step.sleep(ms)` as an alternative to passing
+  `runAfter` / `runAt` to a subsequent step.
+- Improves test type of `register` for `convex-test@0.0.43`+ support
+
 ## 0.3.7
 
 - Introduces { inline: true } for step.runQuery/runMutation, that skips using

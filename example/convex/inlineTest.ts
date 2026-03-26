@@ -60,6 +60,8 @@ export const someAction = internalAction({
   args: { label: v.string() },
   returns: v.string(),
   handler: async (_ctx, { label }) => {
+    // TODO: use setTimeout after https://github.com/get-convex/convex-test/pull/78
+    // await new Promise((resolve) => setTimeout(resolve, 500));
     return `action:${label}`;
   },
 });

@@ -87,15 +87,14 @@ describe("inline queries and mutations", () => {
     expect(status.result).toEqual({ first: 1, second: 2 });
   });
 
-  // TODO: stop skipping after https://github.com/get-convex/convex-test/pull/76
-  test.skip("mixed inline + action: query runs inline, action via workpool", async () => {
+  test("mixed inline + action: query runs inline, action via workpool", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
       workflow.start(ctx, internal.inlineTest.mixedInlineAndAction, {
         key: "mixed_test",
       }),
     );
-    await t.finishAllScheduledFunctions(vi.runAllTimersAsync);
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
     const status = await t.query(internal.inlineTest.checkStatus, {
       workflowId,
     });

@@ -218,11 +218,13 @@ export type WorkflowCtx<
   withOptions(defaults: StepDefaults): WorkflowCtx;
 };
 
-export function createWorkflowCtx(
+export function createWorkflowCtx<
+  DataModel extends GenericDataModel = GenericDataModel,
+>(
   workflowId: WorkflowId,
   sender: BaseChannel<StepRequest>,
   defaults?: StepDefaults,
-): WorkflowCtx {
+): WorkflowCtx<DataModel> {
   return {
     workflowId,
     withOptions: (opts) =>
@@ -244,7 +246,7 @@ export function createWorkflowCtx(
         name: opts?.name ?? "run",
         target: {
           kind: "inline",
-          handler: handler as (
+          handler: handler as unknown as (
             ctx: GenericMutationCtx<GenericDataModel>,
           ) => Promise<unknown>,
           args: {} as Record<string, never>,
@@ -305,7 +307,7 @@ export function createWorkflowCtx(
       }
       return result as any;
     },
-  } satisfies WorkflowCtx;
+  };
 }
 
 async function runFunction<

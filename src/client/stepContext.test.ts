@@ -18,7 +18,9 @@ function fakeFuncRef(name: string) {
 function journalEntry(
   overrides: {
     name?: string;
-    kind?: "function" | "workflow" | "event" | "inline";
+    kind?: "function" | "workflow" | "event";
+    functionType?: "query" | "mutation" | "action";
+    handle?: string;
     args?: Record<string, unknown>;
     runResult?: RunResult;
     stepNumber?: number;
@@ -48,8 +50,8 @@ function journalEntry(
       ...base,
       step: {
         kind: "function",
-        functionType: "action",
-        handle: "handle",
+        functionType: overrides.functionType ?? "action",
+        handle: overrides.handle ?? "handle",
         ...stepCommon,
       },
     } as unknown as JournalEntry;
@@ -63,15 +65,6 @@ function journalEntry(
         args: overrides.args ?? { eventId: undefined },
       },
     } as JournalEntry;
-  }
-  if (kind === "inline") {
-    return {
-      ...base,
-      step: {
-        kind: "inline",
-        ...stepCommon,
-      },
-    } as unknown as JournalEntry;
   }
   return {
     ...base,
@@ -357,7 +350,8 @@ describe("StepExecutor + WorkflowCtx integration", () => {
 
     const entry = journalEntry({
       name: "run",
-      kind: "inline",
+      functionType: "mutation",
+      handle: "inline",
       args: {},
       runResult: { kind: "success", returnValue: 99 },
     });
@@ -376,7 +370,8 @@ describe("StepExecutor + WorkflowCtx integration", () => {
 
     const entry = journalEntry({
       name: "run",
-      kind: "inline",
+      functionType: "mutation",
+      handle: "inline",
       args: {},
       runResult: { kind: "failed", error: "inline boom" },
     });
@@ -398,7 +393,8 @@ describe("StepExecutor + WorkflowCtx integration", () => {
 
     const entry = journalEntry({
       name: "myCustomStep",
-      kind: "inline",
+      functionType: "mutation",
+      handle: "inline",
       args: {},
       runResult: { kind: "success", returnValue: "named" },
     });
@@ -422,7 +418,8 @@ describe("StepExecutor + WorkflowCtx integration", () => {
     const entries = [
       journalEntry({
         name: "run",
-        kind: "inline",
+        functionType: "mutation",
+      handle: "inline",
         args: {},
         runResult: { kind: "success", returnValue: "inline-result" },
         stepNumber: 0,

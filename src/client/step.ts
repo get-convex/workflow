@@ -139,13 +139,17 @@ export class StepExecutor {
       entry.step,
       message.unstableArgs ? ["name", "kind"] : ["name", "kind", "args"],
     );
-    const messageFields = message.unstableArgs
-      ? { name: message.name, kind: message.target.kind }
-      : {
-          name: message.name,
-          kind: message.target.kind,
-          args: message.target.args as Value,
-        };
+    const messageFields = {
+      name: message.name,
+      kind: message.target.kind,
+      args: message.target.args as Value | undefined,
+    };
+    if (message.unstableArgs) {
+      delete messageFields.args;
+    }
+    if (message.target.kind === "inline") {
+      messageFields.kind = "function";
+    }
     const stepJson = JSON.stringify(convexToJson(stepFields));
     const messageJson = JSON.stringify(convexToJson(messageFields));
     if (stepJson !== messageJson) {
@@ -256,7 +260,9 @@ export class StepExecutor {
             break;
           case "inline":
             step = {
-              kind: "inline" as const,
+              kind: "function",
+              functionType: "mutation",
+              handle: "inline",
               ...commonFields,
             };
             break;

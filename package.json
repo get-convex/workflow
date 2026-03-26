@@ -65,7 +65,7 @@
     "async-channel": "^0.2.0"
   },
   "devDependencies": {
-    "@convex-dev/workpool": "0.4.2",
+    "@convex-dev/workpool": "0.4.4",
     "@edge-runtime/vm": "5.0.0",
     "@eslint/eslintrc": "3.3.5",
     "@eslint/js": "9.39.4",
@@ -75,7 +75,7 @@
     "chokidar-cli": "3.0.0",
     "convex": "1.34.0",
     "convex-helpers": "0.1.114",
-    "convex-test": "0.0.41",
+    "convex-test": "0.0.44",
     "cpy-cli": "7.0.0",
     "eslint": "9.39.4",
     "eslint-plugin-react-hooks": "7.0.1",

@@ -1,7 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, test } from "vitest";
 import { BaseChannel } from "async-channel";
 import type { RunResult } from "@convex-dev/workpool";
 import type { StepRequest } from "./step.js";
+import { StepExecutor } from "./step.js";
 import type { JournalEntry } from "../component/schema.js";
 import { createWorkflowCtx } from "./workflowContext.js";
 
@@ -342,5 +343,156 @@ describe("StepExecutor + WorkflowCtx integration", () => {
     ]);
 
     expect(result).toEqual([1, 2, 3]);
+  });
+});
+
+describe("unstableArgs", () => {
+  function makeMessage(opts: {
+    name: string;
+    kind: "function" | "workflow";
+    args: Record<string, unknown>;
+    unstableArgs: boolean;
+  }): StepRequest {
+    return {
+      name: opts.name,
+      target:
+        opts.kind === "function"
+          ? {
+              kind: "function",
+              functionType: "action",
+              function: fakeFuncRef(opts.name) as any,
+              args: opts.args,
+            }
+          : {
+              kind: "workflow",
+              function: fakeFuncRef(opts.name) as any,
+              args: opts.args,
+            },
+      retry: undefined,
+      inline: false,
+      unstableArgs: opts.unstableArgs,
+      schedulerOptions: {},
+      resolve: () => {},
+    };
+  }
+
+  function makeExecutor(entries: JournalEntry[]) {
+    return new StepExecutor(
+      "wf-test",
+      0,
+      {} as any,
+      {} as any,
+      entries,
+      new BaseChannel<StepRequest>(0),
+      Date.now(),
+      undefined,
+    );
+  }
+
+  const kinds = ["function", "workflow"] as const;
+
+  describe.each(kinds)("%s", (kind) => {
+    test("mismatched args fails without unstableArgs", () => {
+      const entry = journalEntry({
+        name: "step",
+        kind,
+        args: { x: 1 },
+      });
+      const executor = makeExecutor([entry]);
+      const message = makeMessage({
+        name: "step",
+        kind,
+        args: { x: 2 },
+        unstableArgs: false,
+      });
+      expect(() => executor.completeMessage(message, entry)).toThrow(
+        "Journal entry mismatch",
+      );
+    });
+
+    test("mismatched args succeeds with unstableArgs", () => {
+      const entry = journalEntry({
+        name: "step",
+        kind,
+        args: { x: 1 },
+      });
+      const executor = makeExecutor([entry]);
+      const message = makeMessage({
+        name: "step",
+        kind,
+        args: { x: 2 },
+        unstableArgs: true,
+      });
+      expect(() => executor.completeMessage(message, entry)).not.toThrow();
+    });
+
+    test("matching args succeeds with unstableArgs", () => {
+      const entry = journalEntry({
+        name: "step",
+        kind,
+        args: { x: 1 },
+      });
+      const executor = makeExecutor([entry]);
+      const message = makeMessage({
+        name: "step",
+        kind,
+        args: { x: 1 },
+        unstableArgs: true,
+      });
+      expect(() => executor.completeMessage(message, entry)).not.toThrow();
+    });
+  });
+
+  test("still validates name even with unstableArgs", () => {
+    const entry = journalEntry({ name: "original", args: { x: 1 } });
+    const executor = makeExecutor([entry]);
+    const message = makeMessage({
+      name: "different",
+      kind: "function",
+      args: { x: 2 },
+      unstableArgs: true,
+    });
+    expect(() => executor.completeMessage(message, entry)).toThrow(
+      "Journal entry mismatch",
+    );
+  });
+
+  test("unstableArgs passes through and defaults correctly", async () => {
+    const channel = new BaseChannel<StepRequest>(0);
+    const ctx = createWorkflowCtx("wf-test" as any, channel);
+
+    const calls: StepRequest[] = [];
+    const drain = async () => {
+      for (let i = 0; i < 8; i++) {
+        const msg = await channel.get();
+        calls.push(msg);
+        msg.resolve({ kind: "success", returnValue: null });
+      }
+    };
+
+    await Promise.all([
+      (async () => {
+        // With unstableArgs: true
+        await ctx.runQuery(fakeFuncRef("q") as any, {}, { unstableArgs: true });
+        await ctx.runMutation(fakeFuncRef("m") as any, {}, { unstableArgs: true });
+        await ctx.runAction(fakeFuncRef("a") as any, {}, { unstableArgs: true });
+        await ctx.runWorkflow(fakeFuncRef("w") as any, {}, { unstableArgs: true });
+        // Without unstableArgs (defaults to false)
+        await ctx.runQuery(fakeFuncRef("q2") as any, {});
+        await ctx.runMutation(fakeFuncRef("m2") as any, {});
+        await ctx.runAction(fakeFuncRef("a2") as any, {});
+        await ctx.runWorkflow(fakeFuncRef("w2") as any, {});
+      })(),
+      drain(),
+    ]);
+
+    expect(calls[0].unstableArgs).toBe(true);
+    expect(calls[1].unstableArgs).toBe(true);
+    expect(calls[2].unstableArgs).toBe(true);
+    expect(calls[3].unstableArgs).toBe(true);
+    expect(calls[4].unstableArgs).toBe(false);
+    expect(calls[5].unstableArgs).toBe(false);
+    expect(calls[6].unstableArgs).toBe(false);
+    expect(calls[7].unstableArgs).toBe(false);
   });
 });

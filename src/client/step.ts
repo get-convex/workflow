@@ -40,6 +40,10 @@ export type StepRequest = {
         kind: "workflow";
         function: FunctionReference<"mutation", "internal">;
         args: Record<string, unknown>;
+      }
+    | {
+        kind: "sleep";
+        args: Record<string, never>;
       };
   retry: RetryBehavior | boolean | undefined;
   inline: boolean;
@@ -199,11 +203,16 @@ export class StepExecutor {
                   handle: await createFunctionHandle(target.function),
                   ...commonFields,
                 }
-              : {
+              : target.kind === "event"
+              ? {
                   kind: "event" as const,
                   eventId: target.args.eventId,
                   ...commonFields,
                   args: target.args,
+                }
+              : {
+                  kind: "sleep" as const,
+                  ...commonFields,
                 };
         return {
           retry: message.retry,

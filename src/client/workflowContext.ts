@@ -117,6 +117,14 @@ export type WorkflowCtx = {
       validator?: Validator<T, any, any>;
     },
   ): Promise<T>;
+
+  /**
+   * Suspend execution for the given duration.
+   *
+   * @param duration - The number of milliseconds to sleep.
+   * @param opts - Optionally name the step. Default: "sleep"
+   */
+  sleep(duration: number, opts?: { name?: string }): Promise<void>;
 };
 
 export type OptionalRestArgs<
@@ -160,6 +168,19 @@ export function createWorkflowCtx(
       });
     },
 
+    sleep: async (duration, opts?) => {
+      await run(sender, {
+        name: opts?.name ?? "sleep",
+        target: {
+          kind: "sleep",
+          args: {},
+        },
+        retry: undefined,
+        inline: false,
+        schedulerOptions: { runAfter: duration },
+      });
+    },
+
     awaitEvent: async (event) => {
       const result = await run(sender, {
         name: event.name ?? event.id ?? "Event",
@@ -189,7 +210,10 @@ async function runFunction<
   opts?: RunOptions & RetryOption,
 ): Promise<unknown> {
   const { name, retry, inline, ...schedulerOptions } = opts ?? {};
-  if (inline && ("runAt" in schedulerOptions || "runAfter" in schedulerOptions)) {
+  if (
+    inline &&
+    ("runAt" in schedulerOptions || "runAfter" in schedulerOptions)
+  ) {
     throw new Error("Cannot combine `inline` with `runAt` or `runAfter`.");
   }
   return run(sender, {

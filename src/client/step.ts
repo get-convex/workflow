@@ -47,6 +47,7 @@ export type StepRequest = {
       };
   retry: RetryBehavior | boolean | undefined;
   inline: boolean;
+  unstableArgs: boolean;
   schedulerOptions: SchedulerOptions;
 
   resolve: (result: RunResult) => void;
@@ -125,18 +126,23 @@ export class StepExecutor {
         `Assertion failed: not blocked but have in-progress journal entry`,
       );
     }
-    const stepJson = JSON.stringify(
-      convexToJson(pick(entry.step, ["name", "args", "kind"])),
+    const stepFields = pick(
+      entry.step,
+      message.unstableArgs ? ["name", "kind"] : ["name", "kind", "args"],
     );
-    const messageJson = JSON.stringify(
-      convexToJson({
-        name: message.name,
-        args: message.target.args as Value,
-        kind: message.target.kind,
-      }),
-    );
+    const messageFields = message.unstableArgs
+      ? { name: message.name, kind: message.target.kind }
+      : {
+          name: message.name,
+          kind: message.target.kind,
+          args: message.target.args as Value,
+        };
+    const stepJson = JSON.stringify(convexToJson(stepFields));
+    const messageJson = JSON.stringify(convexToJson(messageFields));
     if (stepJson !== messageJson) {
-      throw new Error(`Journal entry mismatch: ${stepJson} !== ${messageJson}`);
+      throw new Error(
+        `Journal entry mismatch:\n\n${stepJson}\n\n!==\n\n${messageJson}`,
+      );
     }
     if (entry.step.runResult === undefined) {
       throw new Error(

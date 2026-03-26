@@ -20,6 +20,13 @@ export type RunOptions = {
    * it will use the function handle directly.
    */
   name?: string;
+  /**
+   * If true, the journal will not validate that the arguments match on replay.
+   * This is useful when arguments are non-deterministic (e.g. derived from
+   * a stack trace caught in the workflow) and you want to allow the workflow to
+   * replay successfully despite argument changes.
+   */
+  unstableArgs?: boolean;
 } & (
   | {
       /**
@@ -154,7 +161,7 @@ export function createWorkflowCtx(
     },
 
     runWorkflow: async (workflow, args, opts?) => {
-      const { name, ...schedulerOptions } = opts ?? {};
+      const { name, unstableArgs, ...schedulerOptions } = opts ?? {};
       return run(sender, {
         name: name ?? safeFunctionName(workflow),
         target: {
@@ -164,6 +171,7 @@ export function createWorkflowCtx(
         },
         retry: undefined,
         inline: false,
+        unstableArgs: unstableArgs ?? false,
         schedulerOptions,
       });
     },
@@ -177,6 +185,7 @@ export function createWorkflowCtx(
         },
         retry: undefined,
         inline: false,
+        unstableArgs: false,
         schedulerOptions: { runAfter: duration },
       });
     },
@@ -190,6 +199,7 @@ export function createWorkflowCtx(
         },
         retry: undefined,
         inline: false,
+        unstableArgs: false,
         schedulerOptions: {},
       });
       if (event.validator) {
@@ -209,7 +219,7 @@ async function runFunction<
   args: Record<string, unknown> | undefined,
   opts?: RunOptions & RetryOption,
 ): Promise<unknown> {
-  const { name, retry, inline, ...schedulerOptions } = opts ?? {};
+  const { name, retry, inline, unstableArgs, ...schedulerOptions } = opts ?? {};
   if (
     inline &&
     ("runAt" in schedulerOptions || "runAfter" in schedulerOptions)
@@ -226,6 +236,7 @@ async function runFunction<
     },
     retry,
     inline: inline ?? false,
+    unstableArgs: unstableArgs ?? false,
     schedulerOptions,
   });
 }

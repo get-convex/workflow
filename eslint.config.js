@@ -11,6 +11,7 @@ export default [
       "eslint.config.js",
       "vitest.config.ts",
       "**/_generated/",
+      "example/e2e.mjs",
     ],
   },
   {

@@ -27,27 +27,7 @@ export type RunOptions = {
    * replay successfully despite argument changes.
    */
   unstableArgs?: boolean;
-} & (
-  | {
-      /**
-       * Run the query or mutation inline within the workflow's transaction,
-       * instead of dispatching it through the work pool.
-       *
-       * This avoids the round-trip overhead of scheduling through the work
-       * pool, but means the function shares the workflow's transaction —
-       * reads and writes are part of the same commit. Avoid using this for
-       * functions that read or write large amounts of data, since they will
-       * count toward the workflow transaction's limits.
-       *
-       * Only applies to queries and mutations. Actions always run via the
-       * work pool. Cannot be combined with `runAfter` or `runAt`.
-       */
-      inline?: boolean;
-      runAt?: never;
-      runAfter?: never;
-    }
-  | (SchedulerOptions & { inline?: never })
-);
+} & SchedulerOptions;
 
 export type WorkflowCtx = {
   /**
@@ -63,7 +43,7 @@ export type WorkflowCtx = {
    */
   runQuery<Query extends FunctionReference<"query", FunctionVisibility>>(
     query: Query,
-    ...args: OptionalRestArgs<RunOptions, Query>
+    ...args: OptionalRestArgs<RunOptions & { inline?: boolean }, Query>
   ): Promise<FunctionReturnType<Query>>;
 
   /**
@@ -77,7 +57,7 @@ export type WorkflowCtx = {
     Mutation extends FunctionReference<"mutation", FunctionVisibility>,
   >(
     mutation: Mutation,
-    ...args: OptionalRestArgs<RunOptions, Mutation>
+    ...args: OptionalRestArgs<RunOptions & { inline?: boolean }, Mutation>
   ): Promise<FunctionReturnType<Mutation>>;
 
   /**
@@ -217,7 +197,7 @@ async function runFunction<
   functionType: FunctionType,
   f: F,
   args: Record<string, unknown> | undefined,
-  opts?: RunOptions & RetryOption,
+  opts?: RunOptions & { inline?: boolean } & RetryOption,
 ): Promise<unknown> {
   const { name, retry, inline, unstableArgs, ...schedulerOptions } = opts ?? {};
   if (
@@ -225,6 +205,9 @@ async function runFunction<
     ("runAt" in schedulerOptions || "runAfter" in schedulerOptions)
   ) {
     throw new Error("Cannot combine `inline` with `runAt` or `runAfter`.");
+  }
+  if (inline && functionType === "action") {
+    throw new Error("Cannot run an action inline.");
   }
   return run(sender, {
     name: name ?? safeFunctionName(f),

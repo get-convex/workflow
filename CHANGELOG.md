@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.9 alpha
+
+- Improved support for `convex-test` (testing via vitest).
+- Fix registration of nested workpool component's naming.
+- Cleans up patched globals at the end of the handler - useful for testing.
+
 ## 0.3.8
 
 - Introduces an explicit `step.sleep(ms)` as an alternative to passing

@@ -1,9 +1,22 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   patchMath,
   createDeterministicDate,
   createConsole,
+  setupEnvironment,
+  runWithWorkflowEnvironment,
 } from "./environment.js";
+
+// The workflow environment expects AsyncLocalStorage on globalThis (as provided by
+// convex-backend's async_hooks runtime). Polyfill it here so tests run in Node.js.
+if (
+  (globalThis as { AsyncLocalStorage?: typeof AsyncLocalStorage })
+    .AsyncLocalStorage === undefined
+) {
+  (globalThis as { AsyncLocalStorage?: typeof AsyncLocalStorage }).AsyncLocalStorage =
+    AsyncLocalStorage;
+}
 
 describe("environment patching units", () => {
   describe("patchMath", () => {
@@ -501,6 +514,70 @@ describe("environment patching units", () => {
 
       // Should not call info when latest is false
       expect(mockConsole.info).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("workflow-scoped patching", () => {
+    it("keeps patched globals out of non-workflow execution", async () => {
+      const originalSetTimeout = globalThis.setTimeout;
+      const originalSetInterval = globalThis.setInterval;
+      const originalFetch = globalThis.fetch;
+      const originalDateNow = Date.now;
+
+      setupEnvironment();
+
+      await runWithWorkflowEnvironment(
+        () => ({ now: 12345, latest: true }),
+        "workflow-1",
+        async () => {
+          expect(Date.now()).toBe(12345);
+          expect(() => setTimeout(() => {}, 0)).toThrow(
+            /setTimeout isn't supported within workflows yet/,
+          );
+          expect(() => setInterval(() => {}, 0)).toThrow(
+            /setInterval isn't supported within workflows yet/,
+          );
+          expect(() => fetch("https://example.com")).toThrow(
+            /Fetch isn't currently supported within workflows/,
+          );
+
+          await Promise.resolve();
+          expect(() => setTimeout(() => {}, 0)).toThrow(
+            /setTimeout isn't supported within workflows yet/,
+          );
+        },
+      );
+
+      expect(globalThis.setTimeout).toBe(originalSetTimeout);
+      expect(globalThis.setInterval).toBe(originalSetInterval);
+      expect(globalThis.fetch).toBe(originalFetch);
+      expect(Date.now).toBe(originalDateNow);
+
+      const timeout = setTimeout(() => {}, 0);
+      clearTimeout(timeout);
+    });
+
+    it("keeps restricted globals available outside workflow execution", () => {
+      setupEnvironment();
+
+      const hasProcessOutside = "process" in globalThis;
+      const hasCryptoOutside = "crypto" in globalThis;
+
+      runWithWorkflowEnvironment(
+        () => ({ now: 5, latest: true }),
+        "workflow-2",
+        () => {
+          expect((globalThis as { process?: unknown }).process).toBeUndefined();
+          expect((globalThis as { crypto?: unknown }).crypto).toBeUndefined();
+        },
+      );
+
+      if (hasProcessOutside) {
+        expect((globalThis as { process?: unknown }).process).toBeDefined();
+      }
+      if (hasCryptoOutside) {
+        expect((globalThis as { crypto?: unknown }).crypto).toBeDefined();
+      }
     });
   });
 });

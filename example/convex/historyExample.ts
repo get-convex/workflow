@@ -9,7 +9,9 @@ export const historyWorkflow = workflow.define({
     const h0 = ctx.getHistory();
     console.log(`Before any steps: ${h0.stepCount} steps, ${h0.size} bytes`);
 
-    await ctx.runMutation(internal.historyExample.smallStep, { value: "hello" });
+    await ctx.runMutation(internal.historyExample.smallStep, {
+      value: "hello",
+    });
     const h1 = ctx.getHistory();
     console.log(`After step 1: ${h1.stepCount} steps, ${h1.size} bytes`);
 

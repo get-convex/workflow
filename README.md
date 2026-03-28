@@ -63,7 +63,7 @@ export const userOnboarding = workflow.define({
     }
     const email = await step.runMutation(
       internal.emails.sendWelcomeEmail,
-      { userId: args.userId, content: result.content, },
+      { userId: args.userId, content: result.content },
       // Optimization: run the mutation synchronously from this transaction.
       { inline: true },
     );
@@ -289,9 +289,8 @@ await step.sleep(24 * 60 * 60 * 1000);
 
 Tip: You can name the sleep step for clarity with a second `{ name }` argument.
 
-If you want to defer a specific step, you can use
-`runAfter` or `runAt` as scheduling options on any step. This delays that
-particular step's execution:
+If you want to defer a specific step, you can use `runAfter` or `runAt` as
+scheduling options on any step. This delays that particular step's execution:
 
 ```ts
 // Run this action 10 seconds from now.
@@ -299,8 +298,8 @@ await step.runAction(internal.example.myAction, args, { runAfter: 10_000 });
 ```
 
 This is roughly equivalent to doing a sleep first, with the difference being
-that the "myAction" step is considered "in progress" while it is waiting, and
-it only enqueues one item into the Workpool (myAction@delay), instead of two
+that the "myAction" step is considered "in progress" while it is waiting, and it
+only enqueues one item into the Workpool (myAction@delay), instead of two
 (sleep@delay, myAction@now).
 
 ### Specifying retry behavior

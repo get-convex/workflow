@@ -56,11 +56,12 @@ export const incrementCounter = internalMutation({
   },
 });
 
-export const slowAction = internalAction({
+export const someAction = internalAction({
   args: { label: v.string() },
   returns: v.string(),
   handler: async (_ctx, { label }) => {
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // TODO: use setTimeout after https://github.com/get-convex/convex-test/pull/78
+    // await new Promise((resolve) => setTimeout(resolve, 500));
     return `action:${label}`;
   },
 });
@@ -190,7 +191,7 @@ export const mixedInlineAndAction = workflow.define({
       { key: args.key },
       { inline: true },
     );
-    const actionPromise = step.runAction(internal.inlineTest.slowAction, {
+    const actionPromise = step.runAction(internal.inlineTest.someAction, {
       label: args.key,
     });
     const [queryResult, actionResult] = await Promise.all([

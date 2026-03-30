@@ -85,25 +85,43 @@ export function createDeterministicDate(
 export function setupEnvironment(
   getGenerationState: () => GenerationState,
   workflowId: string,
-): void {
+): () => void {
   const global = globalThis as Record<string, unknown>;
 
+  const patchedKeys = [
+    "Math",
+    "Date",
+    "console",
+    "process",
+    "Crypto",
+    "crypto",
+    "CryptoKey",
+    "SubtleCrypto",
+  ] as const;
+  const originals = Object.fromEntries(
+    patchedKeys.map((key) => [key, global[key]]),
+  );
+
   // Patch Math with seeded random based on workflowId
-  global.Math = patchMath(global.Math as typeof Math, workflowId);
+  global.Math = patchMath(originals.Math as typeof Math, workflowId);
 
   // Patch Date
-  const originalDate = global.Date as typeof Date;
-  global.Date = createDeterministicDate(originalDate, getGenerationState);
+  global.Date = createDeterministicDate(
+    originals.Date as typeof Date,
+    getGenerationState,
+  );
 
   // Patch console
-  global.console = createConsole(global.console as Console, getGenerationState);
+  global.console = createConsole(
+    originals.console as Console,
+    getGenerationState,
+  );
 
-  // Patch fetch
-  global.fetch = (_input: RequestInfo | URL, _init?: RequestInit) => {
-    throw new Error(
-      `Fetch isn't currently supported within workflows. Perform the fetch within an action and call it with step.runAction().`,
-    );
-  };
+  // Note: we intentionally don't patch fetch, setTimeout, or setInterval.
+  // In the real Convex runtime these don't exist (for mutations/queries), so
+  // user code already can't call them. Patching them here would break test
+  // environments (e.g. convex-test) that share the same JS global scope and
+  // rely on these globals internally.
 
   // Remove non-deterministic globals
   delete global.process;
@@ -111,12 +129,8 @@ export function setupEnvironment(
   delete global.crypto;
   delete global.CryptoKey;
   delete global.SubtleCrypto;
-  global.setTimeout = () => {
-    throw new Error("setTimeout isn't supported within workflows yet");
-  };
-  global.setInterval = () => {
-    throw new Error("setInterval isn't supported within workflows yet");
-  };
+
+  return () => Object.assign(global, originals);
 }
 
 function noop() {}

@@ -1,6 +1,6 @@
 {
   "name": "@convex-dev/workflow",
-  "version": "0.3.8",
+  "version": "0.3.9-alpha.0",
   "description": "Convex component for durably executing workflows.",
   "keywords": [
     "convex",
@@ -28,7 +28,8 @@
     "test:watch": "vitest --typecheck --clearScreen false",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:coverage": "vitest run --coverage --coverage.reporter=text",
-    "preversion": "npm ci && npm run build:clean && run-p test lint typecheck",
+    "test:e2e": "node ./example/e2e.mjs",
+    "preversion": "npm ci && npm run build:clean && run-p test lint typecheck test:e2e",
     "alpha": "npm version prerelease --preid alpha && npm publish --tag alpha && git push --follow-tags",
     "release": "npm version patch && npm publish && git push --follow-tags",
     "version": "(npm whoami || npm login) && vim -c 'normal o' -c 'normal o## '$npm_package_version CHANGELOG.md && prettier -w CHANGELOG.md && git add CHANGELOG.md"
@@ -75,7 +76,7 @@
     "chokidar-cli": "3.0.0",
     "convex": "1.34.0",
     "convex-helpers": "0.1.114",
-    "convex-test": "0.0.44",
+    "convex-test": "0.0.45-alpha.0",
     "cpy-cli": "7.0.0",
     "eslint": "9.39.4",
     "eslint-plugin-react-hooks": "7.0.1",

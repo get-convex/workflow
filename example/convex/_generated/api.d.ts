@@ -10,6 +10,7 @@
 
 import type * as admin from "../admin.js";
 import type * as catchError from "../catchError.js";
+import type * as e2e from "../e2e.js";
 import type * as example from "../example.js";
 import type * as inlineTest from "../inlineTest.js";
 import type * as nestedWorkflow from "../nestedWorkflow.js";
@@ -26,6 +27,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   catchError: typeof catchError;
+  e2e: typeof e2e;
   example: typeof example;
   inlineTest: typeof inlineTest;
   nestedWorkflow: typeof nestedWorkflow;

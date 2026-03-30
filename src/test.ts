@@ -14,6 +14,6 @@ export function register<
   Schema extends SchemaDefinition<GenericSchema, boolean>,
 >(t: TestConvex<Schema>, name: string = "workflow") {
   t.registerComponent(name, schema, modules);
-  workpool.register(t);
+  workpool.register(t, `${name}/workpool`);
 }
 export default { register, schema, modules };

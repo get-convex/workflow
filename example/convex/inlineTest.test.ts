@@ -6,8 +6,7 @@ import { internal } from "./_generated/api";
 import { workflow } from "./inlineTest";
 import { assert } from "convex-helpers";
 
-// TODO: When we have tests running without messing with globals, enable these
-describe.skip("inline queries and mutations", () => {
+describe("inline queries and mutations", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });

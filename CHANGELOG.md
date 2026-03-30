@@ -1,8 +1,11 @@
 # Changelog
 
-## 0.3.9 alpha
+## 0.3.9
 
-- Improved support for `convex-test` (testing via vitest).
+- Improved support for `convex-test` (testing via vitest). Testing workflows is
+  mostly supported by `convex-test@0.0.45`. There are still edge cases around
+  patched globals leaking into inline function calls, and other possibly
+  undefined behavior.
 - Fix registration of nested workpool component's naming.
 - Cleans up patched globals at the end of the handler - useful for testing.
 

@@ -46,6 +46,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
   component: WorkflowComponent,
   registered: WorkflowDefinition<ArgsValidator>,
   defaultWorkpoolOptions?: WorkpoolOptions,
+  boundFn?: string,
 ): RegisteredMutation<
   "internal",
   {
@@ -60,6 +61,17 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
   };
   return internalMutationGeneric({
     handler: async (ctx, args) => {
+      if (!validate(workflowArgs, args) && boundFn && "args" in args) {
+        // Bound workflow called directly with { args: ... }
+        const fn = makeFunctionReference(boundFn);
+        const workflowId = await ctx.runMutation(component.workflow.create, {
+          workflowName: safeFunctionName(fn),
+          workflowHandle: await createFunctionHandle(fn),
+          workflowArgs: args.args,
+          maxParallelism: workpoolOptions.maxParallelism,
+        });
+        return workflowId;
+      }
       if (!validate(workflowArgs, args)) {
         throw new Error(INVALID_WORKFLOW_MESSAGE);
       }

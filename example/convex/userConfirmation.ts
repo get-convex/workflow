@@ -1,8 +1,8 @@
 import {
   defineEvent,
+  defineWorkflow,
   vWorkflowId,
   WorkflowId,
-  WorkflowManager,
 } from "@convex-dev/workflow";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
@@ -16,20 +16,21 @@ export const approvalEvent = defineEvent({
   ),
 });
 
-const workflow = new WorkflowManager(components.workflow);
-
-export const confirmationWorkflow = workflow.define({
+const confirmationDef = defineWorkflow(components.workflow, {
   args: { prompt: v.string() },
   returns: v.string(),
-  handler: async (step, args): Promise<string> => {
+}).bind(internal.userConfirmation.confirmationWorkflow);
+
+export const confirmationWorkflow = confirmationDef.handler(
+  async (ctx, args): Promise<string> => {
     console.log("Starting confirmation workflow");
-    const proposals = await step.runAction(
+    const proposals = await ctx.runAction(
       internal.userConfirmation.generateProposals,
       { prompt: args.prompt },
       { retry: true },
     );
     console.log("Proposals generated", proposals);
-    const approval = await step.awaitEvent(approvalEvent);
+    const approval = await ctx.awaitEvent(approvalEvent);
     if (!approval.approved) {
       return "rejected: " + approval.reason;
     }
@@ -37,7 +38,7 @@ export const confirmationWorkflow = workflow.define({
     console.log("Choice selected", choice);
     return choice;
   },
-});
+);
 
 export const generateProposals = internalAction({
   args: { prompt: v.string() },
@@ -50,7 +51,7 @@ export const generateProposals = internalAction({
 export const chooseProposal = internalMutation({
   args: { workflowId: vWorkflowId, choice: v.number() },
   handler: async (ctx, args) => {
-    await workflow.sendEvent(ctx, {
+    await confirmationDef.sendEvent(ctx, {
       ...approvalEvent,
       workflowId: args.workflowId,
       value: { approved: true, choice: args.choice },
@@ -73,10 +74,8 @@ export const chooseProposal = internalMutation({
 export const startConfirmationWorkflow = internalMutation({
   args: { prompt: v.optional(v.string()) },
   handler: async (ctx, args): Promise<WorkflowId> => {
-    return await workflow.start(
-      ctx,
-      internal.userConfirmation.confirmationWorkflow,
-      { prompt: args.prompt ?? "Generate a recipe for me" },
-    );
+    return await confirmationDef.start(ctx, {
+      prompt: args.prompt ?? "Generate a recipe for me",
+    });
   },
 });

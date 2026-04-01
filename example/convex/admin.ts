@@ -1,14 +1,14 @@
 import { v } from "convex/values";
 import { WorkflowId, vWorkflowId } from "@convex-dev/workflow";
 import { mutation, query } from "./_generated/server";
-import { workflow } from "./example";
+import { myWorkflow } from "./example";
 
 export const getWorkflowStatus = query({
   args: {
     workflowId: v.string(),
   },
   handler: async (ctx, args) => {
-    return await workflow.status(ctx, args.workflowId as WorkflowId);
+    return await myWorkflow.status(ctx, args.workflowId as WorkflowId);
   },
 });
 
@@ -36,6 +36,6 @@ export const cancelWorkflow = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    return await workflow.cancel(ctx, args.workflowId as WorkflowId);
+    return await myWorkflow.cancel(ctx, args.workflowId as WorkflowId);
   },
 });

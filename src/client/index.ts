@@ -17,7 +17,11 @@ import {
   type RegisteredMutation,
   type ReturnValueForOptionalValidator,
 } from "convex/server";
-import type { ObjectType, PropertyValidators, Validator } from "convex/values";
+import type {
+  ObjectType,
+  PropertyValidators,
+  Validator,
+} from "convex/values";
 import type { Step } from "../component/schema.js";
 import type {
   EventId,
@@ -90,6 +94,241 @@ export type WorkflowStatus =
   | { type: "completed"; result: unknown }
   | { type: "canceled" }
   | { type: "failed"; error: string };
+
+type MatchingRef<
+  AV extends PropertyValidators,
+  RV extends Validator<any, any, any> | void,
+> = FunctionReference<
+  "mutation",
+  "internal",
+  {
+    fn: "You should not call this directly, call workflow.start instead";
+    args: ObjectType<AV>;
+  },
+  ReturnValueForOptionalValidator<RV>
+>;
+
+export interface UnboundWorkflow<
+  AV extends PropertyValidators,
+  RV extends Validator<any, "required", any> | void,
+> {
+  handler(
+    fn: (
+      step: WorkflowCtx,
+      args: ObjectType<AV>,
+    ) => Promise<ReturnValueForOptionalValidator<RV>>,
+  ): RegisteredMutation<
+    "internal",
+    {
+      fn: "You should not call this directly, call workflow.start instead";
+      args: ObjectType<AV>;
+    },
+    ReturnValueForOptionalValidator<RV>
+  >;
+
+  /** Bind to a function reference. Returns a BoundWorkflow with .start()/.status(). */
+  bind(ref: MatchingRef<AV, RV>): BoundWorkflow<AV, RV>;
+}
+
+export interface BoundWorkflow<
+  AV extends PropertyValidators,
+  RV extends Validator<any, "required", any> | void,
+> {
+  handler(
+    fn: (
+      step: WorkflowCtx,
+      args: ObjectType<AV>,
+    ) => Promise<ReturnValueForOptionalValidator<RV>>,
+  ): RegisteredMutation<
+    "internal",
+    {
+      fn: "You should not call this directly, call workflow.start instead";
+      args: ObjectType<AV>;
+    },
+    ReturnValueForOptionalValidator<RV>
+  >;
+
+  start(
+    ctx: RunMutationCtx,
+    args: ObjectType<AV>,
+    options?: CallbackOptions & { startAsync?: boolean },
+  ): Promise<WorkflowId>;
+  status(ctx: RunQueryCtx, workflowId: WorkflowId): Promise<WorkflowStatus>;
+  cancel(ctx: RunMutationCtx, workflowId: WorkflowId): Promise<void>;
+  restart(
+    ctx: RunMutationCtx,
+    workflowId: WorkflowId,
+    options?: {
+      from?: number | string | FunctionReference<any, any>;
+      startAsync?: boolean;
+    },
+  ): Promise<void>;
+  cleanup(ctx: RunMutationCtx, workflowId: WorkflowId): Promise<boolean>;
+  sendEvent<T = null, Name extends string = string>(
+    ctx: RunMutationCtx,
+    args: (
+      | { workflowId: WorkflowId; name: Name; id?: EventId<Name> }
+      | { workflowId?: undefined; name?: Name; id: EventId<Name> }
+    ) &
+      (
+        | { validator?: undefined; value?: T }
+        | { validator: Validator<T, any, any>; value: T }
+        | { error: string; value?: undefined }
+      ),
+  ): Promise<EventId<Name>>;
+  createEvent<Name extends string>(
+    ctx: RunMutationCtx,
+    args: { name: Name; workflowId: WorkflowId },
+  ): Promise<EventId<Name>>;
+}
+
+/**
+ * Define a new workflow with typed args and optional return validator.
+ *
+ * Call `.bind(ref)` to bind it to a function reference, enabling
+ * `.start()`, `.status()`, and other management methods.
+ *
+ * @example
+ * ```ts
+ * export const myWorkflow = defineWorkflow(components.workflow, {
+ *   args: { amount: v.number() },
+ *   returns: v.object({ total: v.number() }),
+ * }).bind(internal.handler.processPayment);
+ *
+ * export const processPayment = myWorkflow.handler(async (step, args) => {
+ *   return { total: args.amount * 2 };
+ * });
+ *
+ * // Usage from any file:
+ * const id = await myWorkflow.start(ctx, { amount: 100 });
+ * const status = await myWorkflow.status(ctx, id);
+ * ```
+ */
+export function defineWorkflow<
+  AV extends PropertyValidators,
+  RV extends Validator<any, "required", any> | void = void,
+>(
+  component: WorkflowComponent,
+  config: { args: AV; returns?: RV },
+): UnboundWorkflow<AV, RV> {
+  function makeHandler(
+    fn: (
+      step: WorkflowCtx,
+      args: ObjectType<AV>,
+    ) => Promise<ReturnValueForOptionalValidator<RV>>,
+    boundFn?: string,
+  ) {
+    return workflowMutation(
+      component,
+      { ...config, handler: fn },
+      undefined,
+      boundFn,
+    );
+  }
+
+  return {
+    handler: (fn) => makeHandler(fn),
+    bind(ref) {
+      const refName = safeFunctionName(ref);
+      return {
+        handler: (fn) => makeHandler(fn, refName),
+        async start(ctx, args, options?) {
+          const handle = await createFunctionHandle(ref);
+          const onComplete = options?.onComplete
+            ? {
+                fnHandle: await createFunctionHandle(options.onComplete),
+                context: options.context,
+              }
+            : undefined;
+          const workflowId = await ctx.runMutation(
+            component.workflow.create,
+            {
+              workflowName: safeFunctionName(ref),
+              workflowHandle: handle,
+              workflowArgs: args,
+              onComplete,
+              startAsync: options?.startAsync,
+            },
+          );
+          return workflowId as unknown as WorkflowId;
+        },
+        async status(ctx, workflowId) {
+          const { workflow, inProgress } = await ctx.runQuery(
+            component.workflow.getStatus,
+            { workflowId },
+          );
+          const running = inProgress.map(
+            (entry) => entry.step as IdsToStrings<Step>,
+          );
+          switch (workflow.runResult?.kind) {
+            case undefined:
+              return { type: "inProgress", running };
+            case "canceled":
+              return { type: "canceled" };
+            case "failed":
+              return { type: "failed", error: workflow.runResult.error };
+            case "success":
+              return {
+                type: "completed",
+                result: workflow.runResult.returnValue,
+              };
+          }
+        },
+        async cancel(ctx, workflowId) {
+          await ctx.runMutation(component.workflow.cancel, { workflowId });
+        },
+        async restart(ctx, workflowId, options?) {
+          let from: number | string | undefined;
+          if (options?.from !== undefined) {
+            if (
+              typeof options.from === "number" ||
+              typeof options.from === "string"
+            ) {
+              from = options.from;
+            } else {
+              from = safeFunctionName(options.from);
+            }
+          }
+          await ctx.runMutation(component.workflow.restart, {
+            workflowId,
+            from,
+            startAsync: options?.startAsync,
+          });
+        },
+        async cleanup(ctx, workflowId) {
+          return await ctx.runMutation(component.workflow.cleanup, {
+            workflowId,
+          });
+        },
+        async sendEvent(ctx, args) {
+          const result: RunResult =
+            "error" in args
+              ? { kind: "failed", error: args.error }
+              : {
+                  kind: "success" as const,
+                  returnValue: args.validator
+                    ? parse(args.validator, args.value)
+                    : "value" in args
+                      ? args.value
+                      : null,
+                };
+          return (await ctx.runMutation(component.event.send, {
+            eventId: args.id,
+            result,
+            name: args.name,
+            workflowId: args.workflowId,
+          })) as any;
+        },
+        async createEvent(ctx, args) {
+          return (await ctx.runMutation(component.event.create, {
+            name: args.name,
+            workflowId: args.workflowId,
+          })) as any;
+        },
+      };
+    },
+  };
+}
 
 export class WorkflowManager {
   constructor(

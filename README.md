@@ -800,7 +800,7 @@ Here are a few limitations to keep in mind:
   [this issue](https://github.com/get-convex/workflow/issues/35) for ideas on
   how to make this better.
 
-**Tip:** Use `ctx.getHistory()` to get the current journal size and step count.
+**Tip:** Use `step.meta.getHistory()` to get the current journal size and step count.
 This is useful for workflows that poll in a loop, so you can bail out before
 hitting the limit.
 
@@ -814,7 +814,7 @@ while (true) {
   if (result !== null) {
     return result;
   }
-  const { stepCount, size } = ctx.getHistory();
+  const { stepCount, size } = step.meta.getHistory();
   if (stepCount > 100 || size > 2_000_000) {
     return null;
   }

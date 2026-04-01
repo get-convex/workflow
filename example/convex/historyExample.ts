@@ -5,26 +5,26 @@ import { internalAction, internalMutation } from "./_generated/server";
 
 export const historyWorkflow = workflow.define({
   args: {},
-  handler: async (ctx) => {
-    const h0 = ctx.getHistory();
+  handler: async (step) => {
+    const h0 = step.meta.getHistory();
     console.log(`Before any steps: ${h0.stepCount} steps, ${h0.size} bytes`);
 
-    await ctx.runMutation(internal.historyExample.smallStep, {
+    await step.runMutation(internal.historyExample.smallStep, {
       value: "hello",
     });
-    const h1 = ctx.getHistory();
+    const h1 = step.meta.getHistory();
     console.log(`After step 1: ${h1.stepCount} steps, ${h1.size} bytes`);
 
-    await ctx.runAction(internal.historyExample.mediumStep, {
+    await step.runAction(internal.historyExample.mediumStep, {
       data: "x".repeat(100),
     });
-    const h2 = ctx.getHistory();
+    const h2 = step.meta.getHistory();
     console.log(`After step 2: ${h2.stepCount} steps, ${h2.size} bytes`);
 
-    await ctx.runMutation(internal.historyExample.smallStep, {
+    await step.runMutation(internal.historyExample.smallStep, {
       value: "world",
     });
-    const h3 = ctx.getHistory();
+    const h3 = step.meta.getHistory();
     console.log(`After step 3: ${h3.stepCount} steps, ${h3.size} bytes`);
 
     return {

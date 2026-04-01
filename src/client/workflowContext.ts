@@ -126,11 +126,16 @@ export type WorkflowCtx = {
    */
   sleep(duration: number, opts?: { name?: string }): Promise<void>;
   /**
-   * Get the current history of the workflow execution.
-   *
-   * @returns The size in bytes and number of steps processed so far.
+   * Metadata about the workflow execution.
    */
-  getHistory: () => { size: number; stepCount: number };
+  meta: {
+    /**
+     * Get the current history of the workflow execution.
+     *
+     * @returns The size in bytes and number of steps processed so far.
+     */
+    getHistory: () => { size: number; stepCount: number };
+  };
 };
 
 export type OptionalRestArgs<
@@ -148,7 +153,7 @@ export function createWorkflowCtx(
 ) {
   return {
     workflowId,
-    getHistory,
+    meta: { getHistory },
     runQuery: async (query, args, opts?) => {
       return runFunction(sender, "query", query, args, opts);
     },

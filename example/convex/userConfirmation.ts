@@ -16,12 +16,12 @@ export const approvalEvent = defineEvent({
   ),
 });
 
-const confirmationDef = defineWorkflow(components.workflow, {
+export const confirmationWorkflow = defineWorkflow(components.workflow, {
   args: { prompt: v.string() },
   returns: v.string(),
-}).bind(internal.userConfirmation.confirmationWorkflow);
+}).bind(internal.userConfirmation.confirmation);
 
-export const confirmationWorkflow = confirmationDef.handler(
+export const confirmation = confirmationWorkflow.handler(
   async (ctx, args): Promise<string> => {
     console.log("Starting confirmation workflow");
     const proposals = await ctx.runAction(
@@ -51,7 +51,7 @@ export const generateProposals = internalAction({
 export const chooseProposal = internalMutation({
   args: { workflowId: vWorkflowId, choice: v.number() },
   handler: async (ctx, args) => {
-    await confirmationDef.sendEvent(ctx, {
+    await confirmationWorkflow.sendEvent(ctx, {
       ...approvalEvent,
       workflowId: args.workflowId,
       value: { approved: true, choice: args.choice },
@@ -74,7 +74,7 @@ export const chooseProposal = internalMutation({
 export const startConfirmationWorkflow = internalMutation({
   args: { prompt: v.optional(v.string()) },
   handler: async (ctx, args): Promise<WorkflowId> => {
-    return await confirmationDef.start(ctx, {
+    return await confirmationWorkflow.start(ctx, {
       prompt: args.prompt ?? "Generate a recipe for me",
     });
   },

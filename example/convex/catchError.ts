@@ -1,8 +1,7 @@
+import { defineWorkflow } from "@convex-dev/workflow";
 import { v } from "convex/values";
-import { WorkflowId, defineWorkflow } from "@convex-dev/workflow";
-import { internal } from "./_generated/api.js";
-import { internalAction, internalMutation } from "./_generated/server.js";
-import { components } from "./_generated/api.js";
+import { components, internal } from "./_generated/api.js";
+import { internalAction } from "./_generated/server.js";
 
 export const alwaysFails = internalAction({
   args: {},
@@ -12,12 +11,12 @@ export const alwaysFails = internalAction({
   },
 });
 
-const catchErrorDef = defineWorkflow(components.workflow, {
+export const catchErrorWorkflow = defineWorkflow(components.workflow, {
   args: { manualRetries: v.number() },
   returns: v.number(),
-}).bind(internal.catchError.catchErrorWorkflow);
+}).bind(internal.catchError.catchError);
 
-export const catchErrorWorkflow = catchErrorDef.handler(
+export const catchError = catchErrorWorkflow.handler(
   async (step, args): Promise<number> => {
     let i;
     for (i = 0; i < args.manualRetries + 1; i++) {
@@ -35,14 +34,3 @@ export const catchErrorWorkflow = catchErrorDef.handler(
     return i;
   },
 );
-
-export const start = internalMutation({
-  args: { manualRetries: v.optional(v.number()) },
-  returns: v.string(),
-  handler: async (ctx, args) => {
-    const id: WorkflowId = await catchErrorDef.start(ctx, {
-      manualRetries: args.manualRetries ?? 0,
-    });
-    return id;
-  },
-});

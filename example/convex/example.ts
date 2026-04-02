@@ -18,9 +18,9 @@ export const myWorkflow = defineWorkflow(components.workflow, {
     windSpeed: v.number(),
     windGust: v.number(),
   }),
-}).bind(internal.example.exampleWorkflow);
+}).bind(internal.example.example);
 
-export const exampleWorkflow = myWorkflow.handler(async (step, args) => {
+export const example = myWorkflow.handler(async (step, args) => {
   console.time("overall");
   console.time("geocoding");
   // Run in parallel!

@@ -7,11 +7,11 @@ import {
 import { components, internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 
-const signalDef = defineWorkflow(components.workflow, {
+export const signalWorkflow = defineWorkflow(components.workflow, {
   args: {},
-}).bind(internal.passingSignals.signalBasedWorkflow);
+}).bind(internal.passingSignals.signalBased);
 
-export const signalBasedWorkflow = signalDef.handler(async (ctx) => {
+export const signalBased = signalWorkflow.handler(async (ctx) => {
   console.log("Starting signal based  workflow");
   for (let i = 0; i < 3; i++) {
     const signalId = await ctx.runMutation(
@@ -27,7 +27,7 @@ export const signalBasedWorkflow = signalDef.handler(async (ctx) => {
 export const createSignal = internalMutation({
   args: { workflowId: vWorkflowId },
   handler: async (ctx, args): Promise<EventId> => {
-    const eventId = await signalDef.createEvent(ctx, {
+    const eventId = await signalWorkflow.createEvent(ctx, {
       name: "signal",
       workflowId: args.workflowId,
     });
@@ -43,6 +43,6 @@ export const createSignal = internalMutation({
 export const sendSignal = internalMutation({
   args: { eventId: vEventId("signal") },
   handler: async (ctx, args) => {
-    await signalDef.sendEvent(ctx, { id: args.eventId });
+    await signalWorkflow.sendEvent(ctx, { id: args.eventId });
   },
 });

@@ -15,7 +15,7 @@ function getOpenAI() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
-const transcriptionDef = defineWorkflow(components.workflow, {
+export const transcriptionDef = defineWorkflow(components.workflow, {
   args: {
     storageId: v.id("_storage"),
   },

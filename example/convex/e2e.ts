@@ -4,13 +4,17 @@
  */
 import { v } from "convex/values";
 import {
-  WorkflowId,
   WorkflowManager,
   WorkflowStatus,
   vWorkflowId,
 } from "@convex-dev/workflow";
 import { mutation, query } from "./_generated/server";
 import { components, internal } from "./_generated/api";
+import { myWorkflow } from "./example";
+import { catchErrorWorkflow } from "./catchError";
+import { parentWorkflow } from "./nestedWorkflow";
+import { signalWorkflow } from "./passingSignals";
+import { confirmationWorkflow } from "./userConfirmation";
 
 const workflow = new WorkflowManager(components.workflow);
 
@@ -25,33 +29,24 @@ export const startAll = mutation({
     confirmation: v.string(),
   }),
   handler: async (ctx) => {
-    const weather: WorkflowId = await workflow.start(
+    const weather = await myWorkflow.start(
       ctx,
-      internal.example.exampleWorkflow,
       { location: "San Jose" },
       { startAsync: true },
     );
-    const catchError: WorkflowId = await workflow.start(
+    const catchError = await catchErrorWorkflow.start(
       ctx,
-      internal.catchError.catchErrorWorkflow,
       { manualRetries: 2 },
       { startAsync: true },
     );
-    const nested: WorkflowId = await workflow.start(
+    const nested = await parentWorkflow.start(
       ctx,
-      internal.nestedWorkflow.parentWorkflow,
       { prompt: "hello world" },
       { startAsync: true },
     );
-    const signals: WorkflowId = await workflow.start(
+    const signals = await signalWorkflow.start(ctx, {}, { startAsync: true });
+    const confirmation = await confirmationWorkflow.start(
       ctx,
-      internal.passingSignals.signalBasedWorkflow,
-      {},
-      { startAsync: true },
-    );
-    const confirmation: WorkflowId = await workflow.start(
-      ctx,
-      internal.userConfirmation.confirmationWorkflow,
       { prompt: "test prompt" },
       { startAsync: true },
     );

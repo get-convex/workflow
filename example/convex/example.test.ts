@@ -3,7 +3,10 @@
 import { expect, describe, test, vi, beforeEach, afterEach } from "vitest";
 import { initConvexTest } from "./setup.test";
 import { internal } from "./_generated/api";
-import { workflow } from "./example";
+import { catchErrorWorkflow } from "./catchError";
+import { parentWorkflow, childWorkflow } from "./nestedWorkflow";
+import { signalWorkflow } from "./passingSignals";
+import { confirmationWorkflow } from "./userConfirmation";
 import { assert } from "convex-helpers";
 
 describe("catchError workflow", () => {
@@ -16,16 +19,13 @@ describe("catchError workflow", () => {
 
   test("catches action error and retries", async () => {
     const t = initConvexTest();
-    const workflowId = await t.run((ctx) =>
-      workflow.start(
-        ctx,
-        internal.catchError.catchErrorWorkflow,
-        { manualRetries: 3 },
-        { startAsync: true },
-      ),
+    const workflowId = await t.mutation((ctx) =>
+      catchErrorWorkflow.start(ctx, { manualRetries: 3 }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.run((ctx) => workflow.status(ctx, workflowId));
+    const status = await t.run((ctx) =>
+      catchErrorWorkflow.status(ctx, workflowId),
+    );
     expect(status.type).toBe("completed");
     assert(status.type === "completed");
     // With 3 manual retries, it tries 4 times (0, 1, 2, 3) then returns 4
@@ -34,16 +34,13 @@ describe("catchError workflow", () => {
 
   test("zero retries returns 1", async () => {
     const t = initConvexTest();
-    const workflowId = await t.run((ctx) =>
-      workflow.start(
-        ctx,
-        internal.catchError.catchErrorWorkflow,
-        { manualRetries: 0 },
-        { startAsync: true },
-      ),
+    const workflowId = await t.mutation((ctx) =>
+      catchErrorWorkflow.start(ctx, { manualRetries: 0 }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.run((ctx) => workflow.status(ctx, workflowId));
+    const status = await t.run((ctx) =>
+      catchErrorWorkflow.status(ctx, workflowId),
+    );
     expect(status.type).toBe("completed");
     assert(status.type === "completed");
     expect(status.result).toBe(1);
@@ -61,24 +58,20 @@ describe("nested workflow", () => {
   test("parent runs child workflow and mutation step", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.nestedWorkflow.parentWorkflow, {
-        prompt: "hello",
-      }),
+      parentWorkflow.start(ctx, { prompt: "hello" }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.run((ctx) => workflow.status(ctx, workflowId));
+    const status = await t.run((ctx) => parentWorkflow.status(ctx, workflowId));
     expect(status.type).toBe("completed");
   });
 
   test("child workflow returns string length", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.nestedWorkflow.childWorkflow, {
-        foo: "test",
-      }),
+      childWorkflow.start(ctx, { foo: "test" }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.run((ctx) => workflow.status(ctx, workflowId));
+    const status = await t.run((ctx) => childWorkflow.status(ctx, workflowId));
     expect(status.type).toBe("completed");
     assert(status.type === "completed");
     expect(status.result).toBe(4);
@@ -95,11 +88,9 @@ describe("signal-based workflow", () => {
 
   test("completes after all signals are sent", async () => {
     const t = initConvexTest();
-    const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.passingSignals.signalBasedWorkflow, {}),
-    );
+    const workflowId = await t.run((ctx) => signalWorkflow.start(ctx, {}));
     await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.run((ctx) => workflow.status(ctx, workflowId));
+    const status = await t.run((ctx) => signalWorkflow.status(ctx, workflowId));
     expect(status.type).toBe("completed");
   });
 });
@@ -115,9 +106,8 @@ describe("user confirmation workflow", () => {
   test("completes with chosen proposal on approval", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
-      workflow.start(
+      confirmationWorkflow.start(
         ctx,
-        internal.userConfirmation.confirmationWorkflow,
         { prompt: "Generate a recipe" },
         { startAsync: true },
       ),
@@ -127,7 +117,7 @@ describe("user confirmation workflow", () => {
 
     // Should be in progress waiting for the event
     const inProgressStatus = await t.run((ctx) =>
-      workflow.status(ctx, workflowId),
+      confirmationWorkflow.status(ctx, workflowId),
     );
     expect(inProgressStatus.type).toBe("inProgress");
 
@@ -140,7 +130,9 @@ describe("user confirmation workflow", () => {
     // The workflow may need additional poll cycles after event delivery
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
-    const status = await t.run((ctx) => workflow.status(ctx, workflowId));
+    const status = await t.run((ctx) =>
+      confirmationWorkflow.status(ctx, workflowId),
+    );
     expect(status.type).toBe("completed");
     assert(status.type === "completed");
     expect(status.result).toBe("proposal2");
@@ -159,20 +151,17 @@ describe("workflow cancellation", () => {
     const t = initConvexTest();
     // Start a workflow that will block (user confirmation waits for event)
     const workflowId = await t.run((ctx) =>
-      workflow.start(
-        ctx,
-        internal.userConfirmation.confirmationWorkflow,
-        { prompt: "test" },
-        { startAsync: true },
-      ),
+      confirmationWorkflow.start(ctx, { prompt: "test" }, { startAsync: true }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
     // Cancel it
-    await t.run((ctx) => workflow.cancel(ctx, workflowId));
+    await t.run((ctx) => confirmationWorkflow.cancel(ctx, workflowId));
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
-    const status = await t.run((ctx) => workflow.status(ctx, workflowId));
+    const status = await t.run((ctx) =>
+      confirmationWorkflow.status(ctx, workflowId),
+    );
     expect(status.type).toBe("canceled");
   });
 });

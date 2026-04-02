@@ -3,10 +3,16 @@
  * These expose workflow start/status/signal operations for use from a client.
  */
 import { v } from "convex/values";
-import { WorkflowId, WorkflowStatus, vWorkflowId } from "@convex-dev/workflow";
+import {
+  WorkflowId,
+  WorkflowManager,
+  WorkflowStatus,
+  vWorkflowId,
+} from "@convex-dev/workflow";
 import { mutation, query } from "./_generated/server";
-import { internal } from "./_generated/api";
-import { workflow } from "./example";
+import { components, internal } from "./_generated/api";
+
+const workflow = new WorkflowManager(components.workflow);
 
 // Start various workflows and return their IDs
 export const startAll = mutation({

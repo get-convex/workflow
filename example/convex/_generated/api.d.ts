@@ -15,6 +15,7 @@ import type * as example from "../example.js";
 import type * as inlineTest from "../inlineTest.js";
 import type * as nestedWorkflow from "../nestedWorkflow.js";
 import type * as passingSignals from "../passingSignals.js";
+import type * as test_oldSyntax from "../test/oldSyntax.js";
 import type * as transcription from "../transcription.js";
 import type * as userConfirmation from "../userConfirmation.js";
 
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   inlineTest: typeof inlineTest;
   nestedWorkflow: typeof nestedWorkflow;
   passingSignals: typeof passingSignals;
+  "test/oldSyntax": typeof test_oldSyntax;
   transcription: typeof transcription;
   userConfirmation: typeof userConfirmation;
 }>;

@@ -377,9 +377,11 @@ describe("StepExecutor + WorkflowCtx integration", () => {
     });
 
     const [error] = await Promise.all([
-      ctx.run(async () => {
-        throw new Error("inline boom");
-      }).catch((e: Error) => e),
+      ctx
+        .run(async () => {
+          throw new Error("inline boom");
+        })
+        .catch((e: Error) => e),
       replayFromJournal(channel, [entry]),
     ]);
 
@@ -419,7 +421,7 @@ describe("StepExecutor + WorkflowCtx integration", () => {
       journalEntry({
         name: "run",
         functionType: "mutation",
-      handle: "inline",
+        handle: "inline",
         args: {},
         runResult: { kind: "success", returnValue: "inline-result" },
         stepNumber: 0,

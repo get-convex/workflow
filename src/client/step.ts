@@ -24,7 +24,7 @@ export type WorkerResult =
   | { type: "handlerDone"; runResult: RunResult }
   | { type: "executorBlocked" };
 
-export type StepRequest = {
+export type StepRequest<DM extends GenericDataModel = GenericDataModel> = {
   name: string;
   target:
     | {
@@ -48,9 +48,7 @@ export type StepRequest = {
       }
     | {
         kind: "inline";
-        handler: (
-          ctx: GenericMutationCtx<GenericDataModel>,
-        ) => Promise<unknown>;
+        handler: (ctx: GenericMutationCtx<DM>) => Promise<unknown>;
         args: Record<string, never>;
       };
   retry: RetryBehavior | boolean | undefined;
@@ -62,16 +60,16 @@ export type StepRequest = {
   resolve: (result: RunResult) => void;
 };
 
-export class StepExecutor {
+export class StepExecutor<DataModel extends GenericDataModel> {
   private journalEntrySize: number;
 
   constructor(
     private workflowId: string,
     private generationNumber: number,
-    private ctx: GenericMutationCtx<GenericDataModel>,
+    private ctx: GenericMutationCtx<DataModel>,
     private component: WorkflowComponent,
     private journalEntries: Array<JournalEntry>,
-    private receiver: BaseChannel<StepRequest>,
+    private receiver: BaseChannel<StepRequest<DataModel>>,
     private now: number,
     private workpoolOptions: WorkpoolOptions | undefined,
   ) {
@@ -129,7 +127,7 @@ export class StepExecutor {
     };
   }
 
-  completeMessage(message: StepRequest, entry: JournalEntry) {
+  completeMessage(message: StepRequest<DataModel>, entry: JournalEntry) {
     if (entry.step.inProgress) {
       throw new Error(
         `Assertion failed: not blocked but have in-progress journal entry`,
@@ -165,7 +163,9 @@ export class StepExecutor {
     message.resolve(entry.step.runResult);
   }
 
-  async startSteps(messages: StepRequest[]): Promise<JournalEntry[]> {
+  async startSteps(
+    messages: StepRequest<DataModel>[],
+  ): Promise<JournalEntry[]> {
     const steps = await Promise.all(
       messages.map(async (message) => {
         const args = message.target.args ?? {};

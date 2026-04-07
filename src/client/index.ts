@@ -17,11 +17,7 @@ import {
   type RegisteredMutation,
   type ReturnValueForOptionalValidator,
 } from "convex/server";
-import type {
-  ObjectType,
-  PropertyValidators,
-  Validator,
-} from "convex/values";
+import type { ObjectType, PropertyValidators, Validator } from "convex/values";
 import type { Step } from "../component/schema.js";
 import type {
   EventId,
@@ -95,93 +91,6 @@ export type WorkflowStatus =
   | { type: "canceled" }
   | { type: "failed"; error: string };
 
-type MatchingRef<
-  AV extends PropertyValidators,
-  RV extends Validator<any, any, any> | void,
-> = FunctionReference<
-  "mutation",
-  "internal",
-  {
-    fn: "You should not call this directly, call workflow.start instead";
-    args: ObjectType<AV>;
-  },
-  ReturnValueForOptionalValidator<RV>
->;
-
-export interface UnboundWorkflow<
-  AV extends PropertyValidators,
-  RV extends Validator<any, "required", any> | void,
-> {
-  handler(
-    fn: (
-      step: WorkflowCtx,
-      args: ObjectType<AV>,
-    ) => Promise<ReturnValueForOptionalValidator<RV>>,
-  ): RegisteredMutation<
-    "internal",
-    {
-      fn: "You should not call this directly, call workflow.start instead";
-      args: ObjectType<AV>;
-    },
-    ReturnValueForOptionalValidator<RV>
-  >;
-
-  /** Bind to a function reference. Returns a BoundWorkflow with .start()/.status(). */
-  bind(ref: MatchingRef<AV, RV>): BoundWorkflow<AV, RV>;
-}
-
-export interface BoundWorkflow<
-  AV extends PropertyValidators,
-  RV extends Validator<any, "required", any> | void,
-> {
-  handler(
-    fn: (
-      step: WorkflowCtx,
-      args: ObjectType<AV>,
-    ) => Promise<ReturnValueForOptionalValidator<RV>>,
-  ): RegisteredMutation<
-    "internal",
-    {
-      fn: "You should not call this directly, call workflow.start instead";
-      args: ObjectType<AV>;
-    },
-    ReturnValueForOptionalValidator<RV>
-  >;
-
-  start(
-    ctx: RunMutationCtx,
-    args: ObjectType<AV>,
-    options?: CallbackOptions & { startAsync?: boolean },
-  ): Promise<WorkflowId>;
-  status(ctx: RunQueryCtx, workflowId: WorkflowId): Promise<WorkflowStatus>;
-  cancel(ctx: RunMutationCtx, workflowId: WorkflowId): Promise<void>;
-  restart(
-    ctx: RunMutationCtx,
-    workflowId: WorkflowId,
-    options?: {
-      from?: number | string | FunctionReference<any, any>;
-      startAsync?: boolean;
-    },
-  ): Promise<void>;
-  cleanup(ctx: RunMutationCtx, workflowId: WorkflowId): Promise<boolean>;
-  sendEvent<T = null, Name extends string = string>(
-    ctx: RunMutationCtx,
-    args: (
-      | { workflowId: WorkflowId; name: Name; id?: EventId<Name> }
-      | { workflowId?: undefined; name?: Name; id: EventId<Name> }
-    ) &
-      (
-        | { validator?: undefined; value?: T }
-        | { validator: Validator<T, any, any>; value: T }
-        | { error: string; value?: undefined }
-      ),
-  ): Promise<EventId<Name>>;
-  createEvent<Name extends string>(
-    ctx: RunMutationCtx,
-    args: { name: Name; workflowId: WorkflowId },
-  ): Promise<EventId<Name>>;
-}
-
 /**
  * Define a new workflow with typed args and optional return validator.
  *
@@ -240,16 +149,13 @@ export function defineWorkflow<
                 context: options.context,
               }
             : undefined;
-          const workflowId = await ctx.runMutation(
-            component.workflow.create,
-            {
-              workflowName: safeFunctionName(ref),
-              workflowHandle: handle,
-              workflowArgs: args,
-              onComplete,
-              startAsync: options?.startAsync,
-            },
-          );
+          const workflowId = await ctx.runMutation(component.workflow.create, {
+            workflowName: safeFunctionName(ref),
+            workflowHandle: handle,
+            workflowArgs: args,
+            onComplete,
+            startAsync: options?.startAsync,
+          });
           return workflowId as unknown as WorkflowId;
         },
         async status(ctx, workflowId) {
@@ -330,6 +236,178 @@ export function defineWorkflow<
   };
 }
 
+type WorkflowArgs<V extends PropertyValidators> = {
+  fn: "You should not call this directly, call workflow.start instead";
+  args: ObjectType<V>;
+};
+
+export interface UnboundWorkflow<
+  AV extends PropertyValidators,
+  RV extends Validator<any, "required", any> | void,
+> {
+  /**
+   * Define the workflow handler function.
+   * You can then bind it to a Workflow using
+   * myWorkflow.bind(internal.path.to.this.handler)
+   */
+  handler(
+    fn: (
+      step: WorkflowCtx,
+      args: ObjectType<AV>,
+    ) => Promise<ReturnValueForOptionalValidator<RV>>,
+  ): RegisteredMutation<
+    "internal",
+    WorkflowArgs<AV>,
+    ReturnValueForOptionalValidator<RV>
+  >;
+
+  /**
+   * Bind the workflow to its handler function's reference.
+   * Example: internal.myFile.myWorkflowHandler
+   * Returns a BoundWorkflow with .start()/.status()/etc.
+   */
+  bind(
+    ref: FunctionReference<
+      "mutation",
+      "internal",
+      WorkflowArgs<AV>,
+      ReturnValueForOptionalValidator<RV>
+    >,
+  ): BoundWorkflow<AV, RV>;
+}
+
+export interface BoundWorkflow<
+  AV extends PropertyValidators,
+  RV extends Validator<any, "required", any> | void,
+> {
+  /**
+   * Define the workflow handler function.
+   * You can then bind it to a Workflow using
+   * myWorkflow.bind(internal.path.to.this.handler)
+   */
+  handler(
+    fn: (
+      step: WorkflowCtx,
+      args: ObjectType<AV>,
+    ) => Promise<ReturnValueForOptionalValidator<RV>>,
+  ): RegisteredMutation<
+    "internal",
+    WorkflowArgs<AV>,
+    ReturnValueForOptionalValidator<RV>
+  >;
+
+  /**
+   * Kick off a defined workflow.
+   *
+   * @param ctx - The Convex context.
+   * @param args - The workflow arguments.
+   * @param options - The workflow options.
+   * @returns The workflow ID.
+   */
+  start(
+    ctx: RunMutationCtx,
+    args: ObjectType<AV>,
+    options?: CallbackOptions & {
+      /**
+       * By default, during creation the workflow will be initiated immediately.
+       * The benefit is that you catch errors earlier (e.g. passing a bad
+       * workflow reference or catch arg validation).
+       *
+       * With `startAsync` set to true, the workflow will be created but will
+       * start asynchronously via the internal workpool.
+       * You can use this to queue up a lot of work,
+       * or make `start` return faster (you still get a workflowId back).
+       * @default false
+       */
+
+      startAsync?: boolean;
+    },
+  ): Promise<WorkflowId>;
+  /**
+   * Get a workflow's status.
+   *
+   * @param ctx - The Convex context.
+   * @param workflowId - The workflow ID.
+   * @returns The workflow status.
+   */
+  status(ctx: RunQueryCtx, workflowId: WorkflowId): Promise<WorkflowStatus>;
+  /**
+   * Cancel a running workflow.
+   *
+   * @param ctx - The Convex context.
+   * @param workflowId - The workflow ID.
+   */
+  cancel(ctx: RunMutationCtx, workflowId: WorkflowId): Promise<void>;
+  /**
+   * Restart a previously-failed workflow.
+   *
+   * By default it will retry the handler using the existing history of steps.
+   * To restart from the beginning, pass `{from: 0}`.
+   * To restart from a named step or event: `{from: "myName"}`.
+   * To restart from a function call: `{from: internal.foo.bar}`.
+   *
+   * If the function or name were called multiple times, it will restart from
+   * the last invocation.
+   *
+   * @param ctx - The Convex context.
+   * @param workflowId - The workflow ID.
+   * @param options - Options for the retry.
+   * @param options.from - The step to retry from. Can be a step number,
+   *   a step name, or the function / workflow `internal.foo.bar`.
+   *   Steps from this point onwards will be deleted before restarting.
+   *   If not provided, the handler will be re-executed using the existing
+   *   history of steps.
+   * @param options.startAsync - If true, the workflow will be enqueued
+   *   via the workpool instead of running immediately.
+   */
+  restart(
+    ctx: RunMutationCtx,
+    workflowId: WorkflowId,
+    options?: {
+      from?: number | string | FunctionReference<any, any>;
+      startAsync?: boolean;
+    },
+  ): Promise<void>;
+  /**
+   * Clean up a completed workflow's storage.
+   *
+   * @param ctx - The Convex context.
+   * @param workflowId - The workflow ID.
+   * @returns - Whether the workflow's state was cleaned up.
+   */
+  cleanup(ctx: RunMutationCtx, workflowId: WorkflowId): Promise<boolean>;
+  /**
+   * Send an event to a workflow.
+   *
+   * @param ctx - From a mutation, action or workflow step.
+   * @param args - Either send an event by its ID, or by name and workflow ID.
+   *   If you have a validator, you must provide a value.
+   *   If you provide an error string, awaiting the event will throw an error.
+   */
+  sendEvent<T = null, Name extends string = string>(
+    ctx: RunMutationCtx,
+    args: (
+      | { workflowId: WorkflowId; name: Name; id?: EventId<Name> }
+      | { workflowId?: undefined; name?: Name; id: EventId<Name> }
+    ) &
+      (
+        | { validator?: undefined; value?: T }
+        | { validator: Validator<T, any, any>; value: T }
+        | { error: string; value?: undefined }
+      ),
+  ): Promise<EventId<Name>>;
+  /**
+   * Create an event ahead of time, enabling awaiting a specific event by ID.
+   * @param ctx - From an action, mutation or workflow step.
+   * @param args - The name of the event and what workflow it belongs to.
+   * @returns The event ID, which can be used to send the event or await it.
+   */
+  createEvent<Name extends string>(
+    ctx: RunMutationCtx,
+    args: { name: Name; workflowId: WorkflowId },
+  ): Promise<EventId<Name>>;
+}
+
 export class WorkflowManager {
   constructor(
     public component: WorkflowComponent,
@@ -351,10 +429,7 @@ export class WorkflowManager {
     workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator>,
   ): RegisteredMutation<
     "internal",
-    {
-      fn: "You should not call this directly, call workflow.start instead";
-      args: ObjectType<ArgsValidator>;
-    },
+    WorkflowArgs<ArgsValidator>,
     ReturnValueForOptionalValidator<ReturnsValidator>
   >;
   define<
@@ -373,10 +448,7 @@ export class WorkflowManager {
       ) => Promise<ReturnValueForOptionalValidator<ReturnsValidator>>,
     ) => RegisteredMutation<
       "internal",
-      {
-        fn: "You should not call this directly, call workflow.start instead";
-        args: ObjectType<ArgsValidator>;
-      },
+      WorkflowArgs<ArgsValidator>,
       ReturnValueForOptionalValidator<ReturnsValidator>
     >;
   };

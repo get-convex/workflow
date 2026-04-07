@@ -124,27 +124,17 @@ export function defineWorkflow<
   component: WorkflowComponent,
   config: WorkflowDefinition<AV, RV>,
 ): UnboundWorkflow<AV, RV> {
-  function makeHandler(
-    fn: (
-      step: WorkflowCtx,
-      args: ObjectType<AV>,
-    ) => Promise<ReturnValueForOptionalValidator<RV>>,
-    boundFn?: string,
-  ) {
-    return workflowMutation(
-      component,
-      { ...config, handler: fn },
-      undefined,
-      boundFn,
-    );
-  }
-
   return {
-    handler: (fn) => makeHandler(fn),
-    bind(ref) {
+    bind: (ref) => {
       const refName = safeFunctionName(ref);
       return {
-        handler: (fn) => makeHandler(fn, refName),
+        handler: (fn) =>
+          workflowMutation(
+            component,
+            { ...config, handler: fn },
+            undefined,
+            refName,
+          ),
         async start(ctx, args, options?) {
           const handle = await createFunctionHandle(ref);
           const onComplete = options?.onComplete
@@ -297,22 +287,6 @@ export interface UnboundWorkflow<
   RV extends Validator<any, "required", any> | void,
 > {
   /**
-   * Define the workflow handler function.
-   * You can then bind it to a Workflow using
-   * myWorkflow.bind(internal.path.to.this.handler)
-   */
-  handler(
-    fn: (
-      step: WorkflowCtx,
-      args: ObjectType<AV>,
-    ) => Promise<ReturnValueForOptionalValidator<RV>>,
-  ): RegisteredMutation<
-    "internal",
-    WorkflowArgs<AV>,
-    ReturnValueForOptionalValidator<RV>
-  >;
-
-  /**
    * Bind the workflow to its handler function's reference.
    * Example: internal.myFile.myWorkflowHandler
    * Returns a BoundWorkflow with .start()/.status()/etc.
@@ -324,10 +298,10 @@ export interface UnboundWorkflow<
       WorkflowArgs<AV>,
       ReturnValueForOptionalValidator<RV>
     >,
-  ): BoundWorkflow<AV, RV>;
+  ): Workflow<AV, RV>;
 }
 
-export interface BoundWorkflow<
+export interface Workflow<
   AV extends PropertyValidators,
   RV extends Validator<any, "required", any> | void,
 > {

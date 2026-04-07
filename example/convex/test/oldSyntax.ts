@@ -17,17 +17,23 @@ const workflow = new WorkflowManager(components.workflow);
 
 // -- Workflow definition using old syntax --
 
-export const oldSyntaxWorkflow = workflow
-  .define({
-    args: { value: v.number() },
-    returns: v.object({
-      queried: v.number(),
-      mutated: v.number(),
-      acted: v.string(),
-      eventValue: v.string(),
-    }),
-  })
-  .handler(async (step, args) => {
+export const oldSyntaxWorkflow = workflow.define({
+  args: { value: v.number() },
+  returns: v.object({
+    queried: v.number(),
+    mutated: v.number(),
+    acted: v.string(),
+    eventValue: v.string(),
+  }),
+  handler: async (
+    step,
+    args,
+  ): Promise<{
+    queried: number;
+    mutated: number;
+    acted: string;
+    eventValue: string;
+  }> => {
     // step.runQuery
     const queried = await step.runQuery(internal.test.oldSyntax.doubleQuery, {
       n: args.value,
@@ -51,7 +57,8 @@ export const oldSyntaxWorkflow = workflow
       validator: v.string(),
     });
     return { queried, mutated, acted, eventValue };
-  });
+  },
+});
 
 // -- Helper functions --
 

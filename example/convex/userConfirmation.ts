@@ -1,12 +1,8 @@
-import {
-  defineEvent,
-  defineWorkflow,
-  vWorkflowId,
-  WorkflowId,
-} from "@convex-dev/workflow";
+import { defineEvent, vWorkflowId, WorkflowId } from "@convex-dev/workflow";
 import { v } from "convex/values";
-import { components, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { internalAction, internalMutation } from "./_generated/server";
+import { workflow } from "./example";
 
 export const approvalEvent = defineEvent({
   name: "approval",
@@ -16,21 +12,23 @@ export const approvalEvent = defineEvent({
   ),
 });
 
-export const confirmationWorkflow = defineWorkflow(components.workflow, {
-  args: { prompt: v.string() },
-  returns: v.string(),
-}).bind(internal.userConfirmation.confirmation);
+export const confirmationWorkflow = workflow
+  .define({
+    args: { prompt: v.string() },
+    returns: v.string(),
+  })
+  .bind(internal.userConfirmation.confirmation);
 
 export const confirmation = confirmationWorkflow.handler(
-  async (ctx, args): Promise<string> => {
+  async (step, args): Promise<string> => {
     console.log("Starting confirmation workflow");
-    const proposals = await ctx.runAction(
+    const proposals = await step.runAction(
       internal.userConfirmation.generateProposals,
       { prompt: args.prompt },
       { retry: true },
     );
     console.log("Proposals generated", proposals);
-    const approval = await ctx.awaitEvent(approvalEvent);
+    const approval = await step.awaitEvent(approvalEvent);
     if (!approval.approved) {
       return "rejected: " + approval.reason;
     }

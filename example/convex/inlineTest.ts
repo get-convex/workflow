@@ -1,19 +1,24 @@
+import { WorkflowManager } from "@convex-dev/workflow";
 import { v } from "convex/values";
-import { defineWorkflow } from "@convex-dev/workflow";
-import { internal } from "./_generated/api.js";
-import { components } from "./_generated/api.js";
+import { components, internal } from "./_generated/api.js";
 import {
+  internalAction,
   internalMutation,
   internalQuery,
-  internalAction,
 } from "./_generated/server.js";
+
+export const workflow = new WorkflowManager(components.workflow);
 
 // ── Test 1: Sequential inline queries ─────────
 // Results come back in order, one at a time.
-export const sequentialInlineQueries = defineWorkflow(components.workflow, {
-  args: { key: v.string() },
-  returns: v.object({ a: v.number(), b: v.number() }),
-}).handler(async (step, args) => {
+export const sequentialInlineQueries = workflow
+  .define({
+    args: { key: v.string() },
+    returns: v.object({ a: v.number(), b: v.number() }),
+  })
+  .bind(internal.inlineTest.siq);
+
+export const siq = sequentialInlineQueries.handler(async (step, args) => {
   const a = await step.runQuery(
     internal.inlineTest.getCounter,
     { key: args.key },
@@ -32,14 +37,17 @@ export const sequentialInlineQueries = defineWorkflow(components.workflow, {
 // First run: batched, both resolve at once.
 // Replay: resolved one-by-one from journal.
 // resolveOrder should be ["a","b"] in both cases.
-export const parallelInlineQueries = defineWorkflow(components.workflow, {
-  args: { key: v.string() },
-  returns: v.object({
-    a: v.number(),
-    b: v.number(),
-    resolveOrder: v.array(v.string()),
-  }),
-}).handler(async (step, args) => {
+export const parallelInlineQueries = workflow
+  .define({
+    args: { key: v.string() },
+    returns: v.object({
+      a: v.number(),
+      b: v.number(),
+      resolveOrder: v.array(v.string()),
+    }),
+  })
+  .bind(internal.inlineTest.piq);
+export const piq = parallelInlineQueries.handler(async (step, args) => {
   const resolveOrder: string[] = [];
   const aPromise = step
     .runQuery(
@@ -68,10 +76,13 @@ export const parallelInlineQueries = defineWorkflow(components.workflow, {
 // ── Test 3: Promise.race between inline queries ──
 // Checks which promise resolves first.
 // Should be "a" in both first-run and replay paths.
-export const raceInlineQueries = defineWorkflow(components.workflow, {
-  args: { key: v.string() },
-  returns: v.object({ winner: v.string(), value: v.number() }),
-}).handler(async (step, args) => {
+export const raceInlineQueries = workflow
+  .define({
+    args: { key: v.string() },
+    returns: v.object({ winner: v.string(), value: v.number() }),
+  })
+  .bind(internal.inlineTest.riq);
+export const riq = raceInlineQueries.handler(async (step, args) => {
   const aPromise = step
     .runQuery(
       internal.inlineTest.getCounter,
@@ -91,10 +102,13 @@ export const raceInlineQueries = defineWorkflow(components.workflow, {
 
 // ── Test 4: Inline mutations ──────────────────
 // Verifies mutations execute within the same transaction.
-export const inlineMutations = defineWorkflow(components.workflow, {
-  args: { key: v.string() },
-  returns: v.object({ first: v.number(), second: v.number() }),
-}).handler(async (step, args) => {
+export const inlineMutations = workflow
+  .define({
+    args: { key: v.string() },
+    returns: v.object({ first: v.number(), second: v.number() }),
+  })
+  .bind(internal.inlineTest.im);
+export const im = inlineMutations.handler(async (step, args) => {
   const first = await step.runMutation(
     internal.inlineTest.incrementCounter,
     { key: args.key },
@@ -111,13 +125,16 @@ export const inlineMutations = defineWorkflow(components.workflow, {
 // ── Test 6: Mixed inline + action ─────────────
 // The query runs inline, while the action goes through
 // workpool. Since not all steps complete inline, executor blocks.
-export const mixedInlineAndAction = defineWorkflow(components.workflow, {
-  args: { key: v.string() },
-  returns: v.object({
-    queryResult: v.number(),
-    actionResult: v.string(),
-  }),
-}).handler(async (step, args) => {
+export const mixedInlineAndAction = workflow
+  .define({
+    args: { key: v.string() },
+    returns: v.object({
+      queryResult: v.number(),
+      actionResult: v.string(),
+    }),
+  })
+  .bind(internal.inlineTest.mia);
+export const mia = mixedInlineAndAction.handler(async (step, args) => {
   const queryPromise = step.runQuery(
     internal.inlineTest.getCounter,
     { key: args.key },
@@ -135,10 +152,13 @@ export const mixedInlineAndAction = defineWorkflow(components.workflow, {
 
 // ── Test 7: Dependent inline queries ──────────
 // Second query uses result of first.
-export const dependentInlineQueries = defineWorkflow(components.workflow, {
-  args: { key: v.string() },
-  returns: v.object({ first: v.number(), second: v.number() }),
-}).handler(async (step, args) => {
+export const dependentInlineQueries = workflow
+  .define({
+    args: { key: v.string() },
+    returns: v.object({ first: v.number(), second: v.number() }),
+  })
+  .bind(internal.inlineTest.diq);
+export const diq = dependentInlineQueries.handler(async (step, args) => {
   const first = await step.runQuery(
     internal.inlineTest.getCounter,
     { key: args.key },

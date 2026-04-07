@@ -1,15 +1,13 @@
-import {
-  type EventId,
-  vEventId,
-  vWorkflowId,
-  defineWorkflow,
-} from "@convex-dev/workflow";
-import { components, internal } from "./_generated/api";
+import { type EventId, vEventId, vWorkflowId } from "@convex-dev/workflow";
+import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
+import { workflow } from "./example";
 
-export const signalWorkflow = defineWorkflow(components.workflow, {
-  args: {},
-}).bind(internal.passingSignals.signalBased);
+export const signalWorkflow = workflow
+  .define({
+    args: {},
+  })
+  .bind(internal.passingSignals.signalBased);
 
 export const signalBased = signalWorkflow.handler(async (ctx) => {
   console.log("Starting signal based  workflow");

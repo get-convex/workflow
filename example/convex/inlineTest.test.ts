@@ -1,10 +1,18 @@
 /// <reference types="vite/client" />
 
-import { expect, describe, test, vi, beforeEach, afterEach } from "vitest";
-import { initConvexTest } from "./setup.test";
-import { components, internal } from "./_generated/api";
-import { assert } from "convex-helpers";
 import { WorkflowManager } from "@convex-dev/workflow";
+import { assert } from "convex-helpers";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { components } from "./_generated/api";
+import {
+  dependentInlineQueries,
+  inlineMutations,
+  mixedInlineAndAction,
+  parallelInlineQueries,
+  raceInlineQueries,
+  sequentialInlineQueries,
+} from "./inlineTest";
+import { initConvexTest } from "./setup.test";
 
 const workflow = new WorkflowManager(components.workflow);
 
@@ -19,9 +27,7 @@ describe("inline queries and mutations", () => {
   test("sequential inline queries complete in one poll", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.inlineTest.sequentialInlineQueries, {
-        key: "seq_test",
-      }),
+      sequentialInlineQueries.start(ctx, { key: "seq_test" }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     const status = await t.query((ctx) => workflow.status(ctx, workflowId));
@@ -33,9 +39,7 @@ describe("inline queries and mutations", () => {
   test("parallel inline queries resolve in push order", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.inlineTest.parallelInlineQueries, {
-        key: "par_test",
-      }),
+      parallelInlineQueries.start(ctx, { key: "par_test" }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     const status = await t.query((ctx) => workflow.status(ctx, workflowId));
@@ -54,9 +58,7 @@ describe("inline queries and mutations", () => {
   test("Promise.race picks first-pushed query", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.inlineTest.raceInlineQueries, {
-        key: "race_test",
-      }),
+      raceInlineQueries.start(ctx, { key: "race_test" }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     const status = await t.query((ctx) => workflow.status(ctx, workflowId));
@@ -69,9 +71,7 @@ describe("inline queries and mutations", () => {
   test("inline mutations execute and return sequentially", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.inlineTest.inlineMutations, {
-        key: "mut_test",
-      }),
+      inlineMutations.start(ctx, { key: "mut_test" }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     const status = await t.query((ctx) => workflow.status(ctx, workflowId));
@@ -84,9 +84,7 @@ describe("inline queries and mutations", () => {
   test("mixed inline + action: query runs inline, action via workpool", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.inlineTest.mixedInlineAndAction, {
-        key: "mixed_test",
-      }),
+      mixedInlineAndAction.start(ctx, { key: "mixed_test" }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     const status = await t.query((ctx) => workflow.status(ctx, workflowId));
@@ -103,9 +101,7 @@ describe("inline queries and mutations", () => {
   test("dependent inline queries: second uses result of first", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.inlineTest.dependentInlineQueries, {
-        key: "dep_test",
-      }),
+      dependentInlineQueries.start(ctx, { key: "dep_test" }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     const status = await t.query((ctx) => workflow.status(ctx, workflowId));

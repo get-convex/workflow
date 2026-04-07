@@ -1,9 +1,8 @@
 import { v } from "convex/values";
-import { defineWorkflow } from "@convex-dev/workflow";
+import { OpenAI } from "openai";
 import { internal } from "./_generated/api.js";
 import { internalAction, internalMutation } from "./_generated/server.js";
-import { components } from "./_generated/api.js";
-import { OpenAI } from "openai";
+import { workflow } from "./example.js";
 
 function getOpenAI() {
   if (!process.env.OPENAI_API_KEY) {
@@ -15,25 +14,27 @@ function getOpenAI() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
-export const transcriptionDef = defineWorkflow(components.workflow, {
-  args: {
-    storageId: v.id("_storage"),
-  },
-}).bind(internal.transcription.transcriptionWorkflow);
+export const transcriptionWorkflow = workflow
+  .define({
+    args: {
+      storageId: v.id("_storage"),
+    },
+  })
+  .bind(internal.transcription.transcription);
 
 export const startTranscription = internalMutation({
   args: {
     storageId: v.id("_storage"),
   },
   handler: async (ctx, args) => {
-    const id: string = await transcriptionDef.start(ctx, {
+    const id: string = await transcriptionWorkflow.start(ctx, {
       storageId: args.storageId,
     });
     return id;
   },
 });
 
-export const transcriptionWorkflow = transcriptionDef.handler(
+export const transcription = transcriptionWorkflow.handler(
   async (step, args) => {
     const transcription = await step.runAction(
       internal.transcription.computeTranscription,

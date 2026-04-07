@@ -1,26 +1,33 @@
 import { v } from "convex/values";
-import { WorkflowId, defineWorkflow } from "@convex-dev/workflow";
+import { WorkflowId, WorkflowManager } from "@convex-dev/workflow";
 import { internal } from "./_generated/api.js";
 import { internalAction, internalMutation } from "./_generated/server.js";
 import { components } from "./_generated/api.js";
 import { vWorkflowId } from "@convex-dev/workflow";
 import { vResultValidator } from "@convex-dev/workpool";
 
-export const myWorkflow = defineWorkflow(components.workflow, {
-  args: {
-    location: v.string(),
-  },
-  // If you also want to run runtime validation on the return value.
-  returns: v.object({
-    name: v.string(),
-    celsius: v.number(),
-    farenheit: v.number(),
-    windSpeed: v.number(),
-    windGust: v.number(),
-  }),
-}).bind(internal.example.example);
+export const workflow = new WorkflowManager(components.workflow);
 
-export const example = myWorkflow.handler(async (step, args) => {
+export const myWorkflow = workflow
+  .define({
+    args: {
+      location: v.string(),
+    },
+    workpoolOptions: {
+      retryActionsByDefault: true,
+    },
+    // If you also want to run runtime validation on the return value.
+    returns: v.object({
+      name: v.string(),
+      celsius: v.number(),
+      farenheit: v.number(),
+      windSpeed: v.number(),
+      windGust: v.number(),
+    }),
+  })
+  .bind(internal.example.myHandler);
+
+export const myHandler = myWorkflow.handler(async (step, args) => {
   console.time("overall");
   console.time("geocoding");
   // Run in parallel!

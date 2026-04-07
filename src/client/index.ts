@@ -122,7 +122,7 @@ export function defineWorkflow<
   RV extends Validator<any, "required", any> | void = void,
 >(
   component: WorkflowComponent,
-  config: { args: AV; returns?: RV },
+  config: WorkflowDefinition<AV, RV>,
 ): UnboundWorkflow<AV, RV> {
   function makeHandler(
     fn: (

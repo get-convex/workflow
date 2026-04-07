@@ -201,6 +201,58 @@ export function defineWorkflow<
             startAsync: options?.startAsync,
           });
         },
+        async list(
+          ctx: RunQueryCtx,
+          opts?: {
+            order?: "asc" | "desc";
+            paginationOpts?: PaginationOptions;
+          },
+        ): Promise<PaginationResult<PublicWorkflow>> {
+          const workflows = await ctx.runQuery(component.workflow.list, {
+            order: opts?.order ?? "asc",
+            paginationOpts: opts?.paginationOpts ?? {
+              cursor: null,
+              numItems: 100,
+            },
+          });
+          return workflows as PaginationResult<PublicWorkflow>;
+        },
+        async listByName(
+          ctx: RunQueryCtx,
+          name: string,
+          opts?: {
+            order?: "asc" | "desc";
+            paginationOpts?: PaginationOptions;
+          },
+        ): Promise<PaginationResult<PublicWorkflow>> {
+          const workflows = await ctx.runQuery(component.workflow.listByName, {
+            name,
+            order: opts?.order ?? "asc",
+            paginationOpts: opts?.paginationOpts ?? {
+              cursor: null,
+              numItems: 100,
+            },
+          });
+          return workflows as PaginationResult<PublicWorkflow>;
+        },
+        async listSteps(
+          ctx: RunQueryCtx,
+          workflowId: WorkflowId,
+          opts?: {
+            order?: "asc" | "desc";
+            paginationOpts?: PaginationOptions;
+          },
+        ): Promise<PaginationResult<WorkflowStep>> {
+          const steps = await ctx.runQuery(component.workflow.listSteps, {
+            workflowId,
+            order: opts?.order ?? "asc",
+            paginationOpts: opts?.paginationOpts ?? {
+              cursor: null,
+              numItems: 100,
+            },
+          });
+          return steps as PaginationResult<WorkflowStep>;
+        },
         async cleanup(ctx, workflowId) {
           return await ctx.runMutation(component.workflow.cleanup, {
             workflowId,
@@ -368,6 +420,63 @@ export interface BoundWorkflow<
       startAsync?: boolean;
     },
   ): Promise<void>;
+  /**
+   * List workflows, including their name, args, return value etc.
+   *
+   * @param ctx - The Convex context from a query, mutation, or action.
+   * @param opts - How many workflows to fetch and in what order.
+   *   e.g. `{ order: "desc", paginationOpts: { cursor: null, numItems: 10 } }`
+   *   will get the last 10 workflows in descending order.
+   *   Defaults to 100 workflows in ascending order.
+   * @returns The pagination result with per-workflow data.
+   */
+  list(
+    ctx: RunQueryCtx,
+    opts?: {
+      order?: "asc" | "desc";
+      paginationOpts?: PaginationOptions;
+    },
+  ): Promise<PaginationResult<PublicWorkflow>>;
+
+  /**
+   * List workflows matching a specific name, including their args, return value etc.
+   *
+   * @param ctx - The Convex context from a query, mutation, or action.
+   * @param name - The workflow name to filter by.
+   * @param opts - How many workflows to fetch and in what order.
+   *   e.g. `{ order: "desc", paginationOpts: { cursor: null, numItems: 10 } }`
+   *   will get the last 10 workflows in descending order.
+   *   Defaults to 100 workflows in ascending order.
+   * @returns The pagination result with per-workflow data.
+   */
+  listByName(
+    ctx: RunQueryCtx,
+    name: string,
+    opts?: {
+      order?: "asc" | "desc";
+      paginationOpts?: PaginationOptions;
+    },
+  ): Promise<PaginationResult<PublicWorkflow>>;
+
+  /**
+   * List the steps in a workflow, including their name, args, return value etc.
+   *
+   * @param ctx - The Convex context from a query, mutation, or action.
+   * @param workflowId - The workflow ID.
+   * @param opts - How many steps to fetch and in what order.
+   *   e.g. `{ order: "desc", paginationOpts: { cursor: null, numItems: 10 } }`
+   *   will get the last 10 steps in descending order.
+   *   Defaults to 100 steps in ascending order.
+   * @returns The pagination result with per-step data.
+   */
+  listSteps(
+    ctx: RunQueryCtx,
+    workflowId: WorkflowId,
+    opts?: {
+      order?: "asc" | "desc";
+      paginationOpts?: PaginationOptions;
+    },
+  ): Promise<PaginationResult<WorkflowStep>>;
   /**
    * Clean up a completed workflow's storage.
    *

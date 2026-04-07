@@ -36,6 +36,12 @@ const workflowArgs = v.union(
     args: v.any(),
   }),
 );
+
+export type WorkflowArgs<V extends PropertyValidators> = {
+  fn: "You should not call this directly, call workflow.start instead";
+  args: ObjectType<V>;
+};
+
 const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke the workflow with ctx.runMutation() instead of workflow.start()? Pro tip: to start a workflow directly from the CLI or dashboard, you can use args '{ fn: "path/to/file:workflowName", args: { ...your workflow args } }'`;
 
 // This function is defined in the calling component but then gets passed by
@@ -49,14 +55,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
   },
   defaultWorkpoolOptions?: WorkpoolOptions,
   boundFn?: string,
-): RegisteredMutation<
-  "internal",
-  {
-    fn: "You should not call this directly, call workflow.start instead";
-    args: ObjectType<ArgsValidator>;
-  },
-  void
-> {
+): RegisteredMutation<"internal", WorkflowArgs<ArgsValidator>, void> {
   const workpoolOptions = {
     ...defaultWorkpoolOptions,
     ...registered.workpoolOptions,

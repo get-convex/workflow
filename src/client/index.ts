@@ -29,7 +29,7 @@ import type {
 import { safeFunctionName } from "./safeFunctionName.js";
 import type { IdsToStrings, WorkflowComponent } from "./types.js";
 import type { WorkflowCtx } from "./workflowContext.js";
-import { workflowMutation } from "./workflowMutation.js";
+import { workflowMutation, type WorkflowArgs } from "./workflowMutation.js";
 
 export {
   vEventId,
@@ -291,11 +291,6 @@ export function defineWorkflow<
     },
   };
 }
-
-type WorkflowArgs<V extends PropertyValidators> = {
-  fn: "You should not call this directly, call workflow.start instead";
-  args: ObjectType<V>;
-};
 
 export interface UnboundWorkflow<
   AV extends PropertyValidators,

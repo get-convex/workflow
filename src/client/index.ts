@@ -521,18 +521,7 @@ export class WorkflowManager {
     ReturnsValidator extends Validator<unknown, "required", string> | void,
   >(
     workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator>,
-  ): {
-    handler: (
-      handler: (
-        step: WorkflowCtx,
-        args: ObjectType<ArgsValidator>,
-      ) => Promise<ReturnValueForOptionalValidator<ReturnsValidator>>,
-    ) => RegisteredMutation<
-      "internal",
-      WorkflowArgs<ArgsValidator>,
-      ReturnValueForOptionalValidator<ReturnsValidator>
-    >;
-  };
+  ): UnboundWorkflow<ArgsValidator, ReturnsValidator>;
   define<
     ArgsValidator extends PropertyValidators,
     ReturnsValidator extends Validator<unknown, "required", string> | void,
@@ -550,19 +539,17 @@ export class WorkflowManager {
         this.options?.workpoolOptions,
       );
     }
-    return {
-      handler: (
-        handler: (
-          step: WorkflowCtx,
-          args: ObjectType<ArgsValidator>,
-        ) => Promise<ReturnValueForOptionalValidator<ReturnsValidator>>,
-      ) =>
-        workflowMutation(
-          this.component,
-          { ...workflow, handler },
-          this.options?.workpoolOptions,
-        ),
-    };
+    // Note: we're passing through more options than defineWorkflow claims
+    // to support, in order to get the maxParallelism / etc. in there.
+    // Direct users of defineWorkflow should instead configure those values
+    // via configuring the component directly.
+    return defineWorkflow<ArgsValidator, ReturnsValidator>(this.component, {
+      ...workflow,
+      workpoolOptions: {
+        ...this.options?.workpoolOptions,
+        ...workflow.workpoolOptions,
+      },
+    });
   }
 
   /**

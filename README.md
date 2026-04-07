@@ -63,7 +63,7 @@ export const userOnboarding = workflow.define({
     }
     const email = await step.runMutation(
       internal.emails.sendWelcomeEmail,
-      { userId: args.userId, content: result.content, },
+      { userId: args.userId, content: result.content },
       // Optimization: run the mutation synchronously from this transaction.
       { inline: true },
     );
@@ -289,9 +289,8 @@ await step.sleep(24 * 60 * 60 * 1000);
 
 Tip: You can name the sleep step for clarity with a second `{ name }` argument.
 
-If you want to defer a specific step, you can use
-`runAfter` or `runAt` as scheduling options on any step. This delays that
-particular step's execution:
+If you want to defer a specific step, you can use `runAfter` or `runAt` as
+scheduling options on any step. This delays that particular step's execution:
 
 ```ts
 // Run this action 10 seconds from now.
@@ -299,8 +298,8 @@ await step.runAction(internal.example.myAction, args, { runAfter: 10_000 });
 ```
 
 This is roughly equivalent to doing a sleep first, with the difference being
-that the "myAction" step is considered "in progress" while it is waiting, and
-it only enqueues one item into the Workpool (myAction@delay), instead of two
+that the "myAction" step is considered "in progress" while it is waiting, and it
+only enqueues one item into the Workpool (myAction@delay), instead of two
 (sleep@delay, myAction@now).
 
 ### Specifying retry behavior
@@ -785,9 +784,10 @@ Here are a few limitations to keep in mind:
 - The workflow body is internally a mutation, with each step's return value read
   from the database on each subsequent step. As a result, the limits for a
   mutation apply and limit the number and size of steps you can perform
-  (including the workflow state overhead). There is currently an 8MiB limit
-  imposed on the journal size, to stay well within the mutation bounds. See more
-  about mutation limits here:
+  (including the workflow state overhead). **There is currently an 8MiB limit
+  imposed on the journal size**, to stay well within the mutation bounds. See
+  tip below for monitoring the journal size and step count during execution. See
+  more about mutation limits here:
   https://docs.convex.dev/production/state/limits#transactions
 - If you need to use side effects like `fetch` or use crypto.subtle, you'll need
   to do that in a step, not in the workflow definition.
@@ -799,6 +799,27 @@ Here are a few limitations to keep in mind:
   implementation should stay stable for the lifetime of active workflows. See
   [this issue](https://github.com/get-convex/workflow/issues/35) for ideas on
   how to make this better.
+
+**Tip:** Use `step.meta.getHistory()` to get the current journal size and step count.
+This is useful for workflows that poll in a loop, so you can bail out before
+hitting the limit.
+
+```ts
+while (true) {
+  const result = await ctx.runAction(
+    internal.example.pollForResult,
+    { id },
+    { runAfter: 1000 }, // Poll every second
+  );
+  if (result !== null) {
+    return result;
+  }
+  const { stepCount, size } = step.meta.getHistory();
+  if (stepCount > 100 || size > 2_000_000) {
+    return null;
+  }
+}
+```
 
 Open a [GitHub issue](https://github.com/get-convex/workflow/issues) with any
 feedback or bugs you find.

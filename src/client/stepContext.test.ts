@@ -97,7 +97,10 @@ async function replayFromJournal(
 describe("StepExecutor + WorkflowCtx integration", () => {
   it("resolves a successful step", async () => {
     const channel = new BaseChannel<StepRequest>(0);
-    const ctx = createWorkflowCtx("wf-1" as any, channel);
+    const ctx = createWorkflowCtx("wf-1" as any, channel, () => ({
+      size: 0,
+      stepCount: 0,
+    }));
 
     const entry = journalEntry({
       name: "test",
@@ -114,7 +117,10 @@ describe("StepExecutor + WorkflowCtx integration", () => {
 
   it("throws on a failed step and the error is catchable", async () => {
     const channel = new BaseChannel<StepRequest>(0);
-    const ctx = createWorkflowCtx("wf-2" as any, channel);
+    const ctx = createWorkflowCtx("wf-2" as any, channel, () => ({
+      size: 0,
+      stepCount: 0,
+    }));
 
     const entry = journalEntry({
       name: "test",
@@ -132,7 +138,10 @@ describe("StepExecutor + WorkflowCtx integration", () => {
 
   it("throws on a canceled step", async () => {
     const channel = new BaseChannel<StepRequest>(0);
-    const ctx = createWorkflowCtx("wf-3" as any, channel);
+    const ctx = createWorkflowCtx("wf-3" as any, channel, () => ({
+      size: 0,
+      stepCount: 0,
+    }));
 
     const entry = journalEntry({
       name: "test",
@@ -150,7 +159,10 @@ describe("StepExecutor + WorkflowCtx integration", () => {
 
   it("handles sequential steps", async () => {
     const channel = new BaseChannel<StepRequest>(0);
-    const ctx = createWorkflowCtx("wf-4" as any, channel);
+    const ctx = createWorkflowCtx("wf-4" as any, channel, () => ({
+      size: 0,
+      stepCount: 0,
+    }));
 
     const entries = [
       journalEntry({
@@ -183,7 +195,10 @@ describe("StepExecutor + WorkflowCtx integration", () => {
 
   it("catches an error mid-workflow and continues", async () => {
     const channel = new BaseChannel<StepRequest>(0);
-    const ctx = createWorkflowCtx("wf-5" as any, channel);
+    const ctx = createWorkflowCtx("wf-5" as any, channel, () => ({
+      size: 0,
+      stepCount: 0,
+    }));
 
     const entries = [
       journalEntry({
@@ -220,7 +235,10 @@ describe("StepExecutor + WorkflowCtx integration", () => {
 
   it("handles parallel steps via Promise.all", async () => {
     const channel = new BaseChannel<StepRequest>(0);
-    const ctx = createWorkflowCtx("wf-6" as any, channel);
+    const ctx = createWorkflowCtx("wf-6" as any, channel, () => ({
+      size: 0,
+      stepCount: 0,
+    }));
 
     const entries = [
       journalEntry({
@@ -254,7 +272,10 @@ describe("StepExecutor + WorkflowCtx integration", () => {
 
   it("one failure in Promise.all rejects the batch", async () => {
     const channel = new BaseChannel<StepRequest>(0);
-    const ctx = createWorkflowCtx("wf-7" as any, channel);
+    const ctx = createWorkflowCtx("wf-7" as any, channel, () => ({
+      size: 0,
+      stepCount: 0,
+    }));
 
     const entries = [
       journalEntry({
@@ -289,7 +310,10 @@ describe("StepExecutor + WorkflowCtx integration", () => {
 
   it("error is thrown from run(), not from completeMessage", async () => {
     const channel = new BaseChannel<StepRequest>(0);
-    const ctx = createWorkflowCtx("wf-8" as any, channel);
+    const ctx = createWorkflowCtx("wf-8" as any, channel, () => ({
+      size: 0,
+      stepCount: 0,
+    }));
 
     const entry = journalEntry({
       name: "test",
@@ -312,7 +336,10 @@ describe("StepExecutor + WorkflowCtx integration", () => {
 
   it("runMutation works the same as runAction", async () => {
     const channel = new BaseChannel<StepRequest>(0);
-    const ctx = createWorkflowCtx("wf-9" as any, channel);
+    const ctx = createWorkflowCtx("wf-9" as any, channel, () => ({
+      size: 0,
+      stepCount: 0,
+    }));
 
     const entry = journalEntry({
       name: "mut",
@@ -329,7 +356,10 @@ describe("StepExecutor + WorkflowCtx integration", () => {
 
   it("runQuery works the same as runAction", async () => {
     const channel = new BaseChannel<StepRequest>(0);
-    const ctx = createWorkflowCtx("wf-10" as any, channel);
+    const ctx = createWorkflowCtx("wf-10" as any, channel, () => ({
+      size: 0,
+      stepCount: 0,
+    }));
 
     const entry = journalEntry({
       name: "qry",

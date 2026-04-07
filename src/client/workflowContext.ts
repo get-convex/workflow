@@ -125,6 +125,17 @@ export type WorkflowCtx = {
    * @param opts - Optionally name the step. Default: "sleep"
    */
   sleep(duration: number, opts?: { name?: string }): Promise<void>;
+  /**
+   * Metadata about the workflow execution.
+   */
+  meta: {
+    /**
+     * Get the current history of the workflow execution.
+     *
+     * @returns The size in bytes and number of steps processed so far.
+     */
+    getHistory: () => { size: number; stepCount: number };
+  };
 };
 
 export type OptionalRestArgs<
@@ -138,9 +149,11 @@ export type OptionalRestArgs<
 export function createWorkflowCtx(
   workflowId: WorkflowId,
   sender: BaseChannel<StepRequest>,
+  getHistory: () => { size: number; stepCount: number },
 ) {
   return {
     workflowId,
+    meta: { getHistory },
     runQuery: async (query, args, opts?) => {
       return runFunction(sender, "query", query, args, opts);
     },

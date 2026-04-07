@@ -16,7 +16,7 @@ import {
 import { createLogger } from "../component/logging.js";
 import { type JournalEntry } from "../component/schema.js";
 import { setupEnvironment } from "./environment.js";
-import type { WorkflowDefinition } from "./index.js";
+import type { WorkflowDefinition, WorkflowHandler } from "./index.js";
 import { StepExecutor, type StepRequest, type WorkerResult } from "./step.js";
 import { createWorkflowCtx } from "./workflowContext.js";
 import { checkArgs } from "./validator.js";
@@ -44,7 +44,9 @@ const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke
 // it blocks next.
 export function workflowMutation<ArgsValidator extends PropertyValidators>(
   component: WorkflowComponent,
-  registered: WorkflowDefinition<ArgsValidator>,
+  registered: WorkflowDefinition<ArgsValidator> & {
+    handler: WorkflowHandler<ArgsValidator, any>;
+  },
   defaultWorkpoolOptions?: WorkpoolOptions,
   boundFn?: string,
 ): RegisteredMutation<

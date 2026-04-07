@@ -77,13 +77,17 @@ export type WorkflowDefinition<
   ReturnsValidator extends Validator<any, "required", any> | void = any,
 > = {
   args?: ArgsValidator;
-  handler: (
-    step: WorkflowCtx,
-    args: ObjectType<ArgsValidator>,
-  ) => Promise<ReturnValueForOptionalValidator<ReturnsValidator>>;
   returns?: ReturnsValidator;
   workpoolOptions?: WorkpoolRetryOptions;
 };
+
+export type WorkflowHandler<
+  ArgsValidator extends PropertyValidators,
+  ReturnsValidator extends Validator<any, "required", any> | void,
+> = (
+  step: WorkflowCtx,
+  args: ObjectType<ArgsValidator>,
+) => Promise<ReturnValueForOptionalValidator<ReturnsValidator>>;
 
 export type WorkflowStatus =
   | { type: "inProgress"; running: IdsToStrings<Step>[] }
@@ -535,7 +539,9 @@ export class WorkflowManager {
     ArgsValidator extends PropertyValidators,
     ReturnsValidator extends Validator<unknown, "required", string> | void,
   >(
-    workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator>,
+    workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator> & {
+      handler: WorkflowHandler<ArgsValidator, ReturnsValidator>;
+    },
   ): RegisteredMutation<
     "internal",
     WorkflowArgs<ArgsValidator>,
@@ -545,10 +551,7 @@ export class WorkflowManager {
     ArgsValidator extends PropertyValidators,
     ReturnsValidator extends Validator<unknown, "required", string> | void,
   >(
-    workflow: Omit<
-      WorkflowDefinition<ArgsValidator, ReturnsValidator>,
-      "handler"
-    >,
+    workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator>,
   ): {
     handler: (
       handler: (
@@ -565,14 +568,16 @@ export class WorkflowManager {
     ArgsValidator extends PropertyValidators,
     ReturnsValidator extends Validator<unknown, "required", string> | void,
   >(
-    workflow:
-      | Omit<WorkflowDefinition<ArgsValidator, ReturnsValidator>, "handler">
-      | WorkflowDefinition<ArgsValidator, ReturnsValidator>,
+    workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator> & {
+      handler?: WorkflowHandler<ArgsValidator, ReturnsValidator>;
+    },
   ): unknown {
-    if ("handler" in workflow) {
+    if (workflow.handler) {
       return workflowMutation(
         this.component,
-        workflow,
+        workflow as WorkflowDefinition<ArgsValidator, ReturnsValidator> & {
+          handler: WorkflowHandler<ArgsValidator, ReturnsValidator>;
+        },
         this.options?.workpoolOptions,
       );
     }

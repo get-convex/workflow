@@ -117,7 +117,7 @@ export type WorkflowStatus =
  * const status = await myWorkflow.status(ctx, id);
  * ```
  */
-export function defineWorkflow<
+function defineWorkflow<
   AV extends PropertyValidators,
   RV extends Validator<any, "required", any> | void = void,
 >(

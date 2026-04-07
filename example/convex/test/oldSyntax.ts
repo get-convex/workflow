@@ -34,24 +34,19 @@ export const oldSyntaxWorkflow = workflow.define({
     acted: string;
     eventValue: string;
   }> => {
-    // step.runQuery
     const queried = await step.runQuery(internal.test.oldSyntax.doubleQuery, {
       n: args.value,
     });
-    // step.runMutation
     const mutated = await step.runMutation(
       internal.test.oldSyntax.incrementMutation,
       { n: queried },
     );
-    // step.runAction (parallel with sleep)
     const [acted] = await Promise.all([
       step.runAction(internal.test.oldSyntax.echoAction, {
         msg: `val=${mutated}`,
       }),
-      // step.sleep
       step.sleep(10, { name: "brief-pause" }),
     ]);
-    // step.awaitEvent
     const eventValue = await step.awaitEvent<string>({
       name: "approval",
       validator: v.string(),

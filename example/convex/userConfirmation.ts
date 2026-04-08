@@ -1,5 +1,5 @@
 import {
-  defineEvent,
+  ValidatedEvent,
   vWorkflowId,
   WorkflowId,
   WorkflowManager,
@@ -8,13 +8,13 @@ import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import { internalAction, internalMutation } from "./_generated/server";
 
-export const approvalEvent = defineEvent({
-  name: "approval",
+export const approvalEvent = {
+  name: "approval" as const,
   validator: v.union(
     v.object({ approved: v.literal(true), choice: v.number() }),
     v.object({ approved: v.literal(false), reason: v.string() }),
   ),
-});
+} satisfies ValidatedEvent;
 
 const workflow = new WorkflowManager(components.workflow);
 
@@ -51,9 +51,9 @@ export const chooseProposal = internalMutation({
   args: { workflowId: vWorkflowId, choice: v.number() },
   handler: async (ctx, args) => {
     await workflow.sendEvent(ctx, {
-      ...approvalEvent,
       workflowId: args.workflowId,
       value: { approved: true, choice: args.choice },
+      ...approvalEvent,
     });
     return true;
   },

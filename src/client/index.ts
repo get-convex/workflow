@@ -452,10 +452,22 @@ export class WorkflowManager {
  */
 export function defineEvent<
   Name extends string,
-  V extends Validator<unknown, "required", string>,
+  V extends Validator<unknown, "required", any>,
 >(spec: { name: Name; validator: V }) {
   return spec;
 }
+
+export type ValidatedEvent<
+  Name extends string = string,
+  V extends Validator<unknown, "required", any> = Validator<
+    unknown,
+    "required",
+    any
+  >,
+> = {
+  name: Name;
+  validator: V;
+};
 
 type RunQueryCtx = {
   runQuery: GenericQueryCtx<GenericDataModel>["runQuery"];

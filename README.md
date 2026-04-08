@@ -634,14 +634,14 @@ await workflow.sendEvent(ctx, { name, workflowId, error: "An error occurred" });
 
 #### Sharing event definitions
 
-Use `defineEvent` to define an event's name and validator in one place, then
+Use a shared object to define an event's name and validator in one place, then
 share it between the workflow and the sender:
 
 ```ts
-const approvalEvent = defineEvent({
-  name: "approval",
+const approvalEvent = {
+  name: "approval" as const,
   validator: v.object({ approved: v.boolean() }),
-});
+} satisfies ValidatedEvent;
 
 // In the workflow:
 const approval = await step.awaitEvent(approvalEvent);

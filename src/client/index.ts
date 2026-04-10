@@ -123,7 +123,21 @@ function defineWorkflow<
 >(
   component: WorkflowComponent,
   config: WorkflowDefinition<AV, RV>,
-): UnboundWorkflow<AV, RV> {
+): {
+  /**
+   * Bind the workflow to its handler function's reference.
+   * Example: internal.myFile.myWorkflowHandler
+   * Returns a BoundWorkflow with .start()/.status()/etc.
+   */
+  bind(
+    ref: FunctionReference<
+      "mutation",
+      "internal",
+      WorkflowArgs<AV>,
+      ReturnValueForOptionalValidator<RV>
+    >,
+  ): Workflow<AV, RV>;
+} {
   return {
     bind: (ref) => {
       const refName = safeFunctionName(ref);
@@ -280,25 +294,6 @@ function defineWorkflow<
       };
     },
   };
-}
-
-export interface UnboundWorkflow<
-  AV extends PropertyValidators,
-  RV extends Validator<any, "required", any> | void,
-> {
-  /**
-   * Bind the workflow to its handler function's reference.
-   * Example: internal.myFile.myWorkflowHandler
-   * Returns a BoundWorkflow with .start()/.status()/etc.
-   */
-  bind(
-    ref: FunctionReference<
-      "mutation",
-      "internal",
-      WorkflowArgs<AV>,
-      ReturnValueForOptionalValidator<RV>
-    >,
-  ): Workflow<AV, RV>;
 }
 
 export interface Workflow<
@@ -521,7 +516,21 @@ export class WorkflowManager {
     ReturnsValidator extends Validator<unknown, "required", string> | void,
   >(
     workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator>,
-  ): UnboundWorkflow<ArgsValidator, ReturnsValidator>;
+  ): {
+    /**
+     * Bind the workflow to its handler function's reference.
+     * Example: internal.myFile.myWorkflowHandler
+     * Returns a BoundWorkflow with .start()/.status()/etc.
+     */
+    bind(
+      ref: FunctionReference<
+        "mutation",
+        "internal",
+        WorkflowArgs<ArgsValidator>,
+        ReturnValueForOptionalValidator<ReturnsValidator>
+      >,
+    ): Workflow<ArgsValidator, ReturnsValidator>;
+  };
   define<
     ArgsValidator extends PropertyValidators,
     ReturnsValidator extends Validator<unknown, "required", string> | void,

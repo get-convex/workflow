@@ -43,11 +43,11 @@ import { components } from "./_generated/api";
 
 export const workflow = new WorkflowManager(components.workflow);
 
-export const userOnboarding = workflow.define({
-  args: {
-    userId: v.id("users"),
-  },
-  handler: async (step, args): Promise<void> => {
+export const userOnboarding = workflow
+  .define({
+    args: { userId: v.id("users") },
+  })
+  .handler(async (step, args): Promise<void> => {
     let result = await step.runAction(
       internal.llm.generateCustomContent,
       { userId: args.userId },
@@ -63,7 +63,7 @@ export const userOnboarding = workflow.define({
     }
     const email = await step.runMutation(
       internal.emails.sendWelcomeEmail,
-      { userId: args.userId, content: result.content, },
+      { userId: args.userId, content: result.content },
       // Optimization: run the mutation synchronously from this transaction.
       { inline: true },
     );
@@ -87,8 +87,7 @@ export const userOnboarding = workflow.define({
       );
       if (!status.ok) break;
     }
-  },
-});
+  });
 ```
 
 ## How it works
@@ -152,11 +151,12 @@ Note: To help avoid type cycles, always annotate the return type of the
 `handler` with the return type of the workflow.
 
 ```ts
-export const exampleWorkflow = workflow.define({
-  args: { exampleArg: v.string() },
-  returns: v.string(),
-  handler: async (step, args): Promise<string> => {
-    //                         ^ Specify the return type of the handler
+export const exampleWorkflow = workflow
+  .define({
+    args: { exampleArg: v.string() },
+    returns: v.string(),
+  })
+  .handler(async (step, args) => {
     const queryResult = await step.runQuery(
       internal.example.exampleQuery,
       args,
@@ -166,19 +166,18 @@ export const exampleWorkflow = workflow.define({
       { queryResult }, // pass in results from previous steps!
     );
     return actionResult;
-  },
-});
+  });
 
 export const exampleQuery = internalQuery({
   args: { exampleArg: v.string() },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<string> => {
     return `The query says... Hi ${args.exampleArg}!`;
   },
 });
 
 export const exampleAction = internalAction({
   args: { queryResult: v.string() },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<string> => {
     return args.queryResult + " The action says... Hi back!";
   },
 });
@@ -191,12 +190,13 @@ Once you've defined a workflow, you can start it from a mutation or action using
 
 ```ts
 export const kickoffWorkflow = mutation({
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<WorkflowId> => {
     const workflowId = await workflow.start(
       ctx,
       internal.example.exampleWorkflow,
       { exampleArg: "James" },
     );
+    return workflowId;
   },
 });
 ```
@@ -217,11 +217,12 @@ error instead of success. You can also do validation in the `onComplete` handler
 to have more control over handling that situation.
 
 ```ts
-import { vWorkflowId } from "@convex-dev/workflow";
+import { vWorkflowId, Workflow } from "@convex-dev/workflow";
 import { vResultValidator } from "@convex-dev/workpool";
+import { workflow } from "./example";
 
 export const foo = mutation({
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<WorkflowId> => {
     const name = "James";
     const workflowId = await workflow.start(
       ctx,
@@ -232,6 +233,7 @@ export const foo = mutation({
         context: name, // can be anything
       },
     );
+    return workflowId;
   },
 });
 
@@ -241,7 +243,7 @@ export const handleOnComplete = mutation({
     result: vResultValidator,
     context: v.any(), // used to pass through data from the start site.
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<void> => {
     const name = (args.context as { name: string }).name;
     if (args.result.kind === "success") {
       const text = args.result.returnValue;
@@ -261,15 +263,16 @@ You can run steps in parallel by calling `step.runAction()` multiple times in a
 `Promise.all()` call.
 
 ```ts
-export const exampleWorkflow = workflow.define({
-  args: { name: v.string() },
-  handler: async (step, args): Promise<void> => {
+export const exampleWorkflow = workflow
+  .define({
+    args: { name: v.string() },
+  })
+  .handler(async (step, args): Promise<void> => {
     const [result1, result2] = await Promise.all([
       step.runAction(internal.example.myAction, args),
       step.runAction(internal.example.myAction, args),
     ]);
-  },
-});
+  });
 ```
 
 Note: The workflow will not proceed until all steps fired off at once have
@@ -347,9 +350,13 @@ const workflow = new WorkflowManager(components.workflow, {
    }
 });
 
-export const exampleWorkflow = workflow.define({
-  args: { name: v.string() },
-  handler: async (step, args): Promise<void> => {
+export const exampleWorkflow = workflow
+  .define({
+    args: { name: v.string() },
+    // If specified, this will override the workflow manager's default
+    workpoolOptions: { ... },
+  })
+  .handler(async (step, args): Promise<void> => {
     // Uses default retry behavior & retryActionsByDefault
     await step.runAction(internal.example.myAction, args);
     // Retries will be attempted with the default behavior
@@ -360,10 +367,7 @@ export const exampleWorkflow = workflow.define({
     await step.runAction(internal.example.myAction, args, {
       retry: { maxAttempts: 2, initialBackoffMs: 100, base: 2 },
     });
-  },
-  // If specified, this will override the workflow manager's default
-  workpoolOptions: { ... },
-});
+  });
 ```
 
 ### Specifying step parallelism
@@ -410,9 +414,11 @@ can opt in to running a query or mutation **inline**, sharing the workflow's
 transaction by passing `{ inline: true }`:
 
 ```ts
-export const myWorkflow = workflow.define({
-  args: { userId: v.id("users") },
-  handler: async (step, args): Promise<string> => {
+export const myWorkflow = workflow
+  .define({
+    args: { userId: v.id("users") },
+  })
+  .handler(async (step, args): Promise<string> => {
     const user = await step.runQuery(
       internal.example.getUser,
       { userId: args.userId },
@@ -424,8 +430,7 @@ export const myWorkflow = workflow.define({
       { inline: true },
     );
     return updated;
-  },
-});
+  });
 ```
 
 Because inline functions share the workflow's transaction, their reads and
@@ -441,31 +446,34 @@ The `workflow.start()` method returns a `WorkflowId`, which can then be used for
 querying a workflow's status.
 
 ```ts
-export const runWorkflowAndPoll = action({
-  args: {...},
-  handler: async (ctx, args) => {
-    const workflowId = await workflow.start(
-      ctx,
-      internal.example.exampleWorkflow,
-      { name: "James" },
-    );
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+import { vWorkflowId, getStatus, WorkflowStatus } from "@convex-dev/workflow";
 
-    const status = await workflow.status(ctx, workflowId);
-    console.log("Workflow status after 1s", status);
+export const runWorkflowAndPoll = query({
+  args: { workflowId: vWorkflowId, },
+  handler: async (ctx, args): Promise<WorkflowStatus> => {
+    await checkAuth(ctx, args);
+    const status = await getStatus(ctx, components.workflow, workflowId);
+    console.log("Workflow status", status);
+    console.log("Running:", status.kind === "inProgress" ? status.running : []);
+    return status;
   },
 });
 ```
 
+Reading the status from a query will subscribe to the status, so your frontend
+can reactively update as the workflow progresses.
+
 ### Canceling a workflow
 
-You can cancel a workflow with `workflow.cancel()`, halting the workflow's
+You can cancel a workflow with `cancel()`, halting the workflow's
 execution immmediately. In-progress calls to `step.runAction()`, however, will
 finish executing.
 
 ```ts
+import { cancel } from "@convex-dev/workflow";
+
 export const kickoffWorkflow = action({
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<void> => {
     const workflowId = await workflow.start(
       ctx,
       internal.example.exampleWorkflow,
@@ -474,7 +482,7 @@ export const kickoffWorkflow = action({
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
     // Cancel the workflow after 1 second.
-    await workflow.cancel(ctx, workflowId);
+    await cancel(ctx, components.workflow, workflowId);
   },
 });
 ```
@@ -482,13 +490,15 @@ export const kickoffWorkflow = action({
 ### Restart a failed workflow
 
 If you want to re-run a workflow from a specific point, you can do so with
-`workflow.restart(...)`. By default it will retry the handler using the existing
+`restart(...)`. By default it will retry the handler using the existing
 history of steps.
 
 ```ts
+import { restart } from "@convex-dev/workflow";
+
 // Re-executes the handler with the existing history of steps.
 // This is useful if you had a bug in the handler code itself.
-await workflow.restart(ctx, args.workflowId);
+await restart(ctx, components.workflow, args.workflowId);
 ```
 
 If a certain step failed, you can restart from that step onwards by providing
@@ -498,13 +508,13 @@ step number by listing the steps and using the `stepNumber`.
 
 ```ts
 // Restart from a step number (0-indexed)
-await workflow.restart(ctx, workflowId, { from: 2 });
+await restart(ctx, components.workflow, workflowId, { from: 2 });
 
 // Restart from a step by name
-await workflow.restart(ctx, workflowId, { from: "eventName" });
+await restart(ctx, components.workflow, workflowId, { from: "eventName" });
 
 // Restart from a step by function reference
-await workflow.restart(ctx, workflowId, {
+await restart(ctx, components.workflow, workflowId, {
   from: internal.example.myAction,
 });
 ```
@@ -522,16 +532,18 @@ passing `startAsync: true`. This will enqueue the handler via the workpool to
 run asynchronously.
 
 ```ts
-await workflow.restart(ctx, workflowId, { startAsync: true });
+await restart(ctx, components.workflow, workflowId, { startAsync: true });
 ```
 
 ### Cleaning up a workflow
 
 After a workflow has completed, you can clean up its storage with
-`workflow.cleanup()`. Completed workflows are not automatically cleaned up by
+`cleanup()`. Completed workflows are not automatically cleaned up by
 the system.
 
 ```ts
+import { cleanup, getStatus } from "@convex-dev/workflow";
+
 export const kickoffWorkflow = action({
   handler: async (ctx) => {
     const workflowId = await workflow.start(
@@ -541,7 +553,7 @@ export const kickoffWorkflow = action({
     );
     try {
       while (true) {
-        const status = await workflow.status(ctx, workflowId);
+        const status = await getStatus(ctx, components.workflow, workflowId);
         if (status.type === "inProgress") {
           await new Promise((resolve) => setTimeout(resolve, 1000));
           continue;
@@ -550,13 +562,13 @@ export const kickoffWorkflow = action({
         break;
       }
     } finally {
-      await workflow.cleanup(ctx, workflowId);
+      await cleanup(ctx, components.workflow, workflowId);
     }
   },
 });
 ```
 
-You could alternatively use the `workflow.list` API to paginate through and
+You could alternatively use the `list` API to paginate through and
 clean up old workflows from an hourly cron.
 
 ### Specifying a custom name for a step
@@ -598,10 +610,12 @@ await step.awaitEvent({ name: "eventName" });
 
 This will wait for the first un-consumed event with the name "eventName", and
 will continue immediately if one was already sent. Events are sent by calling
-`workflow.sendEvent` from a mutation or action:
+`sendEvent` from a mutation or action:
 
 ```ts
-await workflow.sendEvent(ctx, {
+import { sendEvent } from "@convex-dev/workflow";
+
+await sendEvent(ctx, components.workflow, {
   name: "eventName",
   workflowId,
 });
@@ -622,14 +636,14 @@ const sharedValidator = v.number();
 const event = await step.awaitEvent({ name, validator: sharedValidator });
 
 // From elsewhere:
-await workflow.sendEvent(ctx, { name, workflowId, value: 42 });
+await sendEvent(ctx, components.workflow, { name, workflowId, value: 42 });
 ```
 
 To send an error, use the `error` property. This will cause `step.awaitEvent` to
 throw an error.
 
 ```ts
-await workflow.sendEvent(ctx, { name, workflowId, error: "An error occurred" });
+await sendEvent(ctx, components.workflow, { name, workflowId, error: "An error occurred" });
 ```
 
 #### Sharing event definitions
@@ -648,7 +662,7 @@ const approval = await step.awaitEvent(approvalEvent);
 
 // From a mutation:
 const value = { approved: true };
-await workflow.sendEvent(ctx, { ...approvalEvent, workflowId, value });
+await sendEvent(ctx, components.workflow, { ...approvalEvent, workflowId, value });
 ```
 
 See [`example/convex/userConfirmation.ts`](./example/convex/userConfirmation.ts)
@@ -661,7 +675,9 @@ Note: this is just a convenience to create a typed { event, validator } pair.
 You can also dynamically create an event with `createEvent`:
 
 ```ts
-const eventId = await workflow.createEvent(ctx, {
+import { createEvent } from "@convex-dev/workflow";
+
+const eventId = await createEvent(ctx, components.workflow, {
   name: "userResponse",
   workflowId,
 });
@@ -675,10 +691,10 @@ await step.awaitEvent({ id: eventId });
 
 This works well when there are dynamically defined events, for instance a tool
 that is waiting for a response from a user. You would save the eventId somewhere
-to be able to send the event later with `workflow.sendEvent`:
+to be able to send the event later with `sendEvent`:
 
 ```ts
-await workflow.sendEvent(ctx, { id: eventId });
+await sendEvent(ctx, components.workflow, { id: eventId });
 ```
 
 Similar to named events, you can also send a value or error with the event.
@@ -710,13 +726,17 @@ The status of the parent workflow will include any active child workflowIds.
 Use `list` to get a paginated list of all workflows.
 
 ```ts
-await workflow.list(ctx, { order: "asc" });
+import { list, listByName, listSteps } from "@convex-dev/workflow";
+```
+
+```ts
+await list(ctx, components.workflow, { order: "asc" });
 ```
 
 Use `listByName` to get a paginated list of workflows matching a specific name.
 
 ```ts
-await workflow.listByName(ctx, "file/folder:function", { order: "desc" });
+await listByName(ctx, components.workflow, "file/folder:function", { order: "desc" });
 ```
 
 Both accept paginationOpts, such as `{ numItems: 50, cursor: null }` to get the
@@ -727,7 +747,7 @@ Use `listSteps` with a workflow's ID to get a paginated list of the steps in
 that workflow run.
 
 ```ts
-await workflow.listSteps(ctx, workflowId);
+await listSteps(ctx, components.workflow, workflowId);
 ```
 
 ## Tips and troubleshooting

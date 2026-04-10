@@ -657,7 +657,7 @@ export class WorkflowManager {
    * @param workflowId - The workflow ID.
    * @returns The workflow status.
    */
-  async getStatus(
+  async status(
     ctx: RunQueryCtx,
     workflowId: WorkflowId,
   ): Promise<WorkflowStatus> {

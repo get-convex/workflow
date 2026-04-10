@@ -19,12 +19,6 @@ const workflow = new WorkflowManager(components.workflow);
 
 export const oldSyntaxWorkflow = workflow.define({
   args: { value: v.number() },
-  returns: v.object({
-    queried: v.number(),
-    mutated: v.number(),
-    acted: v.string(),
-    eventValue: v.string(),
-  }),
   handler: async (
     step,
     args,
@@ -79,12 +73,6 @@ export const echoAction = internalAction({
 
 export default internalAction({
   args: {},
-  returns: v.object({
-    queried: v.number(),
-    mutated: v.number(),
-    acted: v.string(),
-    eventValue: v.string(),
-  }),
   handler: async (ctx) => {
     // workflow.start
     const workflowId = await workflow.start(
@@ -115,12 +103,7 @@ export default internalAction({
       if (s.type === "completed") {
         // workflow.cleanup
         await workflow.cleanup(ctx, workflowId);
-        return s.result as {
-          queried: number;
-          mutated: number;
-          acted: string;
-          eventValue: string;
-        };
+        return s.result;
       }
       if (s.type === "failed") throw new Error(s.error);
     }

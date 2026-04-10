@@ -1,8 +1,9 @@
 import { v } from "convex/values";
-import { OpenAI } from "openai";
+import { defineWorkflow, start } from "@convex-dev/workflow";
 import { internal } from "./_generated/api.js";
-import { internalAction } from "./_generated/server.js";
-import { workflow } from "./example.js";
+import { internalAction, internalMutation } from "./_generated/server.js";
+import { components } from "./_generated/api.js";
+import { OpenAI } from "openai";
 
 function getOpenAI() {
   if (!process.env.OPENAI_API_KEY) {
@@ -14,27 +15,41 @@ function getOpenAI() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
-export const transcriptionWorkflow = workflow
-  .define({
-    args: {
-      storageId: v.id("_storage"),
+export const transcriptionWorkflow = defineWorkflow(components.workflow, {
+  args: {
+    storageId: v.id("_storage"),
+  },
+}).handler(async (step, args) => {
+  const transcription = await step.runAction(
+    internal.transcription.computeTranscription,
+    {
+      storageId: args.storageId,
     },
-  })
-  .handler(async (step, args) => {
-    const transcription = await step.runAction(
-      internal.transcription.computeTranscription,
+  );
+  console.log(transcription);
+  const embedding = await step.runAction(
+    internal.transcription.computeEmbedding,
+    { transcription },
+    { retry: false },
+  );
+  console.log(embedding.slice(0, 20));
+});
+
+export const startTranscription = internalMutation({
+  args: {
+    storageId: v.id("_storage"),
+  },
+  handler: async (ctx, args) => {
+    const id: string = await start(
+      ctx,
+      internal.transcription.transcriptionWorkflow,
       {
         storageId: args.storageId,
       },
     );
-    console.log(transcription);
-    const embedding = await step.runAction(
-      internal.transcription.computeEmbedding,
-      { transcription },
-      { retry: false },
-    );
-    console.log(embedding.slice(0, 20));
-  });
+    return id;
+  },
+});
 
 export const computeTranscription = internalAction({
   args: {

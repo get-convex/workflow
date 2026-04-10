@@ -3,9 +3,12 @@
 import { expect, describe, test, vi, beforeEach, afterEach } from "vitest";
 import { initConvexTest } from "./setup.test";
 import { components, internal } from "./_generated/api";
+import { catchErrorWorkflow } from "./catchError";
+import { parentWorkflow, childWorkflow } from "./nestedWorkflow";
+import { signalWorkflow } from "./passingSignals";
+import { confirmationWorkflow } from "./userConfirmation";
 import { assert } from "convex-helpers";
-import { cancel, getStatus } from "@convex-dev/workflow";
-import { workflow } from "./example";
+import { getStatus, cancel } from "@convex-dev/workflow";
 
 describe("catchError workflow", () => {
   beforeEach(() => {
@@ -18,9 +21,7 @@ describe("catchError workflow", () => {
   test("catches action error and retries", async () => {
     const t = initConvexTest();
     const workflowId = await t.mutation((ctx) =>
-      workflow.start(ctx, internal.catchError.catchErrorWorkflow, {
-        manualRetries: 3,
-      }),
+      catchErrorWorkflow.start(ctx, { manualRetries: 3 }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     const status = await t.run((ctx) =>
@@ -35,9 +36,7 @@ describe("catchError workflow", () => {
   test("zero retries returns 1", async () => {
     const t = initConvexTest();
     const workflowId = await t.mutation((ctx) =>
-      workflow.start(ctx, internal.catchError.catchErrorWorkflow, {
-        manualRetries: 0,
-      }),
+      catchErrorWorkflow.start(ctx, { manualRetries: 0 }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     const status = await t.run((ctx) =>
@@ -60,9 +59,7 @@ describe("nested workflow", () => {
   test("parent runs child workflow and mutation step", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.nestedWorkflow.parentWorkflow, {
-        prompt: "hello",
-      }),
+      parentWorkflow.start(ctx, { prompt: "hello" }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     const status = await t.run((ctx) =>
@@ -74,7 +71,7 @@ describe("nested workflow", () => {
   test("child workflow returns string length", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.nestedWorkflow.child, { foo: "test" }),
+      childWorkflow.start(ctx, { foo: "test" }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     const status = await t.run((ctx) =>
@@ -96,13 +93,9 @@ describe("signal-based workflow", () => {
 
   test("completes after all signals are sent", async () => {
     const t = initConvexTest();
-    const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.passingSignals.signalWorkflow, {}),
-    );
+    const workflowId = await t.run((ctx) => signalWorkflow.start(ctx, {}));
     await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.run((ctx) =>
-      getStatus(ctx, components.workflow, workflowId),
-    );
+    const status = await t.run((ctx) => signalWorkflow.status(ctx, workflowId));
     expect(status.type).toBe("completed");
   });
 });
@@ -118,9 +111,8 @@ describe("user confirmation workflow", () => {
   test("completes with chosen proposal on approval", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
-      workflow.start(
+      confirmationWorkflow.start(
         ctx,
-        internal.userConfirmation.confirmationWorkflow,
         { prompt: "Generate a recipe" },
         { startAsync: true },
       ),
@@ -144,7 +136,7 @@ describe("user confirmation workflow", () => {
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
     const status = await t.run((ctx) =>
-      getStatus(ctx, components.workflow, workflowId),
+      confirmationWorkflow.status(ctx, workflowId),
     );
     expect(status.type).toBe("completed");
     assert(status.type === "completed");
@@ -164,21 +156,16 @@ describe("workflow cancellation", () => {
     const t = initConvexTest();
     // Start a workflow that will block (user confirmation waits for event)
     const workflowId = await t.run((ctx) =>
-      workflow.start(
-        ctx,
-        internal.userConfirmation.confirmationWorkflow,
-        { prompt: "test" },
-        { startAsync: true },
-      ),
+      confirmationWorkflow.start(ctx, { prompt: "test" }, { startAsync: true }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
     // Cancel it
-    await t.run((ctx) => cancel(ctx, components.workflow, workflowId));
+    await t.run((ctx) => confirmationWorkflow.cancel(ctx, workflowId));
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
     const status = await t.run((ctx) =>
-      getStatus(ctx, components.workflow, workflowId),
+      confirmationWorkflow.status(ctx, workflowId),
     );
     expect(status.type).toBe("canceled");
   });

@@ -1,8 +1,14 @@
-import { defineEvent, sendEvent, vWorkflowId } from "@convex-dev/workflow";
+import {
+  defineEvent,
+  defineWorkflow,
+  sendEvent,
+  start,
+  vWorkflowId,
+  WorkflowId,
+} from "@convex-dev/workflow";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import { internalAction, internalMutation } from "./_generated/server";
-import { workflow } from "./example";
 
 export const approvalEvent = defineEvent({
   name: "approval",
@@ -12,39 +18,25 @@ export const approvalEvent = defineEvent({
   ),
 });
 
-/**
- * Test this from the CLI:
- * ```sh
-  npx convex run userConfirmation:confirmationWorkflow \
-    '{ "args": { "prompt": "Generate a recipe for me" } }'
- * ```
- * Copy the ID it returns, then run:
- * ```sh
- * npx convex run userConfirmation:chooseProposal '{"workflowId":"...", "choice":1}'
- * ```
- * Watch the logs from `npx convex dev` or `npx convex logs` to see progress.
- */
-export const confirmationWorkflow = workflow
-  .define({
-    args: { prompt: v.string() },
-    returns: v.string(),
-  })
-  .handler(async (step, args): Promise<string> => {
-    console.log("Starting confirmation workflow");
-    const proposals = await step.runAction(
-      internal.userConfirmation.generateProposals,
-      { prompt: args.prompt },
-      { retry: true },
-    );
-    console.log("Proposals generated", proposals);
-    const approval = await step.awaitEvent(approvalEvent);
-    if (!approval.approved) {
-      return "rejected: " + approval.reason;
-    }
-    const choice = proposals[approval.choice];
-    console.log("Choice selected", choice);
-    return choice;
-  });
+export const confirmationWorkflow = defineWorkflow(components.workflow, {
+  args: { prompt: v.string() },
+  returns: v.string(),
+}).handler(async (ctx, args): Promise<string> => {
+  console.log("Starting confirmation workflow");
+  const proposals = await ctx.runAction(
+    internal.userConfirmation.generateProposals,
+    { prompt: args.prompt },
+    { retry: true },
+  );
+  console.log("Proposals generated", proposals);
+  const approval = await ctx.awaitEvent(approvalEvent);
+  if (!approval.approved) {
+    return "rejected: " + approval.reason;
+  }
+  const choice = proposals[approval.choice];
+  console.log("Choice selected", choice);
+  return choice;
+});
 
 export const generateProposals = internalAction({
   args: { prompt: v.string() },
@@ -63,5 +55,25 @@ export const chooseProposal = internalMutation({
       value: { approved: true, choice: args.choice },
     });
     return true;
+  },
+});
+
+/**
+ * Test this from the CLI:
+ * ```sh
+ * npx convex run userConfirmation:startConfirmationWorkflow
+ * ```
+ * Copy the ID it returns, then run:
+ * ```sh
+ * npx convex run userConfirmation:chooseProposal '{"workflowId":"...", "choice":1}'
+ * ```
+ * Watch the logs from `npx convex dev` or `npx convex logs` to see progress.
+ */
+export const startConfirmationWorkflow = internalMutation({
+  args: { prompt: v.optional(v.string()) },
+  handler: async (ctx, args): Promise<WorkflowId> => {
+    return await start(ctx, internal.userConfirmation.confirmationWorkflow, {
+      prompt: args.prompt ?? "Generate a recipe for me",
+    });
   },
 });

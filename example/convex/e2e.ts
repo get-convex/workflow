@@ -4,56 +4,49 @@
  */
 import { v } from "convex/values";
 import {
-  getStatus,
-  WorkflowId,
   WorkflowManager,
   WorkflowStatus,
   vWorkflowId,
 } from "@convex-dev/workflow";
 import { mutation, query } from "./_generated/server";
 import { components, internal } from "./_generated/api";
+import { myWorkflow } from "./example";
+import { catchErrorWorkflow } from "./catchError";
+import { parentWorkflow } from "./nestedWorkflow";
+import { signalWorkflow } from "./passingSignals";
+import { confirmationWorkflow } from "./userConfirmation";
 
 const workflow = new WorkflowManager(components.workflow);
 
 // Start various workflows and return their IDs
 export const startAll = mutation({
   args: {},
-  handler: async (
-    ctx,
-  ): Promise<{
-    weather: WorkflowId;
-    catchError: WorkflowId;
-    nested: WorkflowId;
-    signals: WorkflowId;
-    confirmation: WorkflowId;
-  }> => {
-    const weather = await workflow.start(
+  returns: v.object({
+    weather: v.string(),
+    catchError: v.string(),
+    nested: v.string(),
+    signals: v.string(),
+    confirmation: v.string(),
+  }),
+  handler: async (ctx) => {
+    const weather = await myWorkflow.start(
       ctx,
-      internal.example.myWorkflow,
       { location: "San Jose" },
       { startAsync: true },
     );
-    const catchError = await workflow.start(
+    const catchError = await catchErrorWorkflow.start(
       ctx,
-      internal.catchError.catchErrorWorkflow,
       { manualRetries: 2 },
       { startAsync: true },
     );
-    const nested = await workflow.start(
+    const nested = await parentWorkflow.start(
       ctx,
-      internal.nestedWorkflow.parentWorkflow,
       { prompt: "hello world" },
       { startAsync: true },
     );
-    const signals = await workflow.start(
+    const signals = await signalWorkflow.start(ctx, {}, { startAsync: true });
+    const confirmation = await confirmationWorkflow.start(
       ctx,
-      internal.passingSignals.signalWorkflow,
-      {},
-      { startAsync: true },
-    );
-    const confirmation = await workflow.start(
-      ctx,
-      internal.userConfirmation.confirmationWorkflow,
       { prompt: "test prompt" },
       { startAsync: true },
     );
@@ -75,7 +68,7 @@ export const statusAll = query({
   handler: async (ctx, { ids }): Promise<Record<string, WorkflowStatus>> => {
     const results: Record<string, WorkflowStatus> = {};
     for (const [name, id] of Object.entries(ids)) {
-      results[name] = await getStatus(ctx, components.workflow, id);
+      results[name] = await workflow.status(ctx, id);
     }
     return results;
   },

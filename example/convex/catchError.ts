@@ -1,7 +1,7 @@
+import { defineWorkflow } from "@convex-dev/workflow";
 import { v } from "convex/values";
-import { internal } from "./_generated/api.js";
+import { components, internal } from "./_generated/api.js";
 import { internalAction } from "./_generated/server.js";
-import { workflow } from "./example.js";
 
 export const alwaysFails = internalAction({
   args: {},
@@ -11,12 +11,13 @@ export const alwaysFails = internalAction({
   },
 });
 
-export const catchErrorWorkflow = workflow
-  .define({
-    args: { manualRetries: v.number() },
-    returns: v.number(),
-  })
-  .handler(async (step, args): Promise<number> => {
+export const catchErrorWorkflow = defineWorkflow(components.workflow, {
+  args: { manualRetries: v.number() },
+  returns: v.number(),
+}).withHandlerRef(internal.catchError.catchError);
+
+export const catchError = catchErrorWorkflow.handler(
+  async (step, args): Promise<number> => {
     let i;
     for (i = 0; i < args.manualRetries + 1; i++) {
       try {
@@ -31,4 +32,5 @@ export const catchErrorWorkflow = workflow
       }
     }
     return i;
-  });
+  },
+);

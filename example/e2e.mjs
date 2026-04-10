@@ -48,7 +48,12 @@ console.log("Starting workflows...");
 const ids = await client.mutation(api.e2e.startAll, {});
 for (const [name, id] of Object.entries(ids)) {
   console.log(`  ${name}: ${id}`);
+  console.time(name);
 }
+console.time("oldSyntax");
+const oldSyntaxWorkflow = client
+  .action(api.test.oldSyntax.default)
+  .then(() => console.timeEnd(`oldSyntax`));
 
 // Schedule approval for the confirmation workflow after a delay.
 // The workflow needs time to run generateProposals and create the event
@@ -76,6 +81,7 @@ const approvalTimer = setTimeout(async () => {
   await tryApprove(1);
 }, APPROVAL_DELAY_MS);
 
+const waiting = new Set(Object.keys(ids));
 // Subscribe to status updates via live query
 const done = new Promise((resolve, reject) => {
   const timer = setTimeout(() => {
@@ -87,8 +93,16 @@ const done = new Promise((resolve, reject) => {
     api.e2e.statusAll,
     { ids },
     (statuses) => {
+      for (const [name, status] of Object.entries(statuses)) {
+        if (status.type === "inProgress") continue;
+        if (waiting.has(name)) {
+          waiting.delete(name);
+          console.timeEnd(name);
+        }
+      }
       const summary = Object.entries(statuses)
-        .map(([name, s]) => `${name}:${s.type}`)
+        .filter(([name]) => waiting.has(name))
+        .map(([name, s]) => `${name}:${s.type.padEnd(25)}`)
         .join(" | ");
       if (summary !== lastLine) {
         lastLine = summary;
@@ -124,6 +138,7 @@ try {
       console.log(`       error: ${status.error}`);
     }
   }
+  await oldSyntaxWorkflow;
   console.log(
     allPassed ? "\nAll workflows passed!" : "\nSome workflows failed.",
   );

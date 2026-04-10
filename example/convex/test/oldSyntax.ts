@@ -8,6 +8,7 @@ import { WorkflowManager } from "@convex-dev/workflow";
 import { internal } from "../_generated/api.js";
 import { components } from "../_generated/api.js";
 import {
+  action,
   internalAction,
   internalMutation,
   internalQuery,
@@ -71,7 +72,7 @@ export const echoAction = internalAction({
 
 // -- E2E: start workflow, send event, poll for completion --
 
-export default internalAction({
+export default action({
   args: {},
   handler: async (ctx) => {
     // workflow.start
@@ -82,8 +83,8 @@ export default internalAction({
     );
 
     // workflow.status — poll until the workflow is waiting for the event
-    for (let i = 0; i < 60; i++) {
-      await new Promise((r) => setTimeout(r, 1000));
+    for (let i = 0; i < 100; i++) {
+      await new Promise((r) => setTimeout(r, 100));
       const s = await workflow.status(ctx, workflowId);
       if (s.type !== "inProgress") throw new Error(`Unexpected: ${s.type}`);
       if (s.running.some((r) => "kind" in r && r.kind === "event")) break;
@@ -97,8 +98,8 @@ export default internalAction({
     });
 
     // Poll until completed
-    for (let i = 0; i < 60; i++) {
-      await new Promise((r) => setTimeout(r, 1000));
+    for (let i = 0; i < 100; i++) {
+      await new Promise((r) => setTimeout(r, 100));
       const s = await workflow.status(ctx, workflowId);
       if (s.type === "completed") {
         // workflow.cleanup

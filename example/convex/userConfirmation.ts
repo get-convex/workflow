@@ -41,7 +41,7 @@ export const confirmationWorkflow = workflow
 
 export const generateProposals = internalAction({
   args: { prompt: v.string() },
-  handler: async (_ctx, _args) => {
+  handler: async () => {
     // imagine this is a call to an LLM
     return ["proposal1", "proposal2", "proposal3"];
   },

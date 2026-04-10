@@ -8,13 +8,13 @@ export const parentWorkflow = workflow
     args: { prompt: v.string() },
     returns: v.number(),
   })
-  .handler(async (ctx, args) => {
+  .handler(async (step, args) => {
     console.log("Starting nested workflow");
-    const length = await ctx.runWorkflow(internal.nestedWorkflow.child, {
+    const length = await step.runWorkflow(internal.nestedWorkflow.child, {
       foo: args.prompt,
     });
     console.log("Length:", length);
-    const stepResult = await ctx.runMutation(internal.nestedWorkflow.step, {
+    const stepResult = await step.runMutation(internal.nestedWorkflow.step, {
       foo: args.prompt,
     });
     console.log("Step result:", stepResult);

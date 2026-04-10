@@ -13,14 +13,14 @@ export const signalWorkflow = workflow
   .define({
     args: {},
   })
-  .handler(async (ctx) => {
+  .handler(async (step) => {
     console.log("Starting signal based workflow");
     for (let i = 0; i < 3; i++) {
-      const signalId = await ctx.runMutation(
+      const signalId = await step.runMutation(
         internal.passingSignals.createSignal,
-        { workflowId: ctx.workflowId },
+        { workflowId: step.workflowId },
       );
-      await ctx.awaitEvent({ id: signalId });
+      await step.awaitEvent({ id: signalId });
       console.log("Signal received", signalId);
     }
     console.log("All signals received");

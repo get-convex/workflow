@@ -1,10 +1,12 @@
 /// <reference types="vite/client" />
 
-import { expect, describe, test, vi, beforeEach, afterEach } from "vitest";
-import { initConvexTest } from "./setup.test";
-import { internal } from "./_generated/api";
-import { workflow } from "./inlineTest";
+import { getStatus, WorkflowManager } from "@convex-dev/workflow";
 import { assert } from "convex-helpers";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { components, internal } from "./_generated/api";
+import { initConvexTest } from "./setup.test";
+
+const workflow = new WorkflowManager(components.workflow);
 
 describe("inline queries and mutations", () => {
   beforeEach(() => {
@@ -22,9 +24,9 @@ describe("inline queries and mutations", () => {
       }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.query(internal.inlineTest.checkStatus, {
-      workflowId,
-    });
+    const status = await t.query((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
     expect(status.type).toBe("completed");
     assert(status.type === "completed");
     expect(status.result).toEqual({ a: 0, b: 0 });
@@ -38,9 +40,9 @@ describe("inline queries and mutations", () => {
       }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.query(internal.inlineTest.checkStatus, {
-      workflowId,
-    });
+    const status = await t.query((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
     expect(status.type).toBe("completed");
     assert(status.type === "completed");
     const result = status.result as {
@@ -61,9 +63,9 @@ describe("inline queries and mutations", () => {
       }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.query(internal.inlineTest.checkStatus, {
-      workflowId,
-    });
+    const status = await t.query((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
     expect(status.type).toBe("completed");
     // 'a' was pushed to channel first → completeMessage called first
     assert(status.type === "completed");
@@ -78,9 +80,9 @@ describe("inline queries and mutations", () => {
       }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.query(internal.inlineTest.checkStatus, {
-      workflowId,
-    });
+    const status = await t.query((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
     expect(status.type).toBe("completed");
     assert(status.type === "completed");
     // Mutations run inline in sequence, incrementing a counter
@@ -95,9 +97,9 @@ describe("inline queries and mutations", () => {
       }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.query(internal.inlineTest.checkStatus, {
-      workflowId,
-    });
+    const status = await t.query((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
     expect(status.type).toBe("completed");
     assert(status.type === "completed");
     const result = status.result as {
@@ -116,9 +118,9 @@ describe("inline queries and mutations", () => {
       }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.query(internal.inlineTest.checkStatus, {
-      workflowId,
-    });
+    const status = await t.query((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
     expect(status.type).toBe("completed");
     assert(status.type === "completed");
     expect(status.result).toEqual({ first: 0, second: 0 });

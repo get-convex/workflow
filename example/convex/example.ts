@@ -8,66 +8,56 @@ import { vResultValidator } from "@convex-dev/workpool";
 
 export const workflow = new WorkflowManager(components.workflow);
 
-export const exampleWorkflow = workflow.define({
-  args: {
-    location: v.string(),
-  },
-  handler: async (
-    step,
-    args,
-    // When returning things from other functions, you need to break the type
-    // inference cycle by specifying the return type explicitly.
-  ): Promise<{
-    name: string;
-    celsius: number;
-    farenheit: number;
-    windSpeed: number;
-    windGust: number;
-  }> => {
-    console.time("overall");
-    console.time("geocoding");
-    // Run in parallel!
-    const [{ latitude, longitude, name }, weather2] = await Promise.all([
-      step.runAction(internal.example.getGeocoding, args, { runAfter: 100 }),
-      step.runAction(internal.example.getGeocoding, args, { retry: true }),
-    ]);
-    console.log("Is geocoding is consistent?", latitude === weather2.latitude);
-    console.timeLog("geocoding", name);
-    console.time("weather");
-    const weather = await step.runAction(internal.example.getWeather, {
-      latitude,
-      longitude,
-    });
-    const celsius = weather.temperature;
-    const farenheit = (celsius * 9) / 5 + 32;
-    const { temperature, windSpeed, windGust } = weather;
-    // Show celsius 50% of the time
-    const temp =
-      Math.random() > 0.5 ? `${farenheit.toFixed(1)}°F` : `${temperature}°C`;
-    console.log(
-      `Weather in ${name}: ${temp}, ${windSpeed} km/h, ${windGust} km/h`,
-    );
-    console.timeLog("weather", temperature);
-    // Wait a beat before writing the result.
-    await step.sleep(100, { name: "cooldown" });
-    await step.runMutation(internal.example.updateFlow, {
-      workflowId: step.workflowId,
-      out: { name, celsius, farenheit, windSpeed, windGust },
-    });
-    console.timeEnd("overall");
-    return { name, celsius, farenheit, windSpeed, windGust };
-  },
-  workpoolOptions: {
-    retryActionsByDefault: true,
-  },
-  // If you also want to run runtime validation on the return value.
-  returns: v.object({
-    name: v.string(),
-    celsius: v.number(),
-    farenheit: v.number(),
-    windSpeed: v.number(),
-    windGust: v.number(),
-  }),
+export const myWorkflow = workflow
+  .define({
+    args: {
+      location: v.string(),
+    },
+    workpoolOptions: {
+      retryActionsByDefault: true,
+    },
+    // If you also want to run runtime validation on the return value.
+    returns: v.object({
+      name: v.string(),
+      celsius: v.number(),
+      farenheit: v.number(),
+      windSpeed: v.number(),
+      windGust: v.number(),
+    }),
+  })
+  .handler(async (step, args) => {
+  console.time("overall");
+  console.time("geocoding");
+  // Run in parallel!
+  const [{ latitude, longitude, name }, weather2] = await Promise.all([
+    step.runAction(internal.example.getGeocoding, args, { runAfter: 100 }),
+    step.runAction(internal.example.getGeocoding, args, { retry: true }),
+  ]);
+  console.log("Is geocoding is consistent?", latitude === weather2.latitude);
+  console.timeLog("geocoding", name);
+  console.time("weather");
+  const weather = await step.runAction(internal.example.getWeather, {
+    latitude,
+    longitude,
+  });
+  const celsius = weather.temperature;
+  const farenheit = (celsius * 9) / 5 + 32;
+  const { temperature, windSpeed, windGust } = weather;
+  // Show celsius 50% of the time
+  const temp =
+    Math.random() > 0.5 ? `${farenheit.toFixed(1)}°F` : `${temperature}°C`;
+  console.log(
+    `Weather in ${name}: ${temp}, ${windSpeed} km/h, ${windGust} km/h`,
+  );
+  console.timeLog("weather", temperature);
+  // Wait a beat before writing the result.
+  await step.sleep(100, { name: "cooldown" });
+  await step.runMutation(internal.example.updateFlow, {
+    workflowId: step.workflowId,
+    out: { name, celsius, farenheit, windSpeed, windGust },
+  });
+  console.timeEnd("overall");
+  return { name, celsius, farenheit, windSpeed, windGust };
 });
 
 export const startWorkflow = internalMutation({
@@ -79,7 +69,7 @@ export const startWorkflow = internalMutation({
     const location = args.location ?? "San Francisco";
     const id: WorkflowId = await workflow.start(
       ctx,
-      internal.example.exampleWorkflow,
+      internal.example.myWorkflow,
       { location },
       {
         onComplete: internal.example.flowCompleted,
@@ -121,7 +111,7 @@ export const flowCompleted = internalMutation({
       out: args.result,
     });
     // To delete the workflow data after it completes:
-    // await workflow.cleanup(ctx, args.workflowId);
+    // await myWorkflow.cleanup(ctx, args.workflowId);
   },
 });
 

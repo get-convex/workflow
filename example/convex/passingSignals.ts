@@ -1,18 +1,20 @@
 import {
+  createEvent,
+  sendEvent,
   type EventId,
   vEventId,
   vWorkflowId,
-  WorkflowManager,
 } from "@convex-dev/workflow";
 import { components, internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
+import { workflow } from "./example";
 
-const workflow = new WorkflowManager(components.workflow);
-
-export const signalBasedWorkflow = workflow.define({
-  args: {},
-  handler: async (step) => {
-    console.log("Starting signal based  workflow");
+export const signalWorkflow = workflow
+  .define({
+    args: {},
+  })
+  .handler(async (step) => {
+    console.log("Starting signal based workflow");
     for (let i = 0; i < 3; i++) {
       const signalId = await step.runMutation(
         internal.passingSignals.createSignal,
@@ -22,13 +24,12 @@ export const signalBasedWorkflow = workflow.define({
       console.log("Signal received", signalId);
     }
     console.log("All signals received");
-  },
-});
+  });
 
 export const createSignal = internalMutation({
   args: { workflowId: vWorkflowId },
   handler: async (ctx, args): Promise<EventId> => {
-    const eventId = await workflow.createEvent(ctx, {
+    const eventId = await createEvent(ctx, components.workflow, {
       name: "signal",
       workflowId: args.workflowId,
     });
@@ -44,6 +45,6 @@ export const createSignal = internalMutation({
 export const sendSignal = internalMutation({
   args: { eventId: vEventId("signal") },
   handler: async (ctx, args) => {
-    await workflow.sendEvent(ctx, { id: args.eventId });
+    await sendEvent(ctx, components.workflow, { id: args.eventId });
   },
 });

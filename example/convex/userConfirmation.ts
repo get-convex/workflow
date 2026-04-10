@@ -1,12 +1,13 @@
 import {
   defineEvent,
+  sendEvent,
   vWorkflowId,
   WorkflowId,
-  WorkflowManager,
 } from "@convex-dev/workflow";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import { internalAction, internalMutation } from "./_generated/server";
+import { workflow } from "./example";
 
 export const approvalEvent = defineEvent({
   name: "approval",
@@ -16,12 +17,12 @@ export const approvalEvent = defineEvent({
   ),
 });
 
-const workflow = new WorkflowManager(components.workflow);
-
-export const confirmationWorkflow = workflow.define({
-  args: { prompt: v.string() },
-  returns: v.string(),
-  handler: async (step, args): Promise<string> => {
+export const confirmationWorkflow = workflow
+  .define({
+    args: { prompt: v.string() },
+    returns: v.string(),
+  })
+  .handler(async (step, args): Promise<string> => {
     console.log("Starting confirmation workflow");
     const proposals = await step.runAction(
       internal.userConfirmation.generateProposals,
@@ -36,12 +37,11 @@ export const confirmationWorkflow = workflow.define({
     const choice = proposals[approval.choice];
     console.log("Choice selected", choice);
     return choice;
-  },
-});
+  });
 
 export const generateProposals = internalAction({
   args: { prompt: v.string() },
-  handler: async (_ctx, _args) => {
+  handler: async () => {
     // imagine this is a call to an LLM
     return ["proposal1", "proposal2", "proposal3"];
   },
@@ -50,7 +50,7 @@ export const generateProposals = internalAction({
 export const chooseProposal = internalMutation({
   args: { workflowId: vWorkflowId, choice: v.number() },
   handler: async (ctx, args) => {
-    await workflow.sendEvent(ctx, {
+    await sendEvent(ctx, components.workflow, {
       ...approvalEvent,
       workflowId: args.workflowId,
       value: { approved: true, choice: args.choice },

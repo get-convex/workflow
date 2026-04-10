@@ -16,7 +16,7 @@ import {
 import { createLogger } from "../component/logging.js";
 import { type JournalEntry } from "../component/schema.js";
 import { setupEnvironment } from "./environment.js";
-import type { WorkflowDefinition } from "./index.js";
+import type { WorkflowDefinition, WorkflowHandler } from "./index.js";
 import { StepExecutor, type StepRequest, type WorkerResult } from "./step.js";
 import { createWorkflowCtx } from "./workflowContext.js";
 import { checkArgs } from "./validator.js";
@@ -36,6 +36,12 @@ const workflowArgs = v.union(
     args: v.any(),
   }),
 );
+
+export type WorkflowArgs<V extends PropertyValidators> = {
+  fn: "You should not call this directly, call workflow.start instead";
+  args: ObjectType<V>;
+};
+
 const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke the workflow with ctx.runMutation() instead of workflow.start()? Pro tip: to start a workflow directly from the CLI or dashboard, you can use args '{ fn: "path/to/file:workflowName", args: { ...your workflow args } }'`;
 
 // This function is defined in the calling component but then gets passed by
@@ -44,22 +50,29 @@ const INVALID_WORKFLOW_MESSAGE = `Invalid arguments for workflow: Did you invoke
 // it blocks next.
 export function workflowMutation<ArgsValidator extends PropertyValidators>(
   component: WorkflowComponent,
-  registered: WorkflowDefinition<ArgsValidator>,
-  defaultWorkpoolOptions?: WorkpoolOptions,
-): RegisteredMutation<
-  "internal",
-  {
-    fn: "You should not call this directly, call workflow.start instead";
-    args: ObjectType<ArgsValidator>;
+  registered: WorkflowDefinition<ArgsValidator> & {
+    handler: WorkflowHandler<ArgsValidator, any>;
   },
-  void
-> {
+  defaultWorkpoolOptions?: WorkpoolOptions,
+  boundFn?: string,
+): RegisteredMutation<"internal", WorkflowArgs<ArgsValidator>, void> {
   const workpoolOptions = {
     ...defaultWorkpoolOptions,
     ...registered.workpoolOptions,
   };
   return internalMutationGeneric({
     handler: async (ctx, args) => {
+      if (!validate(workflowArgs, args) && boundFn && "args" in args) {
+        // Bound workflow called directly with { args: ... }
+        const fn = makeFunctionReference(boundFn);
+        const workflowId = await ctx.runMutation(component.workflow.create, {
+          workflowName: safeFunctionName(fn),
+          workflowHandle: await createFunctionHandle(fn),
+          workflowArgs: args.args,
+          maxParallelism: workpoolOptions.maxParallelism,
+        });
+        return workflowId;
+      }
       if (!validate(workflowArgs, args)) {
         throw new Error(INVALID_WORKFLOW_MESSAGE);
       }

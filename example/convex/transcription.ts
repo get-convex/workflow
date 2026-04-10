@@ -1,9 +1,7 @@
 import { v } from "convex/values";
-import { WorkflowManager } from "@convex-dev/workflow";
+import { OpenAI } from "openai";
 import { internal } from "./_generated/api.js";
 import { internalAction, internalMutation } from "./_generated/server.js";
-import { components } from "./_generated/api.js";
-import { OpenAI } from "openai";
 import { workflow } from "./example.js";
 
 function getOpenAI() {
@@ -16,30 +14,13 @@ function getOpenAI() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
-export const startTranscription = internalMutation({
-  args: {
-    storageId: v.id("_storage"),
-  },
-  handler: async (ctx, args) => {
-    const workflow = new WorkflowManager(components.workflow, {
-      workpoolOptions: {
-        maxParallelism: 1,
-      },
-    });
-    const id: string = await workflow.start(
-      ctx,
-      internal.transcription.transcriptionWorkflow,
-      { storageId: args.storageId },
-    );
-    return id;
-  },
-});
-
-export const transcriptionWorkflow = workflow.define({
-  args: {
-    storageId: v.id("_storage"),
-  },
-  handler: async (step, args) => {
+export const transcriptionWorkflow = workflow
+  .define({
+    args: {
+      storageId: v.id("_storage"),
+    },
+  })
+  .handler(async (step, args) => {
     const transcription = await step.runAction(
       internal.transcription.computeTranscription,
       {
@@ -53,14 +34,19 @@ export const transcriptionWorkflow = workflow.define({
       { retry: false },
     );
     console.log(embedding.slice(0, 20));
+  });
+
+export const startTranscription = internalMutation({
+  args: {
+    storageId: v.id("_storage"),
   },
-  workpoolOptions: {
-    retryActionsByDefault: false,
-    defaultRetryBehavior: {
-      maxAttempts: 5,
-      initialBackoffMs: 10,
-      base: 2,
-    },
+  handler: async (ctx, args) => {
+    const id: string = await workflow.start(
+      ctx,
+      internal.transcription.transcriptionWorkflow,
+      { storageId: args.storageId },
+    );
+    return id;
   },
 });
 

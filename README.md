@@ -452,9 +452,9 @@ export const runWorkflowAndPoll = query({
   args: { workflowId: vWorkflowId, },
   handler: async (ctx, args): Promise<WorkflowStatus> => {
     await checkAuth(ctx, args);
-    const status = await getStatus(ctx, components.workflow, workflowId);
+    const status = await getStatus(ctx, components.workflow, args.workflowId);
     console.log("Workflow status", status);
-    console.log("Running:", status.kind === "inProgress" ? status.running : []);
+    console.log("Running:", status.type === "inProgress" ? status.running : []);
     return status;
   },
 });
@@ -466,7 +466,7 @@ can reactively update as the workflow progresses.
 ### Canceling a workflow
 
 You can cancel a workflow with `cancel()`, halting the workflow's
-execution immmediately. In-progress calls to `step.runAction()`, however, will
+execution immediately. In-progress calls to `step.runAction()`, however, will
 finish executing.
 
 ```ts

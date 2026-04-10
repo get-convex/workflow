@@ -99,26 +99,38 @@ export type WorkflowStatus =
 /**
  * Define a new workflow with typed args and optional return validator.
  *
- * Call `.bind(ref)` to bind it to a function reference, enabling
- * `.start()`, `.status()`, and other management methods.
  *
  * @example
  * ```ts
- * export const myWorkflow = defineWorkflow(components.workflow, {
+ * export const doSomething = workflow.define({
  *   args: { amount: v.number() },
  *   returns: v.object({ total: v.number() }),
- * }).bind(internal.handler.processPayment);
- *
- * export const processPayment = myWorkflow.handler(async (step, args) => {
- *   return { total: args.amount * 2 };
+ * }).handler(async (step, args) => {
+ *   ...workflow implementation
  * });
  *
- * // Usage from any file:
- * const id = await myWorkflow.start(ctx, { amount: 100 });
- * const status = await myWorkflow.status(ctx, id);
+ * // Start from a mutation or action:
+ * const id = await workflow.start(ctx, internal.myFile.myWorkflow, { amount });
+ * ```
+ *
+ * Alternatively, you can define the workflow spec separately from the handler,
+ * giving you an object to call ``.start` on directly:
+ *
+ * ```ts
+ * const doSomethingWorkflow = defineWorkflow({
+ *   args: { foo: v.string()  },
+ *   returns: v.boolean(),
+ * }).withHandlerRef(internal.myFile.doSomething);
+ *
+ * export const doSomething = myWorkflow.handler(async (step, args) => {
+ *    ...workflow implementation
+ * });
+ *
+ * // Start from a mutation or action:
+ * const id = await doSomethingWorkflow.start(ctx, { foo });
  * ```
  */
-function defineWorkflow<
+export function defineWorkflow<
   AV extends PropertyValidators,
   RV extends Validator<any, "required", any> | void = void,
 >(
@@ -126,11 +138,26 @@ function defineWorkflow<
   config: WorkflowDefinition<AV, RV>,
 ): {
   /**
-   * Bind the workflow to its handler function's reference.
-   * Example: internal.myFile.myWorkflowHandler
-   * Returns a BoundWorkflow with .start()/.status()/etc.
+   * Define the workflow handler function.
+   * Returns a registered mutation to export from your Convex module.
    */
-  bind(
+  handler(
+    fn: (
+      step: WorkflowCtx,
+      args: ObjectType<AV>,
+    ) => Promise<ReturnValueForOptionalValidator<RV>>,
+  ): RegisteredMutation<
+    "internal",
+    WorkflowArgs<AV>,
+    ReturnValueForOptionalValidator<RV>
+  >;
+  /**
+   * Bind the workflow to its handler function's reference.
+   * Returns a Workflow with `.handler()` and `.start()`.
+   *
+   * Example: `workflow.define({...}).withHandlerRef(internal.myFile.myHandler)`
+   */
+  withHandlerRef(
     ref: FunctionReference<
       "mutation",
       "internal",
@@ -140,7 +167,9 @@ function defineWorkflow<
   ): Workflow<AV, RV>;
 } {
   return {
-    bind: (ref) => {
+    handler: (fn) =>
+      workflowMutation(component, { ...config, handler: fn }, undefined),
+    withHandlerRef: (ref) => {
       const refName = safeFunctionName(ref);
       return {
         handler: (fn) =>
@@ -167,131 +196,6 @@ function defineWorkflow<
           });
           return workflowId as unknown as WorkflowId;
         },
-        async status(ctx, workflowId) {
-          const { workflow, inProgress } = await ctx.runQuery(
-            component.workflow.getStatus,
-            { workflowId },
-          );
-          const running = inProgress.map(
-            (entry) => entry.step as IdsToStrings<Step>,
-          );
-          switch (workflow.runResult?.kind) {
-            case undefined:
-              return { type: "inProgress", running };
-            case "canceled":
-              return { type: "canceled" };
-            case "failed":
-              return { type: "failed", error: workflow.runResult.error };
-            case "success":
-              return {
-                type: "completed",
-                result: workflow.runResult.returnValue,
-              };
-          }
-        },
-        async cancel(ctx, workflowId) {
-          await ctx.runMutation(component.workflow.cancel, { workflowId });
-        },
-        async restart(ctx, workflowId, options?) {
-          let from: number | string | undefined;
-          if (options?.from !== undefined) {
-            if (
-              typeof options.from === "number" ||
-              typeof options.from === "string"
-            ) {
-              from = options.from;
-            } else {
-              from = safeFunctionName(options.from);
-            }
-          }
-          await ctx.runMutation(component.workflow.restart, {
-            workflowId,
-            from,
-            startAsync: options?.startAsync,
-          });
-        },
-        async list(
-          ctx: RunQueryCtx,
-          opts?: {
-            order?: "asc" | "desc";
-            paginationOpts?: PaginationOptions;
-          },
-        ): Promise<PaginationResult<PublicWorkflow>> {
-          const workflows = await ctx.runQuery(component.workflow.list, {
-            order: opts?.order ?? "asc",
-            paginationOpts: opts?.paginationOpts ?? {
-              cursor: null,
-              numItems: 100,
-            },
-          });
-          return workflows as PaginationResult<PublicWorkflow>;
-        },
-        async listByName(
-          ctx: RunQueryCtx,
-          name: string,
-          opts?: {
-            order?: "asc" | "desc";
-            paginationOpts?: PaginationOptions;
-          },
-        ): Promise<PaginationResult<PublicWorkflow>> {
-          const workflows = await ctx.runQuery(component.workflow.listByName, {
-            name,
-            order: opts?.order ?? "asc",
-            paginationOpts: opts?.paginationOpts ?? {
-              cursor: null,
-              numItems: 100,
-            },
-          });
-          return workflows as PaginationResult<PublicWorkflow>;
-        },
-        async listSteps(
-          ctx: RunQueryCtx,
-          workflowId: WorkflowId,
-          opts?: {
-            order?: "asc" | "desc";
-            paginationOpts?: PaginationOptions;
-          },
-        ): Promise<PaginationResult<WorkflowStep>> {
-          const steps = await ctx.runQuery(component.workflow.listSteps, {
-            workflowId,
-            order: opts?.order ?? "asc",
-            paginationOpts: opts?.paginationOpts ?? {
-              cursor: null,
-              numItems: 100,
-            },
-          });
-          return steps as PaginationResult<WorkflowStep>;
-        },
-        async cleanup(ctx, workflowId) {
-          return await ctx.runMutation(component.workflow.cleanup, {
-            workflowId,
-          });
-        },
-        async sendEvent(ctx, args) {
-          const result: RunResult =
-            "error" in args
-              ? { kind: "failed", error: args.error }
-              : {
-                  kind: "success" as const,
-                  returnValue: args.validator
-                    ? parse(args.validator, args.value)
-                    : "value" in args
-                      ? args.value
-                      : null,
-                };
-          return (await ctx.runMutation(component.event.send, {
-            eventId: args.id,
-            result,
-            name: args.name,
-            workflowId: args.workflowId,
-          })) as any;
-        },
-        async createEvent(ctx, args) {
-          return (await ctx.runMutation(component.event.create, {
-            name: args.name,
-            workflowId: args.workflowId,
-          })) as any;
-        },
       };
     },
   };
@@ -303,8 +207,7 @@ export interface Workflow<
 > {
   /**
    * Define the workflow handler function.
-   * You can then bind it to a Workflow using
-   * myWorkflow.bind(internal.path.to.this.handler)
+   * Returns a registered mutation to export from your Convex module.
    */
   handler(
     fn: (
@@ -340,92 +243,10 @@ export interface Workflow<
        * or make `start` return faster (you still get a workflowId back).
        * @default false
        */
-
       startAsync?: boolean;
     },
   ): Promise<WorkflowId>;
-  /**
-   * Get a workflow's status.
-   *
-   * @param ctx - The Convex context.
-   * @param workflowId - The workflow ID.
-   * @returns The workflow status.
-   */
-  status(ctx: RunQueryCtx, workflowId: WorkflowId): Promise<WorkflowStatus>;
-  /**
-   * Cancel a running workflow.
-   *
-   * @param ctx - The Convex context.
-   * @param workflowId - The workflow ID.
-   */
-  cancel(ctx: RunMutationCtx, workflowId: WorkflowId): Promise<void>;
-  /**
-   * Restart a previously-failed workflow.
-   *
-   * By default it will retry the handler using the existing history of steps.
-   * To restart from the beginning, pass `{from: 0}`.
-   * To restart from a named step or event: `{from: "myName"}`.
-   * To restart from a function call: `{from: internal.foo.bar}`.
-   *
-   * If the function or name were called multiple times, it will restart from
-   * the last invocation.
-   *
-   * @param ctx - The Convex context.
-   * @param workflowId - The workflow ID.
-   * @param options - Options for the retry.
-   * @param options.from - The step to retry from. Can be a step number,
-   *   a step name, or the function / workflow `internal.foo.bar`.
-   *   Steps from this point onwards will be deleted before restarting.
-   *   If not provided, the handler will be re-executed using the existing
-   *   history of steps.
-   * @param options.startAsync - If true, the workflow will be enqueued
-   *   via the workpool instead of running immediately.
-   */
-  restart(
-    ctx: RunMutationCtx,
-    workflowId: WorkflowId,
-    options?: {
-      from?: number | string | FunctionReference<any, any>;
-      startAsync?: boolean;
-    },
-  ): Promise<void>;
-  /**
-   * List workflows, including their name, args, return value etc.
-   *
-   * @param ctx - The Convex context from a query, mutation, or action.
-   * @param opts - How many workflows to fetch and in what order.
-   *   e.g. `{ order: "desc", paginationOpts: { cursor: null, numItems: 10 } }`
-   *   will get the last 10 workflows in descending order.
-   *   Defaults to 100 workflows in ascending order.
-   * @returns The pagination result with per-workflow data.
-   */
-  list(
-    ctx: RunQueryCtx,
-    opts?: {
-      order?: "asc" | "desc";
-      paginationOpts?: PaginationOptions;
-    },
-  ): Promise<PaginationResult<PublicWorkflow>>;
-
-  /**
-   * List workflows matching a specific name, including their args, return value etc.
-   *
-   * @param ctx - The Convex context from a query, mutation, or action.
-   * @param name - The workflow name to filter by.
-   * @param opts - How many workflows to fetch and in what order.
-   *   e.g. `{ order: "desc", paginationOpts: { cursor: null, numItems: 10 } }`
-   *   will get the last 10 workflows in descending order.
-   *   Defaults to 100 workflows in ascending order.
-   * @returns The pagination result with per-workflow data.
-   */
-  listByName(
-    ctx: RunQueryCtx,
-    name: string,
-    opts?: {
-      order?: "asc" | "desc";
-      paginationOpts?: PaginationOptions;
-    },
-  ): Promise<PaginationResult<PublicWorkflow>>;
+}
 
 // ── Standalone workflow management functions ─────────────────────────
 // These take ctx first, then a workflow component, so they can be
@@ -510,10 +331,7 @@ export async function restart(
 ): Promise<void> {
   let from: number | string | undefined;
   if (options?.from !== undefined) {
-    if (
-      typeof options.from === "number" ||
-      typeof options.from === "string"
-    ) {
+    if (typeof options.from === "number" || typeof options.from === "string") {
       from = options.from;
     } else {
       from = safeFunctionName(options.from);
@@ -729,11 +547,24 @@ export class WorkflowManager {
     workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator>,
   ): {
     /**
-     * Bind the workflow to its handler function's reference.
-     * Example: internal.myFile.myWorkflowHandler
-     * Returns a BoundWorkflow with .start()/.status()/etc.
+     * Define the workflow handler function.
+     * Returns a registered mutation to export from your Convex module.
      */
-    bind(
+    handler(
+      fn: (
+        step: WorkflowCtx,
+        args: ObjectType<ArgsValidator>,
+      ) => Promise<ReturnValueForOptionalValidator<ReturnsValidator>>,
+    ): RegisteredMutation<
+      "internal",
+      WorkflowArgs<ArgsValidator>,
+      ReturnValueForOptionalValidator<ReturnsValidator>
+    >;
+    /**
+     * Bind the workflow to its handler function's reference.
+     * Returns a Workflow with `.handler()` and `.start()`.
+     */
+    withHandlerRef(
       ref: FunctionReference<
         "mutation",
         "internal",

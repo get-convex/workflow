@@ -8,6 +8,7 @@ import {
   makeFunctionReference,
   type FunctionHandle,
   type GenericDataModel,
+  type MutationBuilder,
   type RegisteredMutation,
 } from "convex/server";
 import {
@@ -110,8 +111,9 @@ export function workflowMutation<
   DataModel extends GenericDataModel = GenericDataModel,
 >(
   component: WorkflowComponent,
-  registered: WorkflowDefinition<ArgsValidator, ReturnsValidator, DataModel> & {
+  registered: WorkflowDefinition<ArgsValidator, ReturnsValidator> & {
     handler: WorkflowHandler<ArgsValidator, ReturnsValidator, DataModel>;
+    internalMutation?: MutationBuilder<DataModel, "internal">;
   },
   defaultWorkpoolOptions?: WorkpoolOptions,
 ): RegisteredMutation<

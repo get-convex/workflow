@@ -28,6 +28,7 @@ import type {
 } from "../types.js";
 import { safeFunctionName } from "./safeFunctionName.js";
 import type { IdsToStrings, WorkflowComponent } from "./types.js";
+export type { WorkflowComponent } from "./types.js";
 import type { WorkflowCtx } from "./workflowContext.js";
 import { workflowMutation, type WorkflowArgs } from "./workflowMutation.js";
 
@@ -426,63 +427,273 @@ export interface Workflow<
     },
   ): Promise<PaginationResult<PublicWorkflow>>;
 
-  /**
-   * List the steps in a workflow, including their name, args, return value etc.
-   *
-   * @param ctx - The Convex context from a query, mutation, or action.
-   * @param workflowId - The workflow ID.
-   * @param opts - How many steps to fetch and in what order.
-   *   e.g. `{ order: "desc", paginationOpts: { cursor: null, numItems: 10 } }`
-   *   will get the last 10 steps in descending order.
-   *   Defaults to 100 steps in ascending order.
-   * @returns The pagination result with per-step data.
-   */
-  listSteps(
-    ctx: RunQueryCtx,
-    workflowId: WorkflowId,
-    opts?: {
-      order?: "asc" | "desc";
-      paginationOpts?: PaginationOptions;
+// ── Standalone workflow management functions ─────────────────────────
+// These take ctx first, then a workflow component, so they can be
+// used without a WorkflowManager instance.
+
+/**
+ * Get a workflow's status.
+ *
+ * @param ctx - The Convex context.
+ * @param component - The workflow component.
+ * @param workflowId - The workflow ID.
+ * @returns The workflow status.
+ */
+export async function getStatus(
+  ctx: RunQueryCtx,
+  component: WorkflowComponent,
+  workflowId: WorkflowId,
+): Promise<WorkflowStatus> {
+  const { workflow, inProgress } = await ctx.runQuery(
+    component.workflow.getStatus,
+    { workflowId },
+  );
+  const running = inProgress.map((entry) => entry.step as IdsToStrings<Step>);
+  switch (workflow.runResult?.kind) {
+    case undefined:
+      return { type: "inProgress", running };
+    case "canceled":
+      return { type: "canceled" };
+    case "failed":
+      return { type: "failed", error: workflow.runResult.error };
+    case "success":
+      return { type: "completed", result: workflow.runResult.returnValue };
+  }
+}
+
+/**
+ * Cancel a running workflow.
+ *
+ * @param ctx - The Convex context.
+ * @param component - The workflow component.
+ * @param workflowId - The workflow ID.
+ */
+export async function cancel(
+  ctx: RunMutationCtx,
+  component: WorkflowComponent,
+  workflowId: WorkflowId,
+): Promise<void> {
+  await ctx.runMutation(component.workflow.cancel, { workflowId });
+}
+
+/**
+ * Restart a previously-failed workflow.
+ *
+ * By default it will retry the handler using the existing history of steps.
+ * To restart from the beginning, pass `{from: 0}`.
+ * To restart from a named step or event: `{from: "myName"}`.
+ * To restart from a function call: `{from: internal.foo.bar}`.
+ *
+ * If the function or name were called multiple times, it will restart from
+ * the last invocation.
+ *
+ * @param ctx - The Convex context.
+ * @param component - The workflow component.
+ * @param workflowId - The workflow ID.
+ * @param options - Options for the retry.
+ * @param options.from - The step to retry from. Can be a step number,
+ *   a step name, or the function / workflow `internal.foo.bar`.
+ *   Steps from this point onwards will be deleted before restarting.
+ *   If not provided, the handler will be re-executed using the existing
+ *   history of steps.
+ * @param options.startAsync - If true, the workflow will be enqueued
+ *   via the workpool instead of running immediately.
+ */
+export async function restart(
+  ctx: RunMutationCtx,
+  component: WorkflowComponent,
+  workflowId: WorkflowId,
+  options?: {
+    from?: number | string | FunctionReference<any, any>;
+    startAsync?: boolean;
+  },
+): Promise<void> {
+  let from: number | string | undefined;
+  if (options?.from !== undefined) {
+    if (
+      typeof options.from === "number" ||
+      typeof options.from === "string"
+    ) {
+      from = options.from;
+    } else {
+      from = safeFunctionName(options.from);
+    }
+  }
+  await ctx.runMutation(component.workflow.restart, {
+    workflowId,
+    from,
+    startAsync: options?.startAsync,
+  });
+}
+
+/**
+ * Send an event to a workflow.
+ *
+ * @param ctx - From a mutation, action or workflow step.
+ * @param component - The workflow component.
+ * @param args - Either send an event by its ID, or by name and workflow ID.
+ *   If you have a validator, you must provide a value.
+ *   If you provide an error string, awaiting the event will throw an error.
+ */
+export async function sendEvent<T = null, Name extends string = string>(
+  ctx: RunMutationCtx,
+  component: WorkflowComponent,
+  args: (
+    | { workflowId: WorkflowId; name: Name; id?: EventId<Name> }
+    | { workflowId?: undefined; name?: Name; id: EventId<Name> }
+  ) &
+    (
+      | { validator?: undefined; value?: T }
+      | { validator: Validator<T, any, any>; value: T }
+      | { error: string; value?: undefined }
+    ),
+): Promise<EventId<Name>> {
+  const result: RunResult =
+    "error" in args
+      ? { kind: "failed", error: args.error }
+      : {
+          kind: "success" as const,
+          returnValue: args.validator
+            ? parse(args.validator, args.value)
+            : "value" in args
+              ? args.value
+              : null,
+        };
+  return (await ctx.runMutation(component.event.send, {
+    eventId: args.id,
+    result,
+    name: args.name,
+    workflowId: args.workflowId,
+  })) as EventId<Name>;
+}
+
+/**
+ * Create an event ahead of time, enabling awaiting a specific event by ID.
+ * @param ctx - From an action, mutation or workflow step.
+ * @param component - The workflow component.
+ * @param args - The name of the event and what workflow it belongs to.
+ * @returns The event ID, which can be used to send the event or await it.
+ */
+export async function createEvent<Name extends string>(
+  ctx: RunMutationCtx,
+  component: WorkflowComponent,
+  args: { name: Name; workflowId: WorkflowId },
+): Promise<EventId<Name>> {
+  return (await ctx.runMutation(component.event.create, {
+    name: args.name,
+    workflowId: args.workflowId,
+  })) as EventId<Name>;
+}
+
+/**
+ * List workflows, including their name, args, return value etc.
+ *
+ * @param ctx - The Convex context from a query, mutation, or action.
+ * @param component - The workflow component.
+ * @param opts - How many workflows to fetch and in what order.
+ *   e.g. `{ order: "desc", paginationOpts: { cursor: null, numItems: 10 } }`
+ *   will get the last 10 workflows in descending order.
+ *   Defaults to 100 workflows in ascending order.
+ * @returns The pagination result with per-workflow data.
+ */
+export async function list(
+  ctx: RunQueryCtx,
+  component: WorkflowComponent,
+  opts?: {
+    order?: "asc" | "desc";
+    paginationOpts?: PaginationOptions;
+  },
+): Promise<PaginationResult<PublicWorkflow>> {
+  const workflows = await ctx.runQuery(component.workflow.list, {
+    order: opts?.order ?? "asc",
+    paginationOpts: opts?.paginationOpts ?? {
+      cursor: null,
+      numItems: 100,
     },
-  ): Promise<PaginationResult<WorkflowStep>>;
-  /**
-   * Clean up a completed workflow's storage.
-   *
-   * @param ctx - The Convex context.
-   * @param workflowId - The workflow ID.
-   * @returns - Whether the workflow's state was cleaned up.
-   */
-  cleanup(ctx: RunMutationCtx, workflowId: WorkflowId): Promise<boolean>;
-  /**
-   * Send an event to a workflow.
-   *
-   * @param ctx - From a mutation, action or workflow step.
-   * @param args - Either send an event by its ID, or by name and workflow ID.
-   *   If you have a validator, you must provide a value.
-   *   If you provide an error string, awaiting the event will throw an error.
-   */
-  sendEvent<T = null, Name extends string = string>(
-    ctx: RunMutationCtx,
-    args: (
-      | { workflowId: WorkflowId; name: Name; id?: EventId<Name> }
-      | { workflowId?: undefined; name?: Name; id: EventId<Name> }
-    ) &
-      (
-        | { validator?: undefined; value?: T }
-        | { validator: Validator<T, any, any>; value: T }
-        | { error: string; value?: undefined }
-      ),
-  ): Promise<EventId<Name>>;
-  /**
-   * Create an event ahead of time, enabling awaiting a specific event by ID.
-   * @param ctx - From an action, mutation or workflow step.
-   * @param args - The name of the event and what workflow it belongs to.
-   * @returns The event ID, which can be used to send the event or await it.
-   */
-  createEvent<Name extends string>(
-    ctx: RunMutationCtx,
-    args: { name: Name; workflowId: WorkflowId },
-  ): Promise<EventId<Name>>;
+  });
+  return workflows as PaginationResult<PublicWorkflow>;
+}
+
+/**
+ * List workflows matching a specific name, including their args, return value etc.
+ *
+ * @param ctx - The Convex context from a query, mutation, or action.
+ * @param component - The workflow component.
+ * @param name - The workflow name to filter by.
+ * @param opts - How many workflows to fetch and in what order.
+ *   e.g. `{ order: "desc", paginationOpts: { cursor: null, numItems: 10 } }`
+ *   will get the last 10 workflows in descending order.
+ *   Defaults to 100 workflows in ascending order.
+ * @returns The pagination result with per-workflow data.
+ */
+export async function listByName(
+  ctx: RunQueryCtx,
+  component: WorkflowComponent,
+  name: string,
+  opts?: {
+    order?: "asc" | "desc";
+    paginationOpts?: PaginationOptions;
+  },
+): Promise<PaginationResult<PublicWorkflow>> {
+  const workflows = await ctx.runQuery(component.workflow.listByName, {
+    name,
+    order: opts?.order ?? "asc",
+    paginationOpts: opts?.paginationOpts ?? {
+      cursor: null,
+      numItems: 100,
+    },
+  });
+  return workflows as PaginationResult<PublicWorkflow>;
+}
+
+/**
+ * List the steps in a workflow, including their name, args, return value etc.
+ *
+ * @param ctx - The Convex context from a query, mutation, or action.
+ * @param component - The workflow component.
+ * @param workflowId - The workflow ID.
+ * @param opts - How many steps to fetch and in what order.
+ *   e.g. `{ order: "desc", paginationOpts: { cursor: null, numItems: 10 } }`
+ *   will get the last 10 steps in descending order.
+ *   Defaults to 100 steps in ascending order.
+ * @returns The pagination result with per-step data.
+ */
+export async function listSteps(
+  ctx: RunQueryCtx,
+  component: WorkflowComponent,
+  workflowId: WorkflowId,
+  opts?: {
+    order?: "asc" | "desc";
+    paginationOpts?: PaginationOptions;
+  },
+): Promise<PaginationResult<WorkflowStep>> {
+  const steps = await ctx.runQuery(component.workflow.listSteps, {
+    workflowId,
+    order: opts?.order ?? "asc",
+    paginationOpts: opts?.paginationOpts ?? {
+      cursor: null,
+      numItems: 100,
+    },
+  });
+  return steps as PaginationResult<WorkflowStep>;
+}
+
+/**
+ * Clean up a completed workflow's storage.
+ *
+ * @param ctx - The Convex context.
+ * @param component - The workflow component.
+ * @param workflowId - The workflow ID.
+ * @returns - Whether the workflow's state was cleaned up.
+ */
+export async function cleanup(
+  ctx: RunMutationCtx,
+  component: WorkflowComponent,
+  workflowId: WorkflowId,
+): Promise<boolean> {
+  return await ctx.runMutation(component.workflow.cleanup, {
+    workflowId,
+  });
 }
 
 export class WorkflowManager {
@@ -615,25 +826,11 @@ export class WorkflowManager {
    * @param workflowId - The workflow ID.
    * @returns The workflow status.
    */
-  async status(
+  async getStatus(
     ctx: RunQueryCtx,
     workflowId: WorkflowId,
   ): Promise<WorkflowStatus> {
-    const { workflow, inProgress } = await ctx.runQuery(
-      this.component.workflow.getStatus,
-      { workflowId },
-    );
-    const running = inProgress.map((entry) => entry.step as IdsToStrings<Step>);
-    switch (workflow.runResult?.kind) {
-      case undefined:
-        return { type: "inProgress", running };
-      case "canceled":
-        return { type: "canceled" };
-      case "failed":
-        return { type: "failed", error: workflow.runResult.error };
-      case "success":
-        return { type: "completed", result: workflow.runResult.returnValue };
-    }
+    return getStatus(ctx, this.component, workflowId);
   }
 
   /**
@@ -666,22 +863,7 @@ export class WorkflowManager {
       startAsync?: boolean;
     },
   ): Promise<void> {
-    let from: number | string | undefined;
-    if (options?.from !== undefined) {
-      if (
-        typeof options.from === "number" ||
-        typeof options.from === "string"
-      ) {
-        from = options.from;
-      } else {
-        from = safeFunctionName(options.from);
-      }
-    }
-    await ctx.runMutation(this.component.workflow.restart, {
-      workflowId,
-      from,
-      startAsync: options?.startAsync,
-    });
+    return restart(ctx, this.component, workflowId, options);
   }
 
   /**
@@ -691,9 +873,7 @@ export class WorkflowManager {
    * @param workflowId - The workflow ID.
    */
   async cancel(ctx: RunMutationCtx, workflowId: WorkflowId) {
-    await ctx.runMutation(this.component.workflow.cancel, {
-      workflowId,
-    });
+    return cancel(ctx, this.component, workflowId);
   }
 
   /**
@@ -713,14 +893,7 @@ export class WorkflowManager {
       paginationOpts?: PaginationOptions;
     },
   ): Promise<PaginationResult<PublicWorkflow>> {
-    const workflows = await ctx.runQuery(this.component.workflow.list, {
-      order: opts?.order ?? "asc",
-      paginationOpts: opts?.paginationOpts ?? {
-        cursor: null,
-        numItems: 100,
-      },
-    });
-    return workflows as PaginationResult<PublicWorkflow>;
+    return list(ctx, this.component, opts);
   }
 
   /**
@@ -742,15 +915,7 @@ export class WorkflowManager {
       paginationOpts?: PaginationOptions;
     },
   ): Promise<PaginationResult<PublicWorkflow>> {
-    const workflows = await ctx.runQuery(this.component.workflow.listByName, {
-      name,
-      order: opts?.order ?? "asc",
-      paginationOpts: opts?.paginationOpts ?? {
-        cursor: null,
-        numItems: 100,
-      },
-    });
-    return workflows as PaginationResult<PublicWorkflow>;
+    return listByName(ctx, this.component, name, opts);
   }
 
   /**
@@ -772,15 +937,7 @@ export class WorkflowManager {
       paginationOpts?: PaginationOptions;
     },
   ): Promise<PaginationResult<WorkflowStep>> {
-    const steps = await ctx.runQuery(this.component.workflow.listSteps, {
-      workflowId,
-      order: opts?.order ?? "asc",
-      paginationOpts: opts?.paginationOpts ?? {
-        cursor: null,
-        numItems: 100,
-      },
-    });
-    return steps as PaginationResult<WorkflowStep>;
+    return listSteps(ctx, this.component, workflowId, opts);
   }
 
   /**
@@ -791,9 +948,7 @@ export class WorkflowManager {
    * @returns - Whether the workflow's state was cleaned up.
    */
   async cleanup(ctx: RunMutationCtx, workflowId: WorkflowId): Promise<boolean> {
-    return await ctx.runMutation(this.component.workflow.cleanup, {
-      workflowId,
-    });
+    return cleanup(ctx, this.component, workflowId);
   }
 
   /**
@@ -816,27 +971,7 @@ export class WorkflowManager {
         | { error: string; value?: undefined }
       ),
   ): Promise<EventId<Name>> {
-    const result: RunResult =
-      "error" in args
-        ? {
-            kind: "failed",
-            error: args.error,
-          }
-        : {
-            kind: "success" as const,
-            returnValue: args.validator
-              ? parse(args.validator, args.value)
-              : "value" in args
-                ? args.value
-                : null,
-          };
-    return (await ctx.runMutation(this.component.event.send, {
-      eventId: args.id,
-      result,
-      name: args.name,
-      workflowId: args.workflowId,
-      workpoolOptions: this.options?.workpoolOptions,
-    })) as EventId<Name>;
+    return sendEvent<T, Name>(ctx, this.component, args);
   }
 
   /**
@@ -849,10 +984,7 @@ export class WorkflowManager {
     ctx: RunMutationCtx,
     args: { name: Name; workflowId: WorkflowId },
   ): Promise<EventId<Name>> {
-    return (await ctx.runMutation(this.component.event.create, {
-      name: args.name,
-      workflowId: args.workflowId,
-    })) as EventId<Name>;
+    return createEvent(ctx, this.component, args);
   }
 }
 

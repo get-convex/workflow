@@ -1,5 +1,11 @@
-import { type EventId, vEventId, vWorkflowId } from "@convex-dev/workflow";
-import { internal } from "./_generated/api";
+import {
+  createEvent,
+  sendEvent,
+  type EventId,
+  vEventId,
+  vWorkflowId,
+} from "@convex-dev/workflow";
+import { components, internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { workflow } from "./example";
 
@@ -7,25 +13,23 @@ export const signalWorkflow = workflow
   .define({
     args: {},
   })
-  .bind(internal.passingSignals.signalBased);
-
-export const signalBased = signalWorkflow.handler(async (ctx) => {
-  console.log("Starting signal based  workflow");
-  for (let i = 0; i < 3; i++) {
-    const signalId = await ctx.runMutation(
-      internal.passingSignals.createSignal,
-      { workflowId: ctx.workflowId },
-    );
-    await ctx.awaitEvent({ id: signalId });
-    console.log("Signal received", signalId);
-  }
-  console.log("All signals received");
-});
+  .handler(async (ctx) => {
+    console.log("Starting signal based workflow");
+    for (let i = 0; i < 3; i++) {
+      const signalId = await ctx.runMutation(
+        internal.passingSignals.createSignal,
+        { workflowId: ctx.workflowId },
+      );
+      await ctx.awaitEvent({ id: signalId });
+      console.log("Signal received", signalId);
+    }
+    console.log("All signals received");
+  });
 
 export const createSignal = internalMutation({
   args: { workflowId: vWorkflowId },
   handler: async (ctx, args): Promise<EventId> => {
-    const eventId = await signalWorkflow.createEvent(ctx, {
+    const eventId = await createEvent(ctx, components.workflow, {
       name: "signal",
       workflowId: args.workflowId,
     });
@@ -41,6 +45,6 @@ export const createSignal = internalMutation({
 export const sendSignal = internalMutation({
   args: { eventId: vEventId("signal") },
   handler: async (ctx, args) => {
-    await signalWorkflow.sendEvent(ctx, { id: args.eventId });
+    await sendEvent(ctx, components.workflow, { id: args.eventId });
   },
 });

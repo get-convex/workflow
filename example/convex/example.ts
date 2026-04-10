@@ -25,9 +25,7 @@ export const myWorkflow = workflow
       windGust: v.number(),
     }),
   })
-  .bind(internal.example.myHandler);
-
-export const myHandler = myWorkflow.handler(async (step, args) => {
+  .handler(async (step, args) => {
   console.time("overall");
   console.time("geocoding");
   // Run in parallel!
@@ -69,8 +67,9 @@ export const startWorkflow = internalMutation({
   returns: v.string(),
   handler: async (ctx, args) => {
     const location = args.location ?? "San Francisco";
-    const id: WorkflowId = await myWorkflow.start(
+    const id: WorkflowId = await workflow.start(
       ctx,
+      internal.example.myWorkflow,
       { location },
       {
         onComplete: internal.example.flowCompleted,
@@ -89,7 +88,7 @@ export const cancelWorkflow = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await myWorkflow.cancel(ctx, args.workflowId);
+    await workflow.cancel(ctx, args.workflowId);
   },
 });
 

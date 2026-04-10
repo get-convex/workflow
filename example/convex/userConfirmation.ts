@@ -1,6 +1,11 @@
-import { defineEvent, vWorkflowId, WorkflowId } from "@convex-dev/workflow";
+import {
+  defineEvent,
+  sendEvent,
+  vWorkflowId,
+  WorkflowId,
+} from "@convex-dev/workflow";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import { internalAction, internalMutation } from "./_generated/server";
 import { workflow } from "./example";
 
@@ -17,10 +22,7 @@ export const confirmationWorkflow = workflow
     args: { prompt: v.string() },
     returns: v.string(),
   })
-  .bind(internal.userConfirmation.confirmation);
-
-export const confirmation = confirmationWorkflow.handler(
-  async (step, args): Promise<string> => {
+  .handler(async (step, args): Promise<string> => {
     console.log("Starting confirmation workflow");
     const proposals = await step.runAction(
       internal.userConfirmation.generateProposals,
@@ -35,8 +37,7 @@ export const confirmation = confirmationWorkflow.handler(
     const choice = proposals[approval.choice];
     console.log("Choice selected", choice);
     return choice;
-  },
-);
+  });
 
 export const generateProposals = internalAction({
   args: { prompt: v.string() },
@@ -49,7 +50,7 @@ export const generateProposals = internalAction({
 export const chooseProposal = internalMutation({
   args: { workflowId: vWorkflowId, choice: v.number() },
   handler: async (ctx, args) => {
-    await confirmationWorkflow.sendEvent(ctx, {
+    await sendEvent(ctx, components.workflow, {
       ...approvalEvent,
       workflowId: args.workflowId,
       value: { approved: true, choice: args.choice },
@@ -72,8 +73,10 @@ export const chooseProposal = internalMutation({
 export const startConfirmationWorkflow = internalMutation({
   args: { prompt: v.optional(v.string()) },
   handler: async (ctx, args): Promise<WorkflowId> => {
-    return await confirmationWorkflow.start(ctx, {
-      prompt: args.prompt ?? "Generate a recipe for me",
-    });
+    return await workflow.start(
+      ctx,
+      internal.userConfirmation.confirmationWorkflow,
+      { prompt: args.prompt ?? "Generate a recipe for me" },
+    );
   },
 });

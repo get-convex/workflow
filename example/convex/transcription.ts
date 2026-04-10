@@ -20,22 +20,7 @@ export const transcriptionWorkflow = workflow
       storageId: v.id("_storage"),
     },
   })
-  .bind(internal.transcription.transcription);
-
-export const startTranscription = internalMutation({
-  args: {
-    storageId: v.id("_storage"),
-  },
-  handler: async (ctx, args) => {
-    const id: string = await transcriptionWorkflow.start(ctx, {
-      storageId: args.storageId,
-    });
-    return id;
-  },
-});
-
-export const transcription = transcriptionWorkflow.handler(
-  async (step, args) => {
+  .handler(async (step, args) => {
     const transcription = await step.runAction(
       internal.transcription.computeTranscription,
       {
@@ -49,8 +34,21 @@ export const transcription = transcriptionWorkflow.handler(
       { retry: false },
     );
     console.log(embedding.slice(0, 20));
+  });
+
+export const startTranscription = internalMutation({
+  args: {
+    storageId: v.id("_storage"),
   },
-);
+  handler: async (ctx, args) => {
+    const id: string = await workflow.start(
+      ctx,
+      internal.transcription.transcriptionWorkflow,
+      { storageId: args.storageId },
+    );
+    return id;
+  },
+});
 
 export const computeTranscription = internalAction({
   args: {

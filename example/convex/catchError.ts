@@ -16,10 +16,7 @@ export const catchErrorWorkflow = workflow
     args: { manualRetries: v.number() },
     returns: v.number(),
   })
-  .bind(internal.catchError.catchError);
-
-export const catchError = catchErrorWorkflow.handler(
-  async (step, args): Promise<number> => {
+  .handler(async (step, args): Promise<number> => {
     let i;
     for (i = 0; i < args.manualRetries + 1; i++) {
       try {
@@ -34,5 +31,4 @@ export const catchError = catchErrorWorkflow.handler(
       }
     }
     return i;
-  },
-);
+  });

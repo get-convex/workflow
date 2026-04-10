@@ -16,21 +16,19 @@ export const sequentialInlineQueries = workflow
     args: { key: v.string() },
     returns: v.object({ a: v.number(), b: v.number() }),
   })
-  .bind(internal.inlineTest.siq);
-
-export const siq = sequentialInlineQueries.handler(async (step, args) => {
-  const a = await step.runQuery(
-    internal.inlineTest.getCounter,
-    { key: args.key },
-    { inline: true },
-  );
-  const b = await step.runQuery(
-    internal.inlineTest.getCounter,
-    { key: args.key + "_other" },
-    { inline: true },
-  );
-  return { a, b };
-});
+  .handler(async (step, args) => {
+    const a = await step.runQuery(
+      internal.inlineTest.getCounter,
+      { key: args.key },
+      { inline: true },
+    );
+    const b = await step.runQuery(
+      internal.inlineTest.getCounter,
+      { key: args.key + "_other" },
+      { inline: true },
+    );
+    return { a, b };
+  });
 
 // ── Test 2: Parallel inline queries ───────────
 // Both pushed to channel before either is awaited.
@@ -46,32 +44,31 @@ export const parallelInlineQueries = workflow
       resolveOrder: v.array(v.string()),
     }),
   })
-  .bind(internal.inlineTest.piq);
-export const piq = parallelInlineQueries.handler(async (step, args) => {
-  const resolveOrder: string[] = [];
-  const aPromise = step
-    .runQuery(
-      internal.inlineTest.getCounter,
-      { key: args.key },
-      { inline: true },
-    )
-    .then((val) => {
-      resolveOrder.push("a");
-      return val;
-    });
-  const bPromise = step
-    .runQuery(
-      internal.inlineTest.getCounter,
-      { key: args.key + "_other" },
-      { inline: true },
-    )
-    .then((val) => {
-      resolveOrder.push("b");
-      return val;
-    });
-  const [a, b] = await Promise.all([aPromise, bPromise]);
-  return { a, b, resolveOrder };
-});
+  .handler(async (step, args) => {
+    const resolveOrder: string[] = [];
+    const aPromise = step
+      .runQuery(
+        internal.inlineTest.getCounter,
+        { key: args.key },
+        { inline: true },
+      )
+      .then((val) => {
+        resolveOrder.push("a");
+        return val;
+      });
+    const bPromise = step
+      .runQuery(
+        internal.inlineTest.getCounter,
+        { key: args.key + "_other" },
+        { inline: true },
+      )
+      .then((val) => {
+        resolveOrder.push("b");
+        return val;
+      });
+    const [a, b] = await Promise.all([aPromise, bPromise]);
+    return { a, b, resolveOrder };
+  });
 
 // ── Test 3: Promise.race between inline queries ──
 // Checks which promise resolves first.
@@ -81,24 +78,23 @@ export const raceInlineQueries = workflow
     args: { key: v.string() },
     returns: v.object({ winner: v.string(), value: v.number() }),
   })
-  .bind(internal.inlineTest.riq);
-export const riq = raceInlineQueries.handler(async (step, args) => {
-  const aPromise = step
-    .runQuery(
-      internal.inlineTest.getCounter,
-      { key: args.key },
-      { inline: true },
-    )
-    .then((val) => ({ winner: "a", value: val }));
-  const bPromise = step
-    .runQuery(
-      internal.inlineTest.getCounter,
-      { key: args.key + "_other" },
-      { inline: true },
-    )
-    .then((val) => ({ winner: "b", value: val }));
-  return await Promise.race([aPromise, bPromise]);
-});
+  .handler(async (step, args) => {
+    const aPromise = step
+      .runQuery(
+        internal.inlineTest.getCounter,
+        { key: args.key },
+        { inline: true },
+      )
+      .then((val) => ({ winner: "a", value: val }));
+    const bPromise = step
+      .runQuery(
+        internal.inlineTest.getCounter,
+        { key: args.key + "_other" },
+        { inline: true },
+      )
+      .then((val) => ({ winner: "b", value: val }));
+    return await Promise.race([aPromise, bPromise]);
+  });
 
 // ── Test 4: Inline mutations ──────────────────
 // Verifies mutations execute within the same transaction.
@@ -107,20 +103,19 @@ export const inlineMutations = workflow
     args: { key: v.string() },
     returns: v.object({ first: v.number(), second: v.number() }),
   })
-  .bind(internal.inlineTest.im);
-export const im = inlineMutations.handler(async (step, args) => {
-  const first = await step.runMutation(
-    internal.inlineTest.incrementCounter,
-    { key: args.key },
-    { inline: true },
-  );
-  const second = await step.runMutation(
-    internal.inlineTest.incrementCounter,
-    { key: args.key },
-    { inline: true },
-  );
-  return { first, second };
-});
+  .handler(async (step, args) => {
+    const first = await step.runMutation(
+      internal.inlineTest.incrementCounter,
+      { key: args.key },
+      { inline: true },
+    );
+    const second = await step.runMutation(
+      internal.inlineTest.incrementCounter,
+      { key: args.key },
+      { inline: true },
+    );
+    return { first, second };
+  });
 
 // ── Test 6: Mixed inline + action ─────────────
 // The query runs inline, while the action goes through
@@ -133,22 +128,21 @@ export const mixedInlineAndAction = workflow
       actionResult: v.string(),
     }),
   })
-  .bind(internal.inlineTest.mia);
-export const mia = mixedInlineAndAction.handler(async (step, args) => {
-  const queryPromise = step.runQuery(
-    internal.inlineTest.getCounter,
-    { key: args.key },
-    { inline: true },
-  );
-  const actionPromise = step.runAction(internal.inlineTest.someAction, {
-    label: args.key,
+  .handler(async (step, args) => {
+    const queryPromise = step.runQuery(
+      internal.inlineTest.getCounter,
+      { key: args.key },
+      { inline: true },
+    );
+    const actionPromise = step.runAction(internal.inlineTest.someAction, {
+      label: args.key,
+    });
+    const [queryResult, actionResult] = await Promise.all([
+      queryPromise,
+      actionPromise,
+    ]);
+    return { queryResult, actionResult };
   });
-  const [queryResult, actionResult] = await Promise.all([
-    queryPromise,
-    actionPromise,
-  ]);
-  return { queryResult, actionResult };
-});
 
 // ── Test 7: Dependent inline queries ──────────
 // Second query uses result of first.
@@ -157,20 +151,19 @@ export const dependentInlineQueries = workflow
     args: { key: v.string() },
     returns: v.object({ first: v.number(), second: v.number() }),
   })
-  .bind(internal.inlineTest.diq);
-export const diq = dependentInlineQueries.handler(async (step, args) => {
-  const first = await step.runQuery(
-    internal.inlineTest.getCounter,
-    { key: args.key },
-    { inline: true },
-  );
-  const second = await step.runQuery(
-    internal.inlineTest.getCounter,
-    { key: first === 0 ? args.key + "_zero" : args.key + "_nonzero" },
-    { inline: true },
-  );
-  return { first, second };
-});
+  .handler(async (step, args) => {
+    const first = await step.runQuery(
+      internal.inlineTest.getCounter,
+      { key: args.key },
+      { inline: true },
+    );
+    const second = await step.runQuery(
+      internal.inlineTest.getCounter,
+      { key: first === 0 ? args.key + "_zero" : args.key + "_nonzero" },
+      { inline: true },
+    );
+    return { first, second };
+  });
 
 // ── Helper functions ──────────────────────────
 

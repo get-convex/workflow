@@ -29,6 +29,16 @@ export type RunOptions = {
   unstableArgs?: boolean;
 } & SchedulerOptions;
 
+type InlineArgs =
+  | {
+      inline: true;
+      runAt?: never;
+      runAfter?: never;
+    }
+  | {
+      inline?: false;
+    };
+
 export type WorkflowCtx = {
   /**
    * The ID of the workflow currently running.
@@ -43,7 +53,7 @@ export type WorkflowCtx = {
    */
   runQuery<Query extends FunctionReference<"query", FunctionVisibility>>(
     query: Query,
-    ...args: OptionalRestArgs<RunOptions & { inline?: boolean }, Query>
+    ...args: OptionalRestArgs<RunOptions & InlineArgs, Query>
   ): Promise<FunctionReturnType<Query>>;
 
   /**
@@ -57,7 +67,7 @@ export type WorkflowCtx = {
     Mutation extends FunctionReference<"mutation", FunctionVisibility>,
   >(
     mutation: Mutation,
-    ...args: OptionalRestArgs<RunOptions & { inline?: boolean }, Mutation>
+    ...args: OptionalRestArgs<RunOptions & InlineArgs, Mutation>
   ): Promise<FunctionReturnType<Mutation>>;
 
   /**

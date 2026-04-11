@@ -14,7 +14,7 @@ import {
 } from "convex/server";
 import { convexToJson, getConvexSize, type Value } from "convex/values";
 import { type JournalEntry, type Step } from "../component/schema.js";
-import type { WorkflowComponent } from "./types.js";
+import type { IdsToStrings, WorkflowComponent } from "./types.js";
 import { MAX_JOURNAL_SIZE, formatErrorWithStack } from "../shared.js";
 import type { EventId, SchedulerOptions } from "../types.js";
 import { pick } from "convex-helpers";
@@ -189,31 +189,40 @@ export class StepExecutor {
           startedAt: this.now,
           completedAt: runResult ? this.now : undefined,
         } satisfies Omit<Step, "kind">;
-        const step =
-          target.kind === "function"
-            ? {
-                kind: "function" as const,
-                functionType: target.functionType,
-                handle: await createFunctionHandle(target.function),
-                ...commonFields,
-              }
-            : target.kind === "workflow"
-              ? {
-                  kind: "workflow" as const,
-                  handle: await createFunctionHandle(target.function),
-                  ...commonFields,
-                }
-              : target.kind === "event"
-                ? {
-                    kind: "event" as const,
-                    eventId: target.args.eventId,
-                    ...commonFields,
-                    args: target.args,
-                  }
-                : {
-                    kind: "sleep" as const,
-                    ...commonFields,
-                  };
+        let step: IdsToStrings<Step>;
+        switch (target.kind) {
+          case "function":
+            step = {
+              kind: "function" as const,
+              functionType: target.functionType,
+              handle: await createFunctionHandle(target.function),
+              ...commonFields,
+            };
+            break;
+          case "workflow":
+            step = {
+              kind: "workflow" as const,
+              handle: await createFunctionHandle(target.function),
+              ...commonFields,
+            };
+            break;
+          case "event":
+            step = {
+              kind: "event" as const,
+              eventId: target.args.eventId,
+              ...commonFields,
+              args: target.args,
+            };
+            break;
+          case "sleep":
+            step = {
+              kind: "sleep" as const,
+              ...commonFields,
+            };
+            break;
+          default:
+            throw new Error(`Unknown step kind: ${(target as any).kind}`);
+        }
         return {
           retry: message.retry,
           schedulerOptions: message.schedulerOptions,

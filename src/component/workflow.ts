@@ -135,7 +135,7 @@ function publicWorkflow(workflow: Doc<"workflows">): PublicWorkflow {
 }
 
 function publicStep(step: JournalEntry): WorkflowStep {
-  return {
+  const commonFields = {
     workflowId: publicWorkflowId(step.workflowId),
     name: step.step.name,
     stepId: step._id,
@@ -146,27 +146,35 @@ function publicStep(step: JournalEntry): WorkflowStep {
 
     startedAt: step.step.startedAt,
     completedAt: step.step.completedAt,
-
-    ...(step.step.kind === "event"
-      ? {
-          kind: "event",
-          eventId: step.step.eventId as unknown as EventId,
-        }
-      : step.step.kind === "workflow"
-        ? {
-            kind: "workflow",
-            nestedWorkflowId: publicWorkflowId(step.step.workflowId!),
-          }
-        : step.step.kind === "function"
-          ? {
-              kind: "function",
-              workId: step.step.workId,
-            }
-          : {
-              kind: "sleep",
-              workId: step.step.workId!,
-            }),
-  } satisfies WorkflowStep;
+  };
+  switch (step.step.kind) {
+    case "event":
+      return {
+        ...commonFields,
+        kind: "event",
+        eventId: step.step.eventId as unknown as EventId,
+      };
+    case "workflow":
+      return {
+        ...commonFields,
+        kind: "workflow",
+        nestedWorkflowId: publicWorkflowId(step.step.workflowId!),
+      };
+    case "function":
+      return {
+        ...commonFields,
+        kind: "function",
+        workId: step.step.workId,
+      };
+    case "sleep":
+      return {
+        ...commonFields,
+        kind: "sleep",
+        workId: step.step.workId!,
+      };
+    default:
+      throw new Error(`Unknown step kind: ${(step.step as any).kind}`);
+  }
 }
 
 export const list = query({

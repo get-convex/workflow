@@ -212,7 +212,8 @@ async function runFunction<
   const { name, retry, inline, unstableArgs, ...schedulerOptions } = opts ?? {};
   if (
     inline &&
-    ("runAt" in schedulerOptions || "runAfter" in schedulerOptions)
+    schedulerOptions &&
+    (schedulerOptions.runAt || schedulerOptions.runAfter)
   ) {
     throw new Error("Cannot combine `inline` with `runAt` or `runAfter`.");
   }

@@ -204,16 +204,16 @@ export class StepExecutor {
                   ...commonFields,
                 }
               : target.kind === "event"
-              ? {
-                  kind: "event" as const,
-                  eventId: target.args.eventId,
-                  ...commonFields,
-                  args: target.args,
-                }
-              : {
-                  kind: "sleep" as const,
-                  ...commonFields,
-                };
+                ? {
+                    kind: "event" as const,
+                    eventId: target.args.eventId,
+                    ...commonFields,
+                    args: target.args,
+                  }
+                : {
+                    kind: "sleep" as const,
+                    ...commonFields,
+                  };
         return {
           retry: message.retry,
           schedulerOptions: message.schedulerOptions,

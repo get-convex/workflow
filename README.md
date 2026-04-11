@@ -292,9 +292,8 @@ await step.sleep(24 * 60 * 60 * 1000);
 
 Tip: You can name the sleep step for clarity with a second `{ name }` argument.
 
-If you want to defer a specific step, you can use
-`runAfter` or `runAt` as scheduling options on any step. This delays that
-particular step's execution:
+If you want to defer a specific step, you can use `runAfter` or `runAt` as
+scheduling options on any step. This delays that particular step's execution:
 
 ```ts
 // Run this action 10 seconds from now.
@@ -302,8 +301,8 @@ await step.runAction(internal.example.myAction, args, { runAfter: 10_000 });
 ```
 
 This is roughly equivalent to doing a sleep first, with the difference being
-that the "myAction" step is considered "in progress" while it is waiting, and
-it only enqueues one item into the Workpool (myAction@delay), instead of two
+that the "myAction" step is considered "in progress" while it is waiting, and it
+only enqueues one item into the Workpool (myAction@delay), instead of two
 (sleep@delay, myAction@now).
 
 ### Specifying retry behavior
@@ -449,7 +448,7 @@ querying a workflow's status.
 import { vWorkflowId, getStatus, WorkflowStatus } from "@convex-dev/workflow";
 
 export const runWorkflowAndPoll = query({
-  args: { workflowId: vWorkflowId, },
+  args: { workflowId: vWorkflowId },
   handler: async (ctx, args): Promise<WorkflowStatus> => {
     await checkAuth(ctx, args);
     const status = await getStatus(ctx, components.workflow, args.workflowId);
@@ -465,9 +464,9 @@ can reactively update as the workflow progresses.
 
 ### Canceling a workflow
 
-You can cancel a workflow with `cancel()`, halting the workflow's
-execution immediately. In-progress calls to `step.runAction()`, however, will
-finish executing.
+You can cancel a workflow with `cancel()`, halting the workflow's execution
+immediately. In-progress calls to `step.runAction()`, however, will finish
+executing.
 
 ```ts
 import { cancel } from "@convex-dev/workflow";
@@ -490,8 +489,8 @@ export const kickoffWorkflow = action({
 ### Restart a failed workflow
 
 If you want to re-run a workflow from a specific point, you can do so with
-`restart(...)`. By default it will retry the handler using the existing
-history of steps.
+`restart(...)`. By default it will retry the handler using the existing history
+of steps.
 
 ```ts
 import { restart } from "@convex-dev/workflow";
@@ -537,9 +536,8 @@ await restart(ctx, components.workflow, workflowId, { startAsync: true });
 
 ### Cleaning up a workflow
 
-After a workflow has completed, you can clean up its storage with
-`cleanup()`. Completed workflows are not automatically cleaned up by
-the system.
+After a workflow has completed, you can clean up its storage with `cleanup()`.
+Completed workflows are not automatically cleaned up by the system.
 
 ```ts
 import { cleanup, getStatus } from "@convex-dev/workflow";
@@ -568,8 +566,8 @@ export const kickoffWorkflow = action({
 });
 ```
 
-You could alternatively use the `list` API to paginate through and
-clean up old workflows from an hourly cron.
+You could alternatively use the `list` API to paginate through and clean up old
+workflows from an hourly cron.
 
 ### Specifying a custom name for a step
 
@@ -643,7 +641,11 @@ To send an error, use the `error` property. This will cause `step.awaitEvent` to
 throw an error.
 
 ```ts
-await sendEvent(ctx, components.workflow, { name, workflowId, error: "An error occurred" });
+await sendEvent(ctx, components.workflow, {
+  name,
+  workflowId,
+  error: "An error occurred",
+});
 ```
 
 #### Sharing event definitions
@@ -662,7 +664,11 @@ const approval = await step.awaitEvent(approvalEvent);
 
 // From a mutation:
 const value = { approved: true };
-await sendEvent(ctx, components.workflow, { ...approvalEvent, workflowId, value });
+await sendEvent(ctx, components.workflow, {
+  ...approvalEvent,
+  workflowId,
+  value,
+});
 ```
 
 See [`example/convex/userConfirmation.ts`](./example/convex/userConfirmation.ts)
@@ -736,7 +742,9 @@ await list(ctx, components.workflow, { order: "asc" });
 Use `listByName` to get a paginated list of workflows matching a specific name.
 
 ```ts
-await listByName(ctx, components.workflow, "file/folder:function", { order: "desc" });
+await listByName(ctx, components.workflow, "file/folder:function", {
+  order: "desc",
+});
 ```
 
 Both accept paginationOpts, such as `{ numItems: 50, cursor: null }` to get the

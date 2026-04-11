@@ -1,6 +1,12 @@
 ---
 name: convex-quickstart
-description: Initializes a new Convex project from scratch or adds Convex to an existing app. Use this skill when starting a new project with Convex, scaffolding with npm create convex@latest, adding Convex to an existing React, Next.js, Vue, Svelte, or other frontend, wiring up ConvexProvider, configuring environment variables for the deployment URL, or running npx convex dev for the first time, even if the user just says "set up Convex" or "add a backend."
+description:
+  Initializes a new Convex project from scratch or adds Convex to an existing
+  app. Use this skill when starting a new project with Convex, scaffolding with
+  npm create convex@latest, adding Convex to an existing React, Next.js, Vue,
+  Svelte, or other frontend, wiring up ConvexProvider, configuring environment
+  variables for the deployment URL, or running npx convex dev for the first
+  time, even if the user just says "set up Convex" or "add a backend."
 ---
 
 # Convex Quickstart
@@ -15,8 +21,10 @@ Set up a working Convex project as fast as possible.
 
 ## When Not to Use
 
-- The project already has Convex installed and `convex/` exists - just start building
-- You only need to add auth to an existing Convex app - use the `convex-setup-auth` skill
+- The project already has Convex installed and `convex/` exists - just start
+  building
+- You only need to add auth to an existing Convex app - use the
+  `convex-setup-auth` skill
 
 ## Workflow
 
@@ -28,21 +36,23 @@ Set up a working Convex project as fast as possible.
 
 ## Path 1: New Project (Recommended)
 
-Use the official scaffolding tool. It creates a complete project with the frontend framework, Convex backend, and all config wired together.
+Use the official scaffolding tool. It creates a complete project with the
+frontend framework, Convex backend, and all config wired together.
 
 ### Pick a template
 
-| Template | Stack |
-|----------|-------|
-| `react-vite-shadcn` | React + Vite + Tailwind + shadcn/ui |
-| `nextjs-shadcn` | Next.js App Router + Tailwind + shadcn/ui |
-| `react-vite-clerk-shadcn` | React + Vite + Clerk auth + shadcn/ui |
-| `nextjs-clerk` | Next.js + Clerk auth |
-| `nextjs-convexauth-shadcn` | Next.js + Convex Auth + shadcn/ui |
-| `nextjs-lucia-shadcn` | Next.js + Lucia auth + shadcn/ui |
-| `bare` | Convex backend only, no frontend |
+| Template                   | Stack                                     |
+| -------------------------- | ----------------------------------------- |
+| `react-vite-shadcn`        | React + Vite + Tailwind + shadcn/ui       |
+| `nextjs-shadcn`            | Next.js App Router + Tailwind + shadcn/ui |
+| `react-vite-clerk-shadcn`  | React + Vite + Clerk auth + shadcn/ui     |
+| `nextjs-clerk`             | Next.js + Clerk auth                      |
+| `nextjs-convexauth-shadcn` | Next.js + Convex Auth + shadcn/ui         |
+| `nextjs-lucia-shadcn`      | Next.js + Lucia auth + shadcn/ui          |
+| `bare`                     | Convex backend only, no frontend          |
 
-If the user has not specified a preference, default to `react-vite-shadcn` for simple apps or `nextjs-shadcn` for apps that need SSR or API routes.
+If the user has not specified a preference, default to `react-vite-shadcn` for
+simple apps or `nextjs-shadcn` for apps that need SSR or API routes.
 
 You can also use any GitHub repo as a template:
 
@@ -61,7 +71,8 @@ cd my-app
 npm install
 ```
 
-The scaffolding tool creates files but does not run `npm install`, so you must run it yourself.
+The scaffolding tool creates files but does not run `npm install`, so you must
+run it yourself.
 
 To scaffold in the current directory (if it is empty):
 
@@ -72,19 +83,28 @@ npm install
 
 ### Start the dev loop
 
-`npx convex dev` is a long-running watcher process that syncs backend code to a Convex deployment on every save. It also requires authentication on first run (browser-based OAuth). Both of these make it unsuitable for an agent to run directly.
+`npx convex dev` is a long-running watcher process that syncs backend code to a
+Convex deployment on every save. It also requires authentication on first run
+(browser-based OAuth). Both of these make it unsuitable for an agent to run
+directly.
 
 **Ask the user to run this themselves:**
 
-Tell the user to run `npx convex dev` in their terminal. On first run it will prompt them to log in or develop anonymously. Once running, it will:
+Tell the user to run `npx convex dev` in their terminal. On first run it will
+prompt them to log in or develop anonymously. Once running, it will:
+
 - Create a Convex project and dev deployment
 - Write the deployment URL to `.env.local`
 - Create the `convex/` directory with generated types
 - Watch for changes and sync continuously
 
-The user should keep `npx convex dev` running in the background while you work on code. The watcher will automatically pick up any files you create or edit in `convex/`.
+The user should keep `npx convex dev` running in the background while you work
+on code. The watcher will automatically pick up any files you create or edit in
+`convex/`.
 
-**Exception - cloud or headless agents:** Environments that cannot open a browser for interactive login should use Agent Mode (see below) to run anonymously without user interaction.
+**Exception - cloud or headless agents:** Environments that cannot open a
+browser for interactive login should use Agent Mode (see below) to run
+anonymously without user interaction.
 
 ### Start the frontend
 
@@ -111,6 +131,7 @@ my-app/
 ```
 
 The template already has:
+
 - `ConvexProvider` wired into the app root
 - Correct env var names for the framework
 - Tailwind and shadcn/ui ready (for shadcn templates)
@@ -120,7 +141,8 @@ Proceed to adding schema, functions, and UI.
 
 ## Path 2: Add Convex to an Existing App
 
-Use this when the user already has a frontend project and wants to add Convex as the backend.
+Use this when the user already has a frontend project and wants to add Convex as
+the backend.
 
 ### Install
 
@@ -130,7 +152,10 @@ npm install convex
 
 ### Initialize and start dev loop
 
-Ask the user to run `npx convex dev` in their terminal. This handles login, creates the `convex/` directory, writes the deployment URL to `.env.local`, and starts the file watcher. See the notes in Path 1 about why the agent should not run this directly.
+Ask the user to run `npx convex dev` in their terminal. This handles login,
+creates the `convex/` directory, writes the deployment URL to `.env.local`, and
+starts the file watcher. See the notes in Path 1 about why the agent should not
+run this directly.
 
 ### Wire up the provider
 
@@ -141,7 +166,9 @@ Create the `ConvexReactClient` at module scope, not inside a component:
 ```tsx
 // Bad: re-creates the client on every render
 function App() {
-  const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
+  const convex = new ConvexReactClient(
+    import.meta.env.VITE_CONVEX_URL as string,
+  );
   return <ConvexProvider client={convex}>...</ConvexProvider>;
 }
 
@@ -192,7 +219,11 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
 // app/layout.tsx
 import { ConvexClientProvider } from "./ConvexClientProvider";
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
       <body>
@@ -205,7 +236,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
 #### Other frameworks
 
-For Vue, Svelte, React Native, TanStack Start, Remix, and others, follow the matching quickstart guide:
+For Vue, Svelte, React Native, TanStack Start, Remix, and others, follow the
+matching quickstart guide:
 
 - [Vue](https://docs.convex.dev/quickstart/vue)
 - [Svelte](https://docs.convex.dev/quickstart/svelte)
@@ -218,18 +250,20 @@ For Vue, Svelte, React Native, TanStack Start, Remix, and others, follow the mat
 
 The env var name depends on the framework:
 
-| Framework | Variable |
-|-----------|----------|
-| Vite | `VITE_CONVEX_URL` |
-| Next.js | `NEXT_PUBLIC_CONVEX_URL` |
-| Remix | `CONVEX_URL` |
+| Framework    | Variable                 |
+| ------------ | ------------------------ |
+| Vite         | `VITE_CONVEX_URL`        |
+| Next.js      | `NEXT_PUBLIC_CONVEX_URL` |
+| Remix        | `CONVEX_URL`             |
 | React Native | `EXPO_PUBLIC_CONVEX_URL` |
 
 `npx convex dev` writes the correct variable to `.env.local` automatically.
 
 ## Agent Mode (Cloud and Headless Agents)
 
-When running in a cloud or headless agent environment where interactive browser login is not possible, set `CONVEX_AGENT_MODE=anonymous` to use a local anonymous deployment.
+When running in a cloud or headless agent environment where interactive browser
+login is not possible, set `CONVEX_AGENT_MODE=anonymous` to use a local
+anonymous deployment.
 
 Add `CONVEX_AGENT_MODE=anonymous` to `.env.local`, or set it inline:
 
@@ -237,7 +271,8 @@ Add `CONVEX_AGENT_MODE=anonymous` to `.env.local`, or set it inline:
 CONVEX_AGENT_MODE=anonymous npx convex dev
 ```
 
-This runs a local Convex backend on the VM without requiring authentication, and avoids conflicting with the user's personal dev deployment.
+This runs a local Convex backend on the VM without requiring authentication, and
+avoids conflicting with the user's personal dev deployment.
 
 ## Verify the Setup
 
@@ -249,7 +284,8 @@ After setup, confirm everything is working:
 
 ## Writing Your First Function
 
-Once the project is set up, create a schema and a query to verify the full loop works.
+Once the project is set up, create a schema and a query to verify the full loop
+works.
 
 `convex/schema.ts`:
 
@@ -286,7 +322,8 @@ export const create = mutation({
 });
 ```
 
-Use in a React component (adjust the import path based on your file location relative to `convex/`):
+Use in a React component (adjust the import path based on your file location
+relative to `convex/`):
 
 ```tsx
 import { useQuery, useMutation } from "convex/react";
@@ -299,7 +336,9 @@ function Tasks() {
   return (
     <div>
       <button onClick={() => create({ text: "New task" })}>Add</button>
-      {tasks?.map((t) => <div key={t._id}>{t.text}</div>)}
+      {tasks?.map((t) => (
+        <div key={t._id}>{t.text}</div>
+      ))}
     </div>
   );
 }
@@ -307,7 +346,8 @@ function Tasks() {
 
 ## Development vs Production
 
-Always use `npx convex dev` during development. It runs against your personal dev deployment and syncs code on save.
+Always use `npx convex dev` during development. It runs against your personal
+dev deployment and syncs code on save.
 
 When ready to ship, deploy to production:
 
@@ -315,21 +355,25 @@ When ready to ship, deploy to production:
 npx convex deploy
 ```
 
-This pushes to the production deployment, which is separate from dev. Do not use `deploy` during development.
+This pushes to the production deployment, which is separate from dev. Do not use
+`deploy` during development.
 
 ## Next Steps
 
 - Add authentication: use the `convex-setup-auth` skill
-- Design your schema: see [Schema docs](https://docs.convex.dev/database/schemas)
+- Design your schema: see
+  [Schema docs](https://docs.convex.dev/database/schemas)
 - Build components: use the `convex-create-component` skill
 - Plan a migration: use the `convex-migration-helper` skill
-- Add file storage: see [File Storage docs](https://docs.convex.dev/file-storage)
+- Add file storage: see
+  [File Storage docs](https://docs.convex.dev/file-storage)
 - Set up cron jobs: see [Scheduling docs](https://docs.convex.dev/scheduling)
 
 ## Checklist
 
 - [ ] Determined starting point: new project or existing app
-- [ ] If new project: scaffolded with `npm create convex@latest` using appropriate template
+- [ ] If new project: scaffolded with `npm create convex@latest` using
+      appropriate template
 - [ ] If existing app: installed `convex` and wired up the provider
 - [ ] User has `npx convex dev` running and connected to a deployment
 - [ ] `convex/_generated/` directory exists with types

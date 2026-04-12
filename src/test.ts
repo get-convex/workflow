@@ -14,6 +14,13 @@ export function register<
   Schema extends SchemaDefinition<GenericSchema, boolean>,
 >(t: TestConvex<Schema>, name: string = "workflow") {
   t.registerComponent(name, schema, modules);
-  workpool.register(t, `${name}/workpool`);
+  // TestConvex<Schema> is invariant w.r.t. Schema, so a constrained generic
+  // parameter is not directly assignable to the concrete base type that
+  // workpool.register expects. The cast is safe: the value satisfies the
+  // interface at runtime.
+  workpool.register(
+    t as unknown as TestConvex<SchemaDefinition<GenericSchema, boolean>>,
+    `${name}/workpool`,
+  );
 }
 export default { register, schema, modules };

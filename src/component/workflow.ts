@@ -45,6 +45,7 @@ const createArgs = v.object({
   maxParallelism: v.optional(v.number()),
   onComplete: v.optional(vOnComplete),
   startAsync: v.optional(v.boolean()),
+  createOnly: v.optional(v.boolean()),
   // TODO: ttl
 });
 export const create = mutation({
@@ -73,6 +74,10 @@ export async function createHandler(
     args.workflowHandle,
   );
   if (args.startAsync) {
+    assert(
+      !args.createOnly,
+      "Cannot startAsync and createOnly at the same time",
+    );
     const workpool = await getWorkpool(ctx, args);
     await workpool.enqueueMutation(
       ctx,
@@ -85,7 +90,7 @@ export async function createHandler(
         ...schedulerOptions,
       },
     );
-  } else {
+  } else if (!args.createOnly) {
     // If we can't start it, may as well not create it, eh? Fail fast...
     await ctx.runMutation(args.workflowHandle as FunctionHandle<"mutation">, {
       workflowId,

@@ -185,26 +185,34 @@ export const exampleAction = internalAction({
 
 ### Starting a workflow
 
-Once you've defined a workflow, you can start it from a mutation or action using
-`workflow.start()`.
+Once you've defined a workflow, you can start it from any mutation or action
+using `start()`:
 
 ```ts
+import { start } from "@convex-dev/workflow";
+import { internal } from "./_generated/api";
+
 export const kickoffWorkflow = mutation({
   handler: async (ctx): Promise<WorkflowId> => {
-    const workflowId = await workflow.start(
-      ctx,
-      internal.example.exampleWorkflow,
-      { exampleArg: "James" },
-    );
+    // Starts the workflow immediately, run asynchronously
+    const workflowId = await start(ctx, internal.example.exampleWorkflow, {
+      exampleArg: "James",
+    });
     return workflowId;
   },
 });
 ```
 
+You can also call workflows directly from code, the CLI or dashboard:
+
+```sh
+npx convex run example:exampleWorkflow '{ "args": { "exampleArg": "James" } }'
+```
+
 ### Handling the workflow's result with onComplete
 
-You can handle the workflow's result with `onComplete`. This is useful for
-cleaning up any resources used by the workflow.
+You can handle the workflow's result with `onComplete` by using the `start()`
+helper. This is useful for cleaning up any resources used by the workflow.
 
 Note: when you return things from a workflow, you'll need to specify the return
 type of your `handler` to break type cycles due to using `internal.*` functions
@@ -217,20 +225,19 @@ error instead of success. You can also do validation in the `onComplete` handler
 to have more control over handling that situation.
 
 ```ts
-import { vWorkflowId, Workflow } from "@convex-dev/workflow";
+import { start, vWorkflowId } from "@convex-dev/workflow";
 import { vResultValidator } from "@convex-dev/workpool";
-import { workflow } from "./example";
 
 export const foo = mutation({
   handler: async (ctx): Promise<WorkflowId> => {
     const name = "James";
-    const workflowId = await workflow.start(
+    const workflowId = await start(
       ctx,
       internal.example.exampleWorkflow,
       { name },
       {
         onComplete: internal.example.handleOnComplete,
-        context: name, // can be anything
+        context: { intent: "welcome", for: "James" }, // can be anything
       },
     );
     return workflowId;
@@ -241,10 +248,11 @@ export const handleOnComplete = mutation({
   args: {
     workflowId: vWorkflowId,
     result: vResultValidator,
-    context: v.any(), // used to pass through data from the start site.
+    // used to pass through data from the start site.
+    context: v.object({ intent: v.string(), for: v.string() }),
   },
   handler: async (ctx, args): Promise<void> => {
-    const name = (args.context as { name: string }).name;
+    const name = args.context.name;
     if (args.result.kind === "success") {
       const text = args.result.returnValue;
       console.log(`${name} result: ${text}`);
@@ -441,11 +449,13 @@ budget.
 
 ### Checking a workflow's status
 
-The `workflow.start()` method returns a `WorkflowId`, which can then be used for
+Calling a workflow returns a `WorkflowId` string, which can then be used for
 querying a workflow's status.
 
 ```ts
 import { vWorkflowId, getStatus, WorkflowStatus } from "@convex-dev/workflow";
+import { components } from "./_generated/api";
+import { query } from "./_generated/server";
 
 export const runWorkflowAndPoll = query({
   args: { workflowId: vWorkflowId },
@@ -471,19 +481,8 @@ executing.
 ```ts
 import { cancel } from "@convex-dev/workflow";
 
-export const kickoffWorkflow = action({
-  handler: async (ctx): Promise<void> => {
-    const workflowId = await workflow.start(
-      ctx,
-      internal.example.exampleWorkflow,
-      { name: "James" },
-    );
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    // Cancel the workflow after 1 second.
-    await cancel(ctx, components.workflow, workflowId);
-  },
-});
+// ... Inside a mutation or action
+await cancel(ctx, components.workflow, workflowId);
 ```
 
 ### Restart a failed workflow
@@ -540,28 +539,17 @@ After a workflow has completed, you can clean up its storage with `cleanup()`.
 Completed workflows are not automatically cleaned up by the system.
 
 ```ts
-import { cleanup, getStatus } from "@convex-dev/workflow";
+import { cleanup, vWorkflowId, vResultValidator } from "@convex-dev/workflow";
 
-export const kickoffWorkflow = action({
-  handler: async (ctx) => {
-    const workflowId = await workflow.start(
-      ctx,
-      internal.example.exampleWorkflow,
-      { name: "James" },
-    );
-    try {
-      while (true) {
-        const status = await getStatus(ctx, components.workflow, workflowId);
-        if (status.type === "inProgress") {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
-        }
-        console.log("Workflow completed with status:", status);
-        break;
-      }
-    } finally {
-      await cleanup(ctx, components.workflow, workflowId);
-    }
+export const afterWorkflow = mutation({
+  args: {
+    workflowId: vWorkflowId,
+    result: vResultValidator,
+    context: v.any(),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    // Clean up a completed workflow's storage.
+    await cleanup(ctx, components.workflow, args.workflowId);
   },
 });
 ```

@@ -4,6 +4,7 @@ import {
   type RunResult,
   type WorkId,
 } from "@convex-dev/workpool";
+import type { FunctionHandle } from "convex/server";
 import {
   v,
   type Infer,

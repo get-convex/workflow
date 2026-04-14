@@ -1,14 +1,13 @@
 import { vResultValidator, vWorkIdValidator } from "@convex-dev/workpool";
+import { deprecated, literals } from "convex-helpers/validators";
 import { defineSchema, defineTable } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { logLevel } from "./logging.js";
-import { deprecated, literals } from "convex-helpers/validators";
 
 export const vOnComplete = v.object({
   fnHandle: v.string(), // mutation
   context: v.optional(v.any()),
 });
-export type OnComplete = Infer<typeof vOnComplete>;
 
 const workflowObject = {
   name: v.optional(v.string()),

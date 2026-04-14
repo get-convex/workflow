@@ -42,6 +42,7 @@ export {
 } from "../types.js";
 export type { RunOptions, WorkflowCtx } from "./workflowContext.js";
 export type { WorkflowArgs } from "./workflowMutation.js";
+export { vResultValidator } from "@convex-dev/workpool";
 
 export type CallbackOptions = {
   /**
@@ -51,9 +52,9 @@ export type CallbackOptions = {
    * ```ts
    * export const completion = internalMutation({
    *  args: {
-   *    workId: workIdValidator,
+   *    workId: vWorkflowId,
+   *    result: vResultValidator,
    *    context: v.any(),
-   *    result: resultValidator,
    *  },
    *  handler: async (ctx, args) => {
    *    console.log(args.result, "Got Context back -> ", args.context, Date.now() - args.context);

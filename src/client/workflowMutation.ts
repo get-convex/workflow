@@ -1,6 +1,6 @@
 import { BaseChannel } from "async-channel";
 import { assert } from "convex-helpers";
-import { parse, validate, ValidationError } from "convex-helpers/validators";
+import { validate, ValidationError } from "convex-helpers/validators";
 import {
   createFunctionHandle,
   internalMutationGeneric,
@@ -149,7 +149,9 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
           let runResult: RunResult;
           try {
             if (registered.args) {
-              parse(v.object(registered.args), workflow.args);
+              validate(v.object(registered.args), workflow.args, {
+                throw: true,
+              });
             }
             const returnValue =
               (await registered.handler(step, workflow.args)) ?? null;

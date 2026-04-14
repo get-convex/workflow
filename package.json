@@ -77,7 +77,7 @@
     "chokidar-cli": "3.0.0",
     "convex": "1.35.1",
     "convex-helpers": "0.1.114",
-    "convex-test": "0.0.47",
+    "convex-test": "0.0.48",
     "cpy-cli": "7.0.0",
     "eslint": "9.39.4",
     "eslint-plugin-react-hooks": "7.0.1",

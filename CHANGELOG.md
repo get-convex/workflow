@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.10
+
+- Allows defining workflow handlers separately from their args & return values,
+  making it easier to break type cycles typically found in the handler function.
+
 ## 0.3.9
 
 - Improved support for `convex-test` (testing via vitest). Testing workflows is

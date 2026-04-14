@@ -102,7 +102,7 @@ export type WorkflowStatus =
  *
  * @example
  * ```ts
- * export const doSomething = workflow.define({
+ * export const doSomething = defineWorkflow({
  *   args: { amount: v.number() },
  *   returns: v.object({ total: v.number() }),
  * }).handler(async (step, args) => {
@@ -111,23 +111,6 @@ export type WorkflowStatus =
  *
  * // Start from a mutation or action:
  * const id = await workflow.start(ctx, internal.myFile.myWorkflow, { amount });
- * ```
- *
- * Alternatively, you can define the workflow spec separately from the handler,
- * giving you an object to call ``.start` on directly:
- *
- * ```ts
- * const doSomethingWorkflow = defineWorkflow({
- *   args: { foo: v.string()  },
- *   returns: v.boolean(),
- * }).withHandlerRef(internal.myFile.doSomething);
- *
- * export const doSomething = myWorkflow.handler(async (step, args) => {
- *    ...workflow implementation
- * });
- *
- * // Start from a mutation or action:
- * const id = await doSomethingWorkflow.start(ctx, { foo });
  * ```
  */
 export function defineWorkflow<
@@ -151,53 +134,10 @@ export function defineWorkflow<
     WorkflowArgs<AV>,
     ReturnValueForOptionalValidator<RV>
   >;
-  /**
-   * Bind the workflow to its handler function's reference.
-   * Returns a Workflow with `.handler()` and `.start()`.
-   *
-   * Example: `workflow.define({...}).withHandlerRef(internal.myFile.myHandler)`
-   */
-  withHandlerRef(
-    ref: FunctionReference<
-      "mutation",
-      "internal",
-      WorkflowArgs<AV>,
-      ReturnValueForOptionalValidator<RV>
-    >,
-  ): Workflow<AV, RV>;
 } {
   return {
     handler: (fn) =>
       workflowMutation(component, { ...config, handler: fn }, undefined),
-    withHandlerRef: (ref) => {
-      const refName = safeFunctionName(ref);
-      return {
-        handler: (fn) =>
-          workflowMutation(
-            component,
-            { ...config, handler: fn },
-            undefined,
-            refName,
-          ),
-        async start(ctx, args, options?) {
-          const handle = await createFunctionHandle(ref);
-          const onComplete = options?.onComplete
-            ? {
-                fnHandle: await createFunctionHandle(options.onComplete),
-                context: options.context,
-              }
-            : undefined;
-          const workflowId = await ctx.runMutation(component.workflow.create, {
-            workflowName: safeFunctionName(ref),
-            workflowHandle: handle,
-            workflowArgs: args,
-            onComplete,
-            startAsync: options?.startAsync,
-          });
-          return workflowId as unknown as WorkflowId;
-        },
-      };
-    },
   };
 }
 
@@ -560,18 +500,6 @@ export class WorkflowManager {
       WorkflowArgs<ArgsValidator>,
       ReturnValueForOptionalValidator<ReturnsValidator>
     >;
-    /**
-     * Bind the workflow to its handler function's reference.
-     * Returns a Workflow with `.handler()` and `.start()`.
-     */
-    withHandlerRef(
-      ref: FunctionReference<
-        "mutation",
-        "internal",
-        WorkflowArgs<ArgsValidator>,
-        ReturnValueForOptionalValidator<ReturnsValidator>
-      >,
-    ): Workflow<ArgsValidator, ReturnsValidator>;
   };
   define<
     ArgsValidator extends PropertyValidators,

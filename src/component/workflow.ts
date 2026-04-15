@@ -514,6 +514,14 @@ async function deleteSteps(ctx: MutationCtx, steps: Doc<"steps">[]) {
         force: true,
       });
     }
+    const oversized = await ctx.db
+      .query("oversizedValues")
+      .withIndex("stepId", (q) => q.eq("stepId", entry._id))
+      .first();
+    if (oversized) {
+      await ctx.storage.delete(oversized.storageId);
+      await ctx.db.delete(oversized._id);
+    }
   }
 }
 

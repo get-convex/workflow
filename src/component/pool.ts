@@ -22,6 +22,7 @@ import { getDefaultLogger } from "./utils.js";
 import { completeHandler } from "./workflow.js";
 import type { Doc } from "./_generated/dataModel.js";
 import { vWorkflowId, type WorkflowId } from "../types.js";
+import { checkForOversizedResult } from "./oversizedValues.js";
 
 export const workpoolOptions = v.object({
   logLevel: v.optional(logLevel),
@@ -147,25 +148,11 @@ async function onCompleteHandler(
   }
   journalEntry.step.inProgress = false;
   journalEntry.step.completedAt = Date.now();
-  switch (args.result.kind) {
-    case "success":
-      journalEntry.step.runResult = {
-        kind: "success",
-        returnValue: args.result.returnValue,
-      };
-      break;
-    case "failed":
-      journalEntry.step.runResult = {
-        kind: "failed",
-        error: args.result.error,
-      };
-      break;
-    case "canceled":
-      journalEntry.step.runResult = {
-        kind: "canceled",
-      };
-      break;
-  }
+  journalEntry.step.runResult = await checkForOversizedResult(
+    ctx,
+    args.result,
+    { stepId },
+  );
   await ctx.db.replace(journalEntry._id, journalEntry);
   console.debug(`Completed execution of ${stepId}`, journalEntry);
 

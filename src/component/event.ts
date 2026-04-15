@@ -6,6 +6,7 @@ import { vResultValidator } from "@convex-dev/workpool";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { assert } from "convex-helpers";
 import { enqueueWorkflow, getWorkpool, workpoolOptions } from "./pool.js";
+import { checkForOversizedResult } from "./oversizedValues.js";
 
 export async function awaitEvent(
   ctx: MutationCtx,
@@ -40,7 +41,11 @@ export async function awaitEvent(
           stepId: entry._id,
         },
       });
-      entry.step.runResult = event.state.result;
+      entry.step.runResult = await checkForOversizedResult(
+        ctx,
+        event.state.result,
+        { stepId: entry._id },
+      );
       entry.step.inProgress = false;
       entry.step.completedAt = Date.now();
       break;
@@ -146,7 +151,11 @@ export const send = mutation({
         );
         assert(step.step.kind === "event", "Step is not an event");
         step.step.eventId = event._id;
-        step.step.runResult = args.result;
+        step.step.runResult = await checkForOversizedResult(
+          ctx,
+          args.result,
+          { stepId: step._id },
+        );
         step.step.inProgress = false;
         step.step.completedAt = Date.now();
         await ctx.db.replace(step._id, step);

@@ -44,7 +44,7 @@ export type { RunOptions, WorkflowCtx } from "./workflowContext.js";
 export type { WorkflowArgs } from "./workflowMutation.js";
 export { vResultValidator } from "@convex-dev/workpool";
 
-export type CallbackOptions = {
+export type CallbackOptions<Context = unknown> = {
   /**
    * A mutation to run after the function succeeds, fails, or is canceled.
    * The context type is for your use, feel free to provide a validator for it.
@@ -65,14 +65,14 @@ export type CallbackOptions = {
   onComplete?: FunctionReference<
     "mutation",
     FunctionVisibility,
-    OnCompleteArgs
+    OnCompleteArgs<Context>
   > | null;
 
   /**
    * A context object to pass to the `onComplete` mutation.
    * Useful for passing data from the enqueue site to the onComplete site.
    */
-  context?: unknown;
+  context?: Context;
 };
 
 export type WorkflowDefinition<

@@ -3,7 +3,7 @@ import type { RunResult } from "@convex-dev/workpool";
 import type { MutationCtx } from "./_generated/server.js";
 import type { Id } from "./_generated/dataModel.js";
 
-export const MAX_RETURN_VALUE_SIZE = 1 << 20; // 1 MB
+export const MAX_RETURN_VALUE_SIZE = 800 << 10; // 800 KiB
 const PREVIEW_SIZE = 128 << 10; // 128 KB
 
 function truncatedPreview(returnValue: unknown): string {

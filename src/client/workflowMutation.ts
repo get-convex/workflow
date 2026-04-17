@@ -19,7 +19,6 @@ import { setupEnvironment } from "./environment.js";
 import type { WorkflowDefinition, WorkflowHandler } from "./index.js";
 import { StepExecutor, type StepRequest, type WorkerResult } from "./step.js";
 import { createWorkflowCtx } from "./workflowContext.js";
-import { checkArgs } from "./validator.js";
 import { type RunResult, type WorkpoolOptions } from "@convex-dev/workpool";
 import { type WorkflowComponent } from "./types.js";
 import { vWorkflowId } from "../types.js";
@@ -149,7 +148,11 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
         const handlerWorker = async (): Promise<WorkerResult> => {
           let runResult: RunResult;
           try {
-            checkArgs(workflow.args, registered.args);
+            if (registered.args) {
+              validate(v.object(registered.args), workflow.args, {
+                throw: true,
+              });
+            }
             const returnValue =
               (await registered.handler(step, workflow.args)) ?? null;
             runResult = { kind: "success", returnValue };

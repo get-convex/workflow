@@ -148,7 +148,7 @@ export function defineWorkflow<
 // These take ctx first, then a workflow component, so they can be
 // used without a WorkflowManager instance.
 
-type StartOptions = CallbackOptions & {
+type StartOptions<Context = unknown> = CallbackOptions<Context> & {
   /**
    * By default, during creation the workflow will be initiated immediately.
    * With `startAsync` set to true, the workflow will be created but will
@@ -180,12 +180,16 @@ type StartOptions = CallbackOptions & {
  * @returns The workflow ID.
  */
 export async function start<
-  F extends FunctionReference<"mutation", "internal">,
+  Context = unknown,
+  F extends FunctionReference<"mutation", "internal"> = FunctionReference<
+    "mutation",
+    "internal"
+  >,
 >(
   ctx: RunMutationCtx,
   workflow: F,
   args: FunctionArgs<F>["args"],
-  options?: StartOptions,
+  options?: StartOptions<Context>,
 ): Promise<WorkflowId> {
   const formatted: Record<string, unknown> = { args };
   if (options?.onComplete) {
@@ -556,11 +560,17 @@ export class WorkflowManager {
    * @param args - The workflow arguments.
    * @returns The workflow ID.
    */
-  async start<F extends FunctionReference<"mutation", "internal">>(
+  async start<
+    Context = unknown,
+    F extends FunctionReference<"mutation", "internal"> = FunctionReference<
+      "mutation",
+      "internal"
+    >,
+  >(
     ctx: RunMutationCtx,
     workflow: F,
     args: FunctionArgs<F>["args"],
-    options?: CallbackOptions & {
+    options?: CallbackOptions<Context> & {
       /**
        * By default, during creation the workflow will be initiated immediately.
        * The benefit is that you catch errors earlier (e.g. passing a bad

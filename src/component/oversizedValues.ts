@@ -14,8 +14,10 @@ function truncatedPreview(returnValue: unknown): string {
   return json.slice(0, PREVIEW_SIZE) + "..." + json.slice(-PREVIEW_SIZE);
 }
 
-export function checkReturnValueSize(returnValue: unknown): string | null {
-  const size = getConvexSize(returnValue as Value | undefined);
+export function checkReturnValueSize(
+  returnValue: Value | undefined,
+): string | null {
+  const size = getConvexSize(returnValue);
   if (size > MAX_RETURN_VALUE_SIZE) {
     return `Step return value too large (${size} bytes). Maximum is ${MAX_RETURN_VALUE_SIZE} bytes. Preview: ${truncatedPreview(returnValue)}`;
   }

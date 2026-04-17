@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.11
+
+- Adds support for `{ unstableArgs: true }` as an argument to various steps,
+  e.g. `step.runQuery(internal.foo.bar, myArgs, { unstableArgs: true })` will
+  not fail if `myArgs` changes between runs of the workflow handler. Use this
+  carefully in scenarios where you are changing code in a backwards-compatible
+  way, or if the args may change, e.g. passing a stack trace as an argument,
+  since stack traces currently reflect the current stack trace.
+- Validates v.id in workpool args are for the right table, now leveraging the
+  shared `validate` implementation with convex-helpers.
+
 ## 0.3.10
 
 - Allows defining workflow handlers separately from their args & return values,

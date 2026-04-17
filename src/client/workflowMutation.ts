@@ -151,6 +151,7 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
             if (registered.args) {
               validate(v.object(registered.args), workflow.args, {
                 throw: true,
+                db: ctx.db,
               });
             }
             const returnValue =

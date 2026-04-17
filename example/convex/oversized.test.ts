@@ -24,6 +24,7 @@ describe("oversized values", () => {
         {},
         {
           onComplete: internal.oversized.onComplete,
+          context: {},
           startAsync: true,
         },
       );
@@ -65,6 +66,7 @@ describe("oversized values", () => {
         {},
         {
           onComplete: internal.oversized.onComplete,
+          context: {},
           startAsync: true,
         },
       );

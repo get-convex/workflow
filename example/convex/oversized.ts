@@ -60,7 +60,7 @@ export const onComplete = internalMutation({
   args: {
     workflowId: vWorkflowId,
     result: vResultValidator,
-    context: v.optional(v.any()),
+    context: v.any(),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -84,6 +84,7 @@ export const startLargeReturn = internalMutation({
       {},
       {
         onComplete: internal.oversized.onComplete,
+        context: {},
         startAsync: true,
       },
     );
@@ -106,6 +107,7 @@ export const startEventWorkflow = internalMutation({
       {},
       {
         onComplete: internal.oversized.onComplete,
+        context: {},
         startAsync: true,
       },
     );

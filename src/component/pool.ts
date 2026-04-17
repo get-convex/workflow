@@ -159,7 +159,7 @@ async function onCompleteHandler(
   console.event("stepCompleted", {
     workflowId,
     workflowName: workflow.name,
-    status: args.result.kind,
+    status: journalEntry.step.runResult!.kind,
     stepName: journalEntry.step.name,
     stepNumber: journalEntry.stepNumber,
     durationMs: journalEntry.step.completedAt - journalEntry.step.startedAt,
@@ -167,7 +167,7 @@ async function onCompleteHandler(
   if (workflow.runResult !== undefined) {
     if (workflow.runResult.kind !== "canceled") {
       console.error(
-        `Workflow: ${workflowId} already ${workflow.runResult.kind} when completing ${stepId} with status ${args.result.kind}`,
+        `Workflow: ${workflowId} already ${workflow.runResult.kind} when completing ${stepId} with status ${journalEntry.step.runResult!.kind}`,
       );
     }
     return;

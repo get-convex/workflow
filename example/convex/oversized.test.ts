@@ -51,9 +51,10 @@ describe("oversized values", () => {
         .first();
     });
     expect(flow).not.toBeNull();
-    expect(flow!.out).not.toBeNull();
-    expect(flow!.out.kind).toBe("failed");
-    expect(flow!.out.error).toContain("Step return value too large");
+    assert(flow);
+    expect(flow.out).not.toBeNull();
+    expect(flow.out.kind).toBe("failed");
+    expect(flow.out.error).toContain("Step return value too large");
   });
 
   test("large event value fails workflow and calls onComplete", async () => {

@@ -1,9 +1,5 @@
 import { v } from "convex/values";
-import {
-  sendEvent,
-  defineEvent,
-  type WorkflowId,
-} from "@convex-dev/workflow";
+import { sendEvent, defineEvent } from "@convex-dev/workflow";
 import { components, internal } from "./_generated/api.js";
 import { internalAction, internalMutation } from "./_generated/server.js";
 import { vWorkflowId } from "@convex-dev/workflow";
@@ -24,7 +20,10 @@ export const largeReturnWorkflow = workflow
     args: {},
   })
   .handler(async (step) => {
-    const result = await step.runAction(internal.oversized.largeReturnAction, {});
+    const result = await step.runAction(
+      internal.oversized.largeReturnAction,
+      {},
+    );
     return result;
   });
 
@@ -71,51 +70,5 @@ export const onComplete = internalMutation({
     if (!flow) return null;
     await ctx.db.patch(flow._id, { out: args.result });
     return null;
-  },
-});
-
-export const startLargeReturn = internalMutation({
-  args: {},
-  returns: vWorkflowId,
-  handler: async (ctx) => {
-    const workflowId: WorkflowId = await workflow.start(
-      ctx,
-      internal.oversized.largeReturnWorkflow,
-      {},
-      {
-        onComplete: internal.oversized.onComplete,
-        context: {},
-        startAsync: true,
-      },
-    );
-    await ctx.db.insert("flows", {
-      workflowId,
-      in: "largeReturn",
-      out: null,
-    });
-    return workflowId;
-  },
-});
-
-export const startEventWorkflow = internalMutation({
-  args: {},
-  returns: vWorkflowId,
-  handler: async (ctx) => {
-    const workflowId: WorkflowId = await workflow.start(
-      ctx,
-      internal.oversized.eventWorkflow,
-      {},
-      {
-        onComplete: internal.oversized.onComplete,
-        context: {},
-        startAsync: true,
-      },
-    );
-    await ctx.db.insert("flows", {
-      workflowId,
-      in: "eventWorkflow",
-      out: null,
-    });
-    return workflowId;
   },
 });

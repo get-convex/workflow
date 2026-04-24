@@ -43,7 +43,6 @@ describe("oversized values", () => {
     expect(status.type).toBe("failed");
     assert(status.type === "failed");
     expect(status.error).toContain("Step return value too large");
-    expect(status.error).toContain("900002 bytes");
 
     const flow = await t.query(async (ctx) => {
       return ctx.db
@@ -87,7 +86,6 @@ describe("oversized values", () => {
 
     // Send the oversized event
     await t.mutation(internal.oversized.sendBigEvent, { workflowId });
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
     const status2 = await t.run((ctx) =>

@@ -105,7 +105,7 @@ export const getStatus = query({
     logLevel: logLevel,
   }),
   handler: async (ctx, args) => {
-    const workflow = await ctx.db.get(args.workflowId);
+    const workflow = await ctx.db.get("workflows", args.workflowId);
     assert(workflow, `Workflow not found: ${args.workflowId}`);
     const console = await getDefaultLogger(ctx);
 
@@ -251,7 +251,7 @@ export async function restartHandler(
   ctx: MutationCtx,
   args: Infer<typeof restartArgs>,
 ) {
-  const workflow = await ctx.db.get(args.workflowId);
+  const workflow = await ctx.db.get("workflows", args.workflowId);
   assert(workflow, `Workflow not found: ${args.workflowId}`);
   const console = await getDefaultLogger(ctx);
 
@@ -305,7 +305,7 @@ export async function restartHandler(
 
   // Increment generation number and clear result
   const generationNumber = workflow.generationNumber + 1;
-  await ctx.db.patch(args.workflowId, {
+  await ctx.db.patch("workflows", args.workflowId, {
     generationNumber,
     runResult: undefined,
   });
@@ -345,7 +345,7 @@ export const cancel = mutation({
   },
   returns: v.null(),
   handler: async (ctx, { workflowId }) => {
-    const workflow = await ctx.db.get(workflowId);
+    const workflow = await ctx.db.get("workflows", workflowId);
     assert(workflow, `Workflow not found: ${workflowId}`);
     await completeHandler(ctx, {
       workflowId,
@@ -417,7 +417,7 @@ export async function completeHandler(
     console.debug(`Canceled workflow:`, workflow);
   }
   // Write the workflow so the onComplete can observe the updated status.
-  await ctx.db.replace(workflow._id, workflow);
+  await ctx.db.replace("workflows", workflow._id, workflow);
   if (workflow.onComplete) {
     try {
       await ctx.runMutation(
@@ -455,7 +455,7 @@ export const cleanup = mutation({
     if (!workflowId) {
       throw new Error(`Invalid workflow ID: ${args.workflowId}`);
     }
-    const workflow = await ctx.db.get(workflowId);
+    const workflow = await ctx.db.get("workflows", workflowId);
     if (!workflow) {
       return false;
     }
@@ -471,7 +471,7 @@ export const cleanup = mutation({
       logger.debug(`Workflow ${workflowId} is not completed, forcing anyways`);
     }
     logger.debug(`Cleaning up workflow ${workflowId}`, workflow);
-    await ctx.db.delete(workflowId);
+    await ctx.db.delete("workflows", workflowId);
     const journalEntries = await ctx.db
       .query("steps")
       .withIndex("workflow", (q) => q.eq("workflowId", workflowId))
@@ -490,7 +490,7 @@ async function updateMaxParallelism(
   if (config) {
     if (maxParallelism && maxParallelism !== config.maxParallelism) {
       console.warn("Updating max parallelism to", maxParallelism);
-      await ctx.db.patch(config._id, { maxParallelism });
+      await ctx.db.patch("config", config._id, { maxParallelism });
     }
   } else {
     await ctx.db.insert("config", { maxParallelism });
@@ -499,9 +499,9 @@ async function updateMaxParallelism(
 
 async function deleteSteps(ctx: MutationCtx, steps: Doc<"steps">[]) {
   for (const entry of steps) {
-    await ctx.db.delete(entry._id);
+    await ctx.db.delete("steps", entry._id);
     if (entry.step.kind === "event" && entry.step.eventId) {
-      await ctx.db.delete(entry.step.eventId);
+      await ctx.db.delete("events", entry.step.eventId);
     } else if (entry.step.kind === "workflow" && entry.step.workflowId) {
       const workpool = await getWorkpool(ctx, {});
       await workpool.enqueueMutation(ctx, api.workflow.cleanup, {

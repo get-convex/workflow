@@ -107,7 +107,7 @@ async function onCompleteHandler(
     await ctx.db.insert("onCompleteFailures", args);
     return;
   }
-  const journalEntry = await ctx.db.get(stepId);
+  const journalEntry = await ctx.db.get("steps", stepId);
   if (!journalEntry) {
     console.error(
       `Journal entry not found: ${stepId}. This is likely because it was already cleaned up.`,
@@ -122,7 +122,7 @@ async function onCompleteHandler(
     const error =
       `Invalid onComplete context for ${args.workId ? `workId ${args.workId}` : `nested workflowId ${args.workflowId}`}` +
       JSON.stringify(args.context);
-    await ctx.db.patch(workflowId, {
+    await ctx.db.patch("workflows", workflowId, {
       runResult: {
         kind: "failed",
         error,
@@ -166,7 +166,7 @@ async function onCompleteHandler(
       };
       break;
   }
-  await ctx.db.replace(journalEntry._id, journalEntry);
+  await ctx.db.replace("steps", journalEntry._id, journalEntry);
   console.debug(`Completed execution of ${stepId}`, journalEntry);
 
   console.event("stepCompleted", {

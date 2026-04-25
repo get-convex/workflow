@@ -288,7 +288,7 @@ describe("workflow", () => {
         .withIndex("workflow", (q) => q.eq("workflowId", id))
         .collect();
       expect(steps).toHaveLength(0);
-      const event = await ctx.db.get(eventId);
+      const event = await ctx.db.get("events", eventId);
       expect(event).toBeNull();
     });
   });
@@ -309,7 +309,7 @@ describe("workflow", () => {
     const cleaned = await t.mutation(api.workflow.cleanup, { workflowId: id });
     expect(cleaned).toBe(true);
     await t.run(async (ctx) => {
-      const workflow = await ctx.db.get(id);
+      const workflow = await ctx.db.get("workflows", id);
       expect(workflow).toBeNull();
     });
   });
@@ -352,7 +352,7 @@ describe("workflow", () => {
 
     // Verify event exists
     await t.run(async (ctx) => {
-      const event = await ctx.db.get(eventId);
+      const event = await ctx.db.get("events", eventId);
       expect(event).not.toBeNull();
     });
 
@@ -367,19 +367,19 @@ describe("workflow", () => {
 
     // Verify the workflow is deleted
     await t.run(async (ctx) => {
-      const workflow = await ctx.db.get(workflowId);
+      const workflow = await ctx.db.get("workflows", workflowId);
       expect(workflow).toBeNull();
     });
 
     // Verify the step is deleted
     await t.run(async (ctx) => {
-      const step = await ctx.db.get(stepId);
+      const step = await ctx.db.get("steps", stepId);
       expect(step).toBeNull();
     });
 
     // Verify the event is deleted
     await t.run(async (ctx) => {
-      const event = await ctx.db.get(eventId);
+      const event = await ctx.db.get("events", eventId);
       expect(event).toBeNull();
     });
   });
@@ -419,7 +419,7 @@ describe("workflow", () => {
     // Get the nested workflow ID that was created by startSteps
     let nestedWorkflowId: Id<"workflows"> | undefined;
     await t.run(async (ctx) => {
-      const step = await ctx.db.get(stepId);
+      const step = await ctx.db.get("steps", stepId);
       if (step && step.step.kind === "workflow") {
         nestedWorkflowId = step.step.workflowId;
       }
@@ -431,14 +431,14 @@ describe("workflow", () => {
 
     // Verify nested workflow was also canceled automatically
     await t.run(async (ctx) => {
-      const nested = await ctx.db.get(nestedWorkflowId!);
+      const nested = await ctx.db.get("workflows", nestedWorkflowId!);
       expect(nested?.runResult).toBeDefined();
     });
 
     // Verify both workflows exist before cleanup
     await t.run(async (ctx) => {
-      const parent = await ctx.db.get(parentWorkflowId);
-      const nested = await ctx.db.get(nestedWorkflowId!);
+      const parent = await ctx.db.get("workflows", parentWorkflowId);
+      const nested = await ctx.db.get("workflows", nestedWorkflowId!);
       expect(parent).not.toBeNull();
       expect(nested).not.toBeNull();
     });
@@ -451,13 +451,13 @@ describe("workflow", () => {
 
     // Verify the parent workflow is deleted
     await t.run(async (ctx) => {
-      const parent = await ctx.db.get(parentWorkflowId);
+      const parent = await ctx.db.get("workflows", parentWorkflowId);
       expect(parent).toBeNull();
     });
 
     // Verify the step is deleted
     await t.run(async (ctx) => {
-      const step = await ctx.db.get(stepId);
+      const step = await ctx.db.get("steps", stepId);
       expect(step).toBeNull();
     });
 
@@ -467,7 +467,7 @@ describe("workflow", () => {
 
     // Verify the nested workflow is also cleaned up
     await t.run(async (ctx) => {
-      const nested = await ctx.db.get(nestedWorkflowId!);
+      const nested = await ctx.db.get("workflows", nestedWorkflowId!);
       expect(nested).toBeNull();
     });
   });
@@ -511,7 +511,7 @@ describe("workflow", () => {
 
     // Verify the workflow is deleted
     await t.run(async (ctx) => {
-      const workflow = await ctx.db.get(workflowId);
+      const workflow = await ctx.db.get("workflows", workflowId);
       expect(workflow).toBeNull();
     });
   });
@@ -554,7 +554,7 @@ describe("workflow", () => {
 
     // Verify the workflow is deleted
     await t.run(async (ctx) => {
-      const workflow = await ctx.db.get(workflowId);
+      const workflow = await ctx.db.get("workflows", workflowId);
       expect(workflow).toBeNull();
     });
   });
@@ -610,7 +610,7 @@ describe("workflow", () => {
     const workflowStepId = entries[1]._id as Id<"steps">;
     let nestedWorkflowId: Id<"workflows"> | undefined;
     await t.run(async (ctx) => {
-      const step = await ctx.db.get(workflowStepId);
+      const step = await ctx.db.get("steps", workflowStepId);
       if (step && step.step.kind === "workflow") {
         nestedWorkflowId = step.step.workflowId;
       }
@@ -622,15 +622,15 @@ describe("workflow", () => {
 
     // Verify nested workflow was also canceled automatically
     await t.run(async (ctx) => {
-      const nested = await ctx.db.get(nestedWorkflowId!);
+      const nested = await ctx.db.get("workflows", nestedWorkflowId!);
       expect(nested?.runResult).toBeDefined();
     });
 
     // Verify resources exist before cleanup
     await t.run(async (ctx) => {
-      const parent = await ctx.db.get(parentWorkflowId);
-      const nested = await ctx.db.get(nestedWorkflowId!);
-      const event = await ctx.db.get(eventId);
+      const parent = await ctx.db.get("workflows", parentWorkflowId);
+      const nested = await ctx.db.get("workflows", nestedWorkflowId!);
+      const event = await ctx.db.get("events", eventId);
       expect(parent).not.toBeNull();
       expect(nested).not.toBeNull();
       expect(event).not.toBeNull();
@@ -647,9 +647,9 @@ describe("workflow", () => {
 
     // Verify all resources are cleaned up
     await t.run(async (ctx) => {
-      const parent = await ctx.db.get(parentWorkflowId);
-      const nested = await ctx.db.get(nestedWorkflowId!);
-      const event = await ctx.db.get(eventId);
+      const parent = await ctx.db.get("workflows", parentWorkflowId);
+      const nested = await ctx.db.get("workflows", nestedWorkflowId!);
+      const event = await ctx.db.get("events", eventId);
       expect(parent).toBeNull();
       expect(nested).toBeNull();
       expect(event).toBeNull();

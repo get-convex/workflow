@@ -31,7 +31,7 @@ export async function awaitEvent(
 
   switch (event.state.kind) {
     case "sent": {
-      await ctx.db.patch(event._id, {
+      await ctx.db.patch("events", event._id, {
         state: {
           kind: "consumed",
           sentAt: event.state.sentAt,
@@ -46,7 +46,7 @@ export async function awaitEvent(
       break;
     }
     case "created": {
-      await ctx.db.patch(event._id, {
+      await ctx.db.patch("events", event._id, {
         state: {
           kind: "waiting",
           waitingAt: Date.now(),
@@ -70,7 +70,7 @@ async function getOrCreateEvent(
   statuses: Doc<"events">["state"]["kind"][],
 ): Promise<Doc<"events">> {
   if (args.eventId) {
-    const event = await ctx.db.get(args.eventId);
+    const event = await ctx.db.get("events", args.eventId);
     if (!event) {
       throw new Error(
         `Event not found: ${args.eventId} (${args.name}) in workflow ${workflowId}`,
@@ -97,7 +97,7 @@ async function getOrCreateEvent(
       kind: "created",
     },
   });
-  return (await ctx.db.get(eventId))!;
+  return (await ctx.db.get("events", eventId))!;
 }
 
 export const send = mutation({
@@ -133,13 +133,13 @@ export const send = mutation({
         );
       }
       case "created": {
-        await ctx.db.patch(event._id, {
+        await ctx.db.patch("events", event._id, {
           state: { kind: "sent", result: args.result, sentAt: Date.now() },
         });
         break;
       }
       case "waiting": {
-        const step = await ctx.db.get(event.state.stepId);
+        const step = await ctx.db.get("steps", event.state.stepId);
         assert(
           step,
           `Entry ${event.state.stepId} not found when sending event ${event._id} (${name}) in workflow ${workflowId}`,
@@ -149,8 +149,8 @@ export const send = mutation({
         step.step.runResult = args.result;
         step.step.inProgress = false;
         step.step.completedAt = Date.now();
-        await ctx.db.replace(step._id, step);
-        await ctx.db.patch(event._id, {
+        await ctx.db.replace("steps", step._id, step);
+        await ctx.db.patch("events", event._id, {
           state: {
             kind: "consumed",
             stepId: step._id,
@@ -167,7 +167,7 @@ export const send = mutation({
           .order("desc")
           .first();
         if (!anyMoreEvents) {
-          const workflow = await ctx.db.get(workflowId);
+          const workflow = await ctx.db.get("workflows", workflowId);
           assert(workflow, `Workflow ${workflowId} not found`);
           const workpool = await getWorkpool(ctx, args.workpoolOptions);
           await enqueueWorkflow(ctx, workflow, workpool);

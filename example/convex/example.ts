@@ -107,7 +107,7 @@ export const flowCompleted = internalMutation({
       console.error(`Flow not found: ${args.workflowId}`);
       return;
     }
-    await ctx.db.patch(flow._id, {
+    await ctx.db.patch("flows", flow._id, {
       out: args.result,
     });
     // To delete the workflow data after it completes:
@@ -189,7 +189,7 @@ export const updateFlow = internalMutation({
       console.warn(`Flow not found: ${args.workflowId}`);
       return;
     }
-    await ctx.db.patch(flow._id, {
+    await ctx.db.patch("flows", flow._id, {
       out: args.out,
     });
   },

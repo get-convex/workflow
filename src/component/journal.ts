@@ -35,7 +35,7 @@ export const load = query({
     blocked: v.optional(v.boolean()),
   }),
   handler: async (ctx, { workflowId, shortCircuit }) => {
-    const workflow = await ctx.db.get(workflowId);
+    const workflow = await ctx.db.get("workflows", workflowId);
     assert(workflow, `Workflow not found: ${workflowId}`);
     const { logLevel } = await getDefaultLogger(ctx);
     const journalEntries: JournalEntry[] = [];
@@ -115,7 +115,7 @@ export const startSteps = mutation({
           stepNumber,
           step: stepArgs.step,
         });
-        let entry = await ctx.db.get(stepId);
+        let entry = await ctx.db.get("steps", stepId);
         assert(entry, "Step not found");
         const step = entry.step;
         const { name } = step;
@@ -219,7 +219,7 @@ export const startSteps = mutation({
           }
           step.workId = workId;
         }
-        await ctx.db.replace(entry._id, entry);
+        await ctx.db.replace("steps", entry._id, entry);
 
         return entry;
       }),

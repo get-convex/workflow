@@ -22,6 +22,7 @@ import { getDefaultLogger } from "./utils.js";
 import { completeHandler } from "./workflow.js";
 import type { Doc } from "./_generated/dataModel.js";
 import { vWorkflowId, type WorkflowId } from "../types.js";
+import { checkForOversizedResult } from "./oversizedValues.js";
 
 export const workpoolOptions = v.object({
   logLevel: v.optional(logLevel),
@@ -147,32 +148,15 @@ async function onCompleteHandler(
   }
   journalEntry.step.inProgress = false;
   journalEntry.step.completedAt = Date.now();
-  switch (args.result.kind) {
-    case "success":
-      journalEntry.step.runResult = {
-        kind: "success",
-        returnValue: args.result.returnValue,
-      };
-      break;
-    case "failed":
-      journalEntry.step.runResult = {
-        kind: "failed",
-        error: args.result.error,
-      };
-      break;
-    case "canceled":
-      journalEntry.step.runResult = {
-        kind: "canceled",
-      };
-      break;
-  }
+  const runResult = checkForOversizedResult(args.result);
+  journalEntry.step.runResult = runResult;
   await ctx.db.replace(journalEntry._id, journalEntry);
   console.debug(`Completed execution of ${stepId}`, journalEntry);
 
   console.event("stepCompleted", {
     workflowId,
     workflowName: workflow.name,
-    status: args.result.kind,
+    status: journalEntry.step.runResult.kind,
     stepName: journalEntry.step.name,
     stepNumber: journalEntry.stepNumber,
     durationMs: journalEntry.step.completedAt - journalEntry.step.startedAt,
@@ -180,7 +164,7 @@ async function onCompleteHandler(
   if (workflow.runResult !== undefined) {
     if (workflow.runResult.kind !== "canceled") {
       console.error(
-        `Workflow: ${workflowId} already ${workflow.runResult.kind} when completing ${stepId} with status ${args.result.kind}`,
+        `Workflow: ${workflowId} already ${workflow.runResult.kind} when completing ${stepId} with status ${journalEntry.step.runResult.kind}`,
       );
     }
     return;

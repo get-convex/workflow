@@ -41,6 +41,7 @@ export {
   type WorkflowStep,
 } from "../types.js";
 export type { RunOptions, WorkflowCtx } from "./workflowContext.js";
+export type { WorkflowArgs } from "./workflowMutation.js";
 
 export type CallbackOptions = {
   /**

@@ -1,7 +1,5 @@
 import { type Value, convexToJson, getConvexSize } from "convex/values";
 import type { RunResult } from "@convex-dev/workpool";
-import type { MutationCtx } from "./_generated/server.js";
-import type { Id } from "./_generated/dataModel.js";
 
 export const MAX_RETURN_VALUE_SIZE = 800 << 10; // 800 KiB
 const PREVIEW_SIZE = 128 << 10; // 128 KB
@@ -24,13 +22,7 @@ export function checkReturnValueSize(
   return null;
 }
 
-export async function checkForOversizedResult(
-  _ctx: MutationCtx,
-  result: RunResult,
-  _opts: {
-    stepId: Id<"steps">;
-  },
-): Promise<RunResult> {
+export function checkForOversizedResult(result: RunResult): RunResult {
   if (result.kind !== "success") {
     return result;
   }

@@ -41,11 +41,7 @@ export async function awaitEvent(
           stepId: entry._id,
         },
       });
-      entry.step.runResult = await checkForOversizedResult(
-        ctx,
-        event.state.result,
-        { stepId: entry._id },
-      );
+      entry.step.runResult = checkForOversizedResult(event.state.result);
       entry.step.inProgress = false;
       entry.step.completedAt = Date.now();
       break;
@@ -151,11 +147,7 @@ export const send = mutation({
         );
         assert(step.step.kind === "event", "Step is not an event");
         step.step.eventId = event._id;
-        step.step.runResult = await checkForOversizedResult(
-          ctx,
-          args.result,
-          { stepId: step._id },
-        );
+        step.step.runResult = checkForOversizedResult(args.result);
         step.step.inProgress = false;
         step.step.completedAt = Date.now();
         await ctx.db.replace(step._id, step);

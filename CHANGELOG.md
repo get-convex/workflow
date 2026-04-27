@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.12
+
+- Steps that return values too large to store in the DB will now correctly throw
+  a catchable error in the workflow.
+- Export the WorkflowArgs type
+
 ## 0.3.11
 
 - Adds support for `{ unstableArgs: true }` as an argument to various steps,

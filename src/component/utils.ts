@@ -22,12 +22,12 @@ export const updateConfig = internalMutation({
       });
     } else {
       if (args.logLevel) {
-        await ctx.db.patch(config._id, {
+        await ctx.db.patch("config", config._id, {
           logLevel: args.logLevel,
         });
       }
       if (args.maxParallelism) {
-        await ctx.db.patch(config._id, {
+        await ctx.db.patch("config", config._id, {
           maxParallelism: args.maxParallelism,
         });
       }

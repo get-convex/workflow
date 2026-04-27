@@ -189,7 +189,7 @@ export const incrementCounter = internalMutation({
       .first();
     const newVal = doc ? (doc.out as number) + 1 : 1;
     if (doc) {
-      await ctx.db.patch(doc._id, { out: newVal });
+      await ctx.db.patch("flows", doc._id, { out: newVal });
     } else {
       await ctx.db.insert("flows", {
         in: key,

@@ -1,9 +1,13 @@
 import { v } from "convex/values";
-import { WorkflowId, WorkflowManager } from "@convex-dev/workflow";
+import {
+  WorkflowId,
+  WorkflowManager,
+  start,
+  vWorkflowId,
+} from "@convex-dev/workflow";
 import { internal } from "./_generated/api.js";
 import { internalAction, internalMutation } from "./_generated/server.js";
 import { components } from "./_generated/api.js";
-import { vWorkflowId } from "@convex-dev/workflow";
 import { vResultValidator } from "@convex-dev/workpool";
 
 export const workflow = new WorkflowManager(components.workflow);
@@ -67,7 +71,7 @@ export const startWorkflow = internalMutation({
   returns: v.string(),
   handler: async (ctx, args) => {
     const location = args.location ?? "San Francisco";
-    const id: WorkflowId = await workflow.start(
+    const id: WorkflowId = await start(
       ctx,
       internal.example.myWorkflow,
       { location },

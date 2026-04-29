@@ -336,6 +336,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "mutation",
         "internal",
         {
+          createOnly?: boolean;
           maxParallelism?: number;
           onComplete?: { context?: any; fnHandle: string };
           startAsync?: boolean;

@@ -68,7 +68,7 @@ export const onComplete = internalMutation({
       .withIndex("workflowId", (q) => q.eq("workflowId", args.workflowId))
       .first();
     if (!flow) return null;
-    await ctx.db.patch(flow._id, { out: args.result });
+    await ctx.db.patch("flows", flow._id, { out: args.result });
     return null;
   },
 });

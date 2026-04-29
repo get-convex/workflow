@@ -4,6 +4,7 @@ import {
   type RunResult,
   type WorkId,
 } from "@convex-dev/workpool";
+import type { FunctionHandle } from "convex/server";
 import {
   v,
   type Infer,
@@ -105,7 +106,13 @@ export type SchedulerOptions =
       runAt?: never;
     };
 
-export type OnCompleteArgs = {
+// The argument to "workflow.create" / calling the function directly
+export type OnComplete<Context = unknown> = {
+  fnHandle: FunctionHandle<"mutation", OnCompleteArgs<Context>>;
+  context?: Context;
+};
+
+export type OnCompleteArgs<Context = unknown> = {
   /**
    * The ID of the work that completed.
    */
@@ -114,7 +121,7 @@ export type OnCompleteArgs = {
    * The context object passed when enqueuing the work.
    * Useful for passing data from the enqueue site to the onComplete site.
    */
-  context: unknown;
+  context: Context;
   /**
    * The result of the run that completed.
    */

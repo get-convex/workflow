@@ -42,8 +42,9 @@ export {
 } from "../types.js";
 export type { RunOptions, WorkflowCtx } from "./workflowContext.js";
 export type { WorkflowArgs } from "./workflowMutation.js";
+export { vResultValidator } from "@convex-dev/workpool";
 
-export type CallbackOptions = {
+export type CallbackOptions<Context = unknown> = {
   /**
    * A mutation to run after the function succeeds, fails, or is canceled.
    * The context type is for your use, feel free to provide a validator for it.
@@ -51,9 +52,9 @@ export type CallbackOptions = {
    * ```ts
    * export const completion = internalMutation({
    *  args: {
-   *    workId: workIdValidator,
+   *    workflowId: vWorkflowId,
+   *    result: vResultValidator,
    *    context: v.any(),
-   *    result: resultValidator,
    *  },
    *  handler: async (ctx, args) => {
    *    console.log(args.result, "Got Context back -> ", args.context, Date.now() - args.context);
@@ -64,14 +65,14 @@ export type CallbackOptions = {
   onComplete?: FunctionReference<
     "mutation",
     FunctionVisibility,
-    OnCompleteArgs
+    OnCompleteArgs<Context>
   > | null;
 
   /**
    * A context object to pass to the `onComplete` mutation.
    * Useful for passing data from the enqueue site to the onComplete site.
    */
-  context?: unknown;
+  context?: Context;
 };
 
 export type WorkflowDefinition<
@@ -100,18 +101,23 @@ export type WorkflowStatus =
 /**
  * Define a new workflow with typed args and optional return validator.
  *
- *
  * @example
  * ```ts
- * export const doSomething = defineWorkflow({
+ * export const myWorkflow = defineWorkflow(components.workflow, {
  *   args: { amount: v.number() },
  *   returns: v.object({ total: v.number() }),
  * }).handler(async (step, args) => {
  *   ...workflow implementation
  * });
+ * ```
  *
- * // Start from a mutation or action:
- * const id = await workflow.start(ctx, internal.myFile.myWorkflow, { amount });
+ * Start the workflow from a mutation or action:
+ * ```ts
+ * const workflowId = await start(ctx, internal.myFile.myWorkflow, { amount: 42 });
+ * ```
+ * Or call it directly:
+ * ```ts
+ * const workflowId = await ctx.runMutation(internal.myFile.myWorkflow, { args: { ...myArgs } });
  * ```
  */
 export function defineWorkflow<
@@ -130,11 +136,7 @@ export function defineWorkflow<
       step: WorkflowCtx,
       args: ObjectType<AV>,
     ) => Promise<ReturnValueForOptionalValidator<RV>>,
-  ): RegisteredMutation<
-    "internal",
-    WorkflowArgs<AV>,
-    ReturnValueForOptionalValidator<RV>
-  >;
+  ): RegisteredMutation<"internal", WorkflowArgs<AV>, WorkflowId>;
 } {
   return {
     handler: (fn) =>
@@ -142,56 +144,68 @@ export function defineWorkflow<
   };
 }
 
-export interface Workflow<
-  AV extends PropertyValidators,
-  RV extends Validator<any, "required", any> | void,
-> {
-  /**
-   * Define the workflow handler function.
-   * Returns a registered mutation to export from your Convex module.
-   */
-  handler(
-    fn: (
-      step: WorkflowCtx,
-      args: ObjectType<AV>,
-    ) => Promise<ReturnValueForOptionalValidator<RV>>,
-  ): RegisteredMutation<
-    "internal",
-    WorkflowArgs<AV>,
-    ReturnValueForOptionalValidator<RV>
-  >;
-
-  /**
-   * Kick off a defined workflow.
-   *
-   * @param ctx - The Convex context.
-   * @param args - The workflow arguments.
-   * @param options - The workflow options.
-   * @returns The workflow ID.
-   */
-  start(
-    ctx: RunMutationCtx,
-    args: ObjectType<AV>,
-    options?: CallbackOptions & {
-      /**
-       * By default, during creation the workflow will be initiated immediately.
-       * The benefit is that you catch errors earlier (e.g. passing a bad
-       * workflow reference or catch arg validation).
-       *
-       * With `startAsync` set to true, the workflow will be created but will
-       * start asynchronously via the internal workpool.
-       * You can use this to queue up a lot of work,
-       * or make `start` return faster (you still get a workflowId back).
-       * @default false
-       */
-      startAsync?: boolean;
-    },
-  ): Promise<WorkflowId>;
-}
-
 // ── Standalone workflow management functions ─────────────────────────
 // These take ctx first, then a workflow component, so they can be
 // used without a WorkflowManager instance.
+
+type StartOptions<Context = unknown> = CallbackOptions<Context> & {
+  /**
+   * By default, during creation the workflow will be initiated immediately.
+   * With `startAsync` set to true, the workflow will be created but will
+   * start asynchronously via the internal workpool.
+   * @default false
+   */
+  startAsync?: boolean;
+};
+
+/**
+ * Start a workflow
+ *
+ * It will run asynchronously, returning a workflow ID to monitor the progress.
+ *
+ * By default it will start running the handler as part of "start" unless
+ * `startAsync` is set to true.
+ *
+ * ```ts
+ * const id = await start(ctx, internal.myFile.myWorkflow, { ...args }, {
+ *   onComplete: internal.myFile.handleComplete,
+ *   context: { ...passed through to onComplete },
+ * });
+ * ```
+ *
+ * @param ctx - The Convex mutation or action context.
+ * @param workflow - The workflow to start (e.g. `internal.myFile.myWorkflow`).
+ * @param args - The workflow arguments.
+ * @param options - Options like `onComplete`, `context`, `startAsync`.
+ * @returns The workflow ID.
+ */
+export async function start<
+  Context = unknown,
+  F extends FunctionReference<"mutation", "internal"> = FunctionReference<
+    "mutation",
+    "internal"
+  >,
+>(
+  ctx: RunMutationCtx,
+  workflow: F,
+  args: FunctionArgs<F>["args"],
+  options?: StartOptions<Context>,
+): Promise<WorkflowId> {
+  const formatted: Record<string, unknown> = { args };
+  if (options?.onComplete) {
+    formatted.onComplete = await createFunctionHandle(options.onComplete);
+  }
+  if (options?.context !== undefined) {
+    formatted.context = options.context;
+  }
+  if (options?.startAsync !== undefined) {
+    formatted.startAsync = options.startAsync;
+  }
+  return (await ctx.runMutation(
+    workflow as any,
+    formatted as any,
+  )) as unknown as WorkflowId;
+}
 
 /**
  * Get a workflow's status.
@@ -466,6 +480,15 @@ export class WorkflowManager {
   /**
    * Define a new workflow.
    *
+   * Start the workflow from a mutation or action:
+   * ```ts
+   * const workflowId = await start(ctx, internal.myFile.myWorkflow, { ...myArgs });
+   * ```
+   * Or call it directly:
+   * ```ts
+   * const workflowId = await ctx.runMutation(internal.myFile.myWorkflow, { args: { ...myArgs } });
+   * ```
+   *
    * @param workflow - The workflow definition.
    * @returns The workflow mutation.
    */
@@ -476,11 +499,7 @@ export class WorkflowManager {
     workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator> & {
       handler: WorkflowHandler<ArgsValidator, ReturnsValidator>;
     },
-  ): RegisteredMutation<
-    "internal",
-    WorkflowArgs<ArgsValidator>,
-    ReturnValueForOptionalValidator<ReturnsValidator>
-  >;
+  ): RegisteredMutation<"internal", WorkflowArgs<ArgsValidator>, WorkflowId>;
   define<
     ArgsValidator extends PropertyValidators,
     ReturnsValidator extends Validator<unknown, "required", string> | void,
@@ -496,11 +515,7 @@ export class WorkflowManager {
         step: WorkflowCtx,
         args: ObjectType<ArgsValidator>,
       ) => Promise<ReturnValueForOptionalValidator<ReturnsValidator>>,
-    ): RegisteredMutation<
-      "internal",
-      WorkflowArgs<ArgsValidator>,
-      ReturnValueForOptionalValidator<ReturnsValidator>
-    >;
+    ): RegisteredMutation<"internal", WorkflowArgs<ArgsValidator>, WorkflowId>;
   };
   define<
     ArgsValidator extends PropertyValidators,
@@ -533,18 +548,29 @@ export class WorkflowManager {
   }
 
   /**
-   * Kick off a defined workflow.
+   * Start a workflow.
+   *
+   * Alternative to `start` (`import { start } from "@convex-dev/workflow"`).
+   *
+   * This is slightly more efficient than calling `start` when passing
+   * `startAsync: true`, and slightly less efficient in the default case.
    *
    * @param ctx - The Convex context.
    * @param workflow - The workflow to start (e.g. `internal.index.exampleWorkflow`).
    * @param args - The workflow arguments.
    * @returns The workflow ID.
    */
-  async start<F extends FunctionReference<"mutation", "internal">>(
+  async start<
+    Context = unknown,
+    F extends FunctionReference<"mutation", "internal"> = FunctionReference<
+      "mutation",
+      "internal"
+    >,
+  >(
     ctx: RunMutationCtx,
     workflow: F,
     args: FunctionArgs<F>["args"],
-    options?: CallbackOptions & {
+    options?: CallbackOptions<Context> & {
       /**
        * By default, during creation the workflow will be initiated immediately.
        * The benefit is that you catch errors earlier (e.g. passing a bad
@@ -557,10 +583,11 @@ export class WorkflowManager {
        * @default false
        */
       startAsync?: boolean;
-      /** @deprecated Use `startAsync` instead. */
-      validateAsync?: boolean;
     },
   ): Promise<WorkflowId> {
+    if (!options?.startAsync) {
+      return start(ctx, workflow, args, options);
+    }
     const handle = await createFunctionHandle(workflow);
     const onComplete = options?.onComplete
       ? {
@@ -574,7 +601,7 @@ export class WorkflowManager {
       workflowArgs: args,
       maxParallelism: this.options?.workpoolOptions?.maxParallelism,
       onComplete,
-      startAsync: options?.startAsync ?? options?.validateAsync,
+      startAsync: true,
     });
     return workflowId as unknown as WorkflowId;
   }

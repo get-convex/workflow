@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { OpenAI } from "openai";
 import { internal } from "./_generated/api.js";
-import { internalAction, internalMutation } from "./_generated/server.js";
+import { internalAction } from "./_generated/server.js";
 import { workflow } from "./example.js";
 
 function getOpenAI() {
@@ -35,20 +35,6 @@ export const transcriptionWorkflow = workflow
     );
     console.log(embedding.slice(0, 20));
   });
-
-export const startTranscription = internalMutation({
-  args: {
-    storageId: v.id("_storage"),
-  },
-  handler: async (ctx, args) => {
-    const id: string = await workflow.start(
-      ctx,
-      internal.transcription.transcriptionWorkflow,
-      { storageId: args.storageId },
-    );
-    return id;
-  },
-});
 
 export const computeTranscription = internalAction({
   args: {

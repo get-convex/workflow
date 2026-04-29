@@ -91,11 +91,11 @@ export const save = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args): Promise<null> => {
-    const step = await ctx.db.get(args.stepId);
+    const step = await ctx.db.get("steps", args.stepId);
     if (!step) {
       throw new Error(`Step not found: ${args.stepId}`);
     }
-    const workflow = await ctx.db.get(step.workflowId);
+    const workflow = await ctx.db.get("workflows", step.workflowId);
     await ctx.db.insert("oversizedValues", {
       workflowId: step.workflowId,
       name: workflow?.name ?? "",
@@ -180,7 +180,7 @@ export const deleteRecord = internalMutation({
       .first();
     if (record) {
       await ctx.storage.delete(record.storageId);
-      await ctx.db.delete(record._id);
+      await ctx.db.delete("oversizedValues", record._id);
     }
     return null;
   },

@@ -520,7 +520,7 @@ async function deleteSteps(ctx: MutationCtx, steps: Doc<"steps">[]) {
       .first();
     if (oversized) {
       await ctx.storage.delete(oversized.storageId);
-      await ctx.db.delete(oversized._id);
+      await ctx.db.delete("oversizedValues", oversized._id);
     }
   }
 }

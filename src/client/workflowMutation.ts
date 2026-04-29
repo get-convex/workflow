@@ -282,7 +282,7 @@ type TransactionMetrics = {
   scheduledFunctionArgsBytes: TransactionMetric;
 };
 
-// TODO: replace with ctx.meta.getFunctionMetadata() in 1.36+
+// TODO: replace with ctx.meta.getTransactionMetrics() in 1.36+
 export async function getTransactionMetrics(): Promise<TransactionMetrics> {
   const syscalls = (global as any).Convex;
   return JSON.parse(

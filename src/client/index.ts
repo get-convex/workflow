@@ -52,7 +52,7 @@ export type CallbackOptions<Context = unknown> = {
    * ```ts
    * export const completion = internalMutation({
    *  args: {
-   *    workId: vWorkflowId,
+   *    workflowId: vWorkflowId,
    *    result: vResultValidator,
    *    context: v.any(),
    *  },

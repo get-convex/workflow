@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0
+
+- Allows starting a workflow by calling it directly, like
+  ```ts
+  const workflowId = await ctx.runMutation(internal.my.workflow, {
+    args: { ...workflowArgs },
+    onComplete: await createFunctionHandle(internal.my.onComplete),
+    context: { ...contextForOnComplete },
+  });
+  ```
+  instead of using workflow.start.
+- Enforce that `context` is passed when specifying `onComplete`.
+
 ## 0.3.12
 
 - Steps that return values too large to store in the DB will now correctly throw

@@ -36,16 +36,23 @@ export type WorkflowArgs<V extends PropertyValidators, Context = unknown> = {
    * current transaction.
    */
   startAsync?: boolean;
-  /**
-   * A function handle (created with createFunctionHandle) that will be called
-   * when the Workflow completes.
-   */
-  onComplete?: FunctionHandle<"mutation", OnCompleteArgs<Context>>;
-  /**
-   * Any extra context to pass to the Workflow.
-   */
-  context?: Context;
-};
+} & (
+  | {
+      /**
+       * A function handle (created with createFunctionHandle) that will be
+       * called when the Workflow completes.
+       */
+      onComplete: FunctionHandle<"mutation", OnCompleteArgs<Context>>;
+      /**
+       * Context forwarded to the `onComplete` mutation.
+       */
+      context: Context;
+    }
+  | {
+      onComplete?: undefined;
+      context?: undefined;
+    }
+);
 const vWorkflowArgs = v.union(
   v.object({
     workflowId: vWorkflowId,

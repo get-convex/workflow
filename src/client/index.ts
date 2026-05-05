@@ -44,36 +44,43 @@ export type { RunOptions, WorkflowCtx } from "./workflowContext.js";
 export type { WorkflowArgs } from "./workflowMutation.js";
 export { vResultValidator } from "@convex-dev/workpool";
 
-export type CallbackOptions<Context = unknown> = {
-  /**
-   * A mutation to run after the function succeeds, fails, or is canceled.
-   * The context type is for your use, feel free to provide a validator for it.
-   * e.g.
-   * ```ts
-   * export const completion = internalMutation({
-   *  args: {
-   *    workflowId: vWorkflowId,
-   *    result: vResultValidator,
-   *    context: v.any(),
-   *  },
-   *  handler: async (ctx, args) => {
-   *    console.log(args.result, "Got Context back -> ", args.context, Date.now() - args.context);
-   *  },
-   * });
-   * ```
-   */
-  onComplete?: FunctionReference<
-    "mutation",
-    FunctionVisibility,
-    OnCompleteArgs<Context>
-  > | null;
-
-  /**
-   * A context object to pass to the `onComplete` mutation.
-   * Useful for passing data from the enqueue site to the onComplete site.
-   */
-  context?: Context;
-};
+export type CallbackOptions<Context = unknown> =
+  | {
+      /**
+       * A mutation to run after the workflow succeeds, fails, or is canceled.
+       * The context type is for your use, feel free to provide a validator for it.
+       *
+       * If you don't need `context`, you can set the validator to optional
+       * with `v.optional(v.any())` and pass `context: undefined`.
+       *
+       * ```ts
+       * export const completion = internalMutation({
+       *  args: {
+       *    workflowId: vWorkflowId,
+       *    result: vResultValidator,
+       *    context: v.optional(v.any()),
+       *  },
+       *  handler: async (ctx, args) => {
+       *    console.log(args.result, "Got Context back -> ", args.context);
+       *  },
+       * });
+       * ```
+       */
+      onComplete: FunctionReference<
+        "mutation",
+        FunctionVisibility,
+        OnCompleteArgs<Context>
+      >;
+      /**
+       * A context object to pass to the `onComplete` mutation.
+       * Useful for passing data from the enqueue site to the onComplete site.
+       */
+      context: Context;
+    }
+  | {
+      onComplete?: undefined;
+      context?: undefined;
+    };
 
 export type WorkflowDefinition<
   ArgsValidator extends PropertyValidators,

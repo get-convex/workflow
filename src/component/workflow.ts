@@ -495,49 +495,31 @@ export const cleanupContinue = internalMutation({
   },
 });
 
+const CLEANUP_BATCH_SIZE = 256;
+
 async function cleanupStepsFrom(
   ctx: MutationCtx,
   workflowId: Id<"workflows">,
   fromStepNumber: number,
 ) {
-  const nestedWorkflowIds: Id<"workflows">[] = [];
-  const steps = ctx.db
-    .query("steps")
-    .withIndex("workflow", (q) =>
-      q.eq("workflowId", workflowId).gte("stepNumber", fromStepNumber),
-    );
-  for await (const entry of steps) {
-    await ctx.db.delete("steps", entry._id);
-    if (entry.step.kind === "event" && entry.step.eventId) {
-      await ctx.db.delete("events", entry.step.eventId);
-    } else if (entry.step.kind === "workflow" && entry.step.workflowId) {
-      nestedWorkflowIds.push(entry.step.workflowId);
-    }
+  while (true) {
+    const batch = await ctx.db
+      .query("steps")
+      .withIndex("workflow", (q) =>
+        q.eq("workflowId", workflowId).gte("stepNumber", fromStepNumber),
+      )
+      .take(CLEANUP_BATCH_SIZE);
+    if (batch.length === 0) return;
+    await deleteSteps(ctx, batch);
+    if (batch.length < CLEANUP_BATCH_SIZE) return;
     if (await transactionBudgetMostlyConsumed(ctx)) {
       await ctx.scheduler.runAfter(0, internal.workflow.cleanupContinue, {
         workflowId,
-        fromStepNumber: entry.stepNumber + 1,
+        fromStepNumber: batch[batch.length - 1].stepNumber + 1,
       });
-      break;
+      return;
     }
   }
-  await flushNestedCleanup(ctx, nestedWorkflowIds);
-}
-
-async function flushNestedCleanup(
-  ctx: MutationCtx,
-  nestedWorkflowIds: Id<"workflows">[],
-) {
-  if (nestedWorkflowIds.length === 0) return;
-  // Fetch workpool / config once and enqueue in a single batch so we don't
-  // pay the per-step cost (config .first(), workpool enqueue subqueries) for
-  // every nested workflow.
-  const workpool = await getWorkpool(ctx, {});
-  await workpool.enqueueMutationBatch(
-    ctx,
-    api.workflow.cleanup,
-    nestedWorkflowIds.map((workflowId) => ({ workflowId, force: true })),
-  );
 }
 
 async function transactionBudgetMostlyConsumed(
@@ -581,7 +563,13 @@ async function deleteSteps(ctx: MutationCtx, steps: Doc<"steps">[]) {
       nestedWorkflowIds.push(entry.step.workflowId);
     }
   }
-  await flushNestedCleanup(ctx, nestedWorkflowIds);
+  // Fetch workpool / config once and enqueue in a single batch
+  const workpool = await getWorkpool(ctx, {});
+  await workpool.enqueueMutationBatch(
+    ctx,
+    api.workflow.cleanup,
+    nestedWorkflowIds.map((workflowId) => ({ workflowId, force: true })),
+  );
 }
 
 export const sleep = internalQuery({

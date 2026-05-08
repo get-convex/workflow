@@ -559,6 +559,59 @@ describe("workflow", () => {
     });
   });
 
+  test("cleanup deletes large numbers of steps via async iteration", async () => {
+    const t = initConvexTest();
+
+    const workflowId = await t.mutation(api.workflow.create, {
+      workflowName: "test-many-steps",
+      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowArgs: {},
+      startAsync: true,
+    });
+
+    // Insert many steps so the async iteration walks through them all and
+    // (in environments that enforce limits) any continuation kicks in.
+    const stepCount = 100;
+    await t.run(async (ctx) => {
+      for (let i = 0; i < stepCount; i++) {
+        await ctx.db.insert("steps", {
+          workflowId,
+          stepNumber: i,
+          step: {
+            kind: "function" as const,
+            functionType: "mutation" as const,
+            handle: "function://test",
+            name: `step${i}`,
+            inProgress: false,
+            argsSize: 0,
+            args: {},
+            runResult: { kind: "success", returnValue: null },
+            startedAt: Date.now(),
+            completedAt: Date.now(),
+          },
+        });
+      }
+    });
+
+    await t.mutation(api.workflow.cancel, { workflowId });
+
+    const cleaned = await t.mutation(api.workflow.cleanup, { workflowId });
+    expect(cleaned).toBe(true);
+
+    // Drain any continuations scheduled when budget was halfway consumed.
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    await t.run(async (ctx) => {
+      const workflow = await ctx.db.get("workflows", workflowId);
+      expect(workflow).toBeNull();
+      const remaining = await ctx.db
+        .query("steps")
+        .withIndex("workflow", (q) => q.eq("workflowId", workflowId))
+        .collect();
+      expect(remaining).toHaveLength(0);
+    });
+  });
+
   test("cleanup with mixed event and workflow steps", async () => {
     const t = initConvexTest();
 

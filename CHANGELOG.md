@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Make `cleanup` resilient to workflows with many steps, events, and nested
+  workflows by yielding to a scheduled continuation before transaction limits
+  are hit (#255).
+
 ## 0.4.1
 
 - Support the alpha workpool

@@ -267,46 +267,51 @@ export async function restartHandler(
 
   // Delete steps from the specified point
   if (args.from !== undefined) {
+    let fromStepNumber: number;
+    let prefetched: Doc<"steps">[] | undefined;
     if (typeof args.from === "number") {
       if (args.from < 0) {
         throw new Error(`Step number cannot be negative: ${args.from}`);
       }
-      const stepsToDelete = await ctx.db
+      const firstMatching = await ctx.db
         .query("steps")
         .withIndex("workflow", (q) =>
           q
             .eq("workflowId", args.workflowId)
             .gte("stepNumber", args.from as number),
         )
-        .collect();
-      if (stepsToDelete.length === 0) {
+        .first();
+      if (!firstMatching) {
         console.warn(
           `Step number ${args.from} not found in workflow ${args.workflowId}`,
         );
       }
-      await deleteSteps(ctx, stepsToDelete);
+      fromStepNumber = args.from;
     } else {
-      // Walk backwards to find step by name, collecting steps to delete
+      // Walk backwards to find step by name, keeping the visited docs so
+      // deleteStepsFrom doesn't re-fetch them.
       const stepsDesc = ctx.db
         .query("steps")
         .withIndex("workflow", (q) => q.eq("workflowId", args.workflowId))
         .order("desc");
-      let found = false;
-      const toDelete: Doc<"steps">[] = [];
+      const visited: Doc<"steps">[] = [];
+      let found: number | null = null;
       for await (const step of stepsDesc) {
-        toDelete.push(step);
+        visited.push(step);
         if (step.step.name === args.from) {
-          found = true;
+          found = step.stepNumber;
           break;
         }
       }
-      if (!found) {
+      if (found === null) {
         throw new Error(
           `Step "${args.from}" not found in workflow ${args.workflowId}`,
         );
       }
-      await deleteSteps(ctx, toDelete);
+      fromStepNumber = found;
+      prefetched = visited;
     }
+    await deleteStepsFrom(ctx, args.workflowId, fromStepNumber, prefetched);
   }
 
   // Increment generation number and clear result
@@ -478,7 +483,7 @@ export const cleanup = mutation({
     }
     logger.debug(`Cleaning up workflow ${workflowId}`, workflow);
     await ctx.db.delete("workflows", workflowId);
-    await cleanupStepsFrom(ctx, workflowId, 0);
+    await deleteStepsFrom(ctx, workflowId, 0);
     return true;
   },
 });
@@ -490,37 +495,12 @@ export const cleanupContinue = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await cleanupStepsFrom(ctx, args.workflowId, args.fromStepNumber);
+    await deleteStepsFrom(ctx, args.workflowId, args.fromStepNumber);
     return null;
   },
 });
 
-const CLEANUP_BATCH_SIZE = 256;
-
-async function cleanupStepsFrom(
-  ctx: MutationCtx,
-  workflowId: Id<"workflows">,
-  fromStepNumber: number,
-) {
-  while (true) {
-    const batch = await ctx.db
-      .query("steps")
-      .withIndex("workflow", (q) =>
-        q.eq("workflowId", workflowId).gte("stepNumber", fromStepNumber),
-      )
-      .take(CLEANUP_BATCH_SIZE);
-    if (batch.length === 0) return;
-    await deleteSteps(ctx, batch);
-    if (batch.length < CLEANUP_BATCH_SIZE) return;
-    if (await transactionBudgetMostlyConsumed(ctx)) {
-      await ctx.scheduler.runAfter(0, internal.workflow.cleanupContinue, {
-        workflowId,
-        fromStepNumber: batch[batch.length - 1].stepNumber + 1,
-      });
-      return;
-    }
-  }
-}
+const DELETE_STEPS_BATCH_SIZE = 256;
 
 async function transactionBudgetMostlyConsumed(
   ctx: MutationCtx,
@@ -553,9 +533,48 @@ async function updateMaxParallelism(
   }
 }
 
-async function deleteSteps(ctx: MutationCtx, steps: Doc<"steps">[]) {
+async function deleteStepsFrom(
+  ctx: MutationCtx,
+  workflowId: Id<"workflows">,
+  fromStepNumber: number,
+  prefetched?: Doc<"steps">[],
+) {
+  if (prefetched && prefetched.length > 0) {
+    for (let i = 0; i < prefetched.length; i += DELETE_STEPS_BATCH_SIZE) {
+      const batch = prefetched.slice(i, i + DELETE_STEPS_BATCH_SIZE);
+      await deleteStepBatch(ctx, batch);
+      if (await transactionBudgetMostlyConsumed(ctx)) {
+        await ctx.scheduler.runAfter(0, internal.workflow.cleanupContinue, {
+          workflowId,
+          fromStepNumber,
+        });
+        return;
+      }
+    }
+  }
+  while (true) {
+    const batch = await ctx.db
+      .query("steps")
+      .withIndex("workflow", (q) =>
+        q.eq("workflowId", workflowId).gte("stepNumber", fromStepNumber),
+      )
+      .take(DELETE_STEPS_BATCH_SIZE);
+    if (batch.length === 0) return;
+    await deleteStepBatch(ctx, batch);
+    if (batch.length < DELETE_STEPS_BATCH_SIZE) return;
+    if (await transactionBudgetMostlyConsumed(ctx)) {
+      await ctx.scheduler.runAfter(0, internal.workflow.cleanupContinue, {
+        workflowId,
+        fromStepNumber: batch[batch.length - 1].stepNumber + 1,
+      });
+      return;
+    }
+  }
+}
+
+async function deleteStepBatch(ctx: MutationCtx, batch: Doc<"steps">[]) {
   const nestedWorkflowIds: Id<"workflows">[] = [];
-  for (const entry of steps) {
+  for (const entry of batch) {
     await ctx.db.delete("steps", entry._id);
     if (entry.step.kind === "event" && entry.step.eventId) {
       await ctx.db.delete("events", entry.step.eventId);
@@ -563,13 +582,14 @@ async function deleteSteps(ctx: MutationCtx, steps: Doc<"steps">[]) {
       nestedWorkflowIds.push(entry.step.workflowId);
     }
   }
-  // Fetch workpool / config once and enqueue in a single batch
-  const workpool = await getWorkpool(ctx, {});
-  await workpool.enqueueMutationBatch(
-    ctx,
-    api.workflow.cleanup,
-    nestedWorkflowIds.map((workflowId) => ({ workflowId, force: true })),
-  );
+  if (nestedWorkflowIds.length > 0) {
+    const workpool = await getWorkpool(ctx, {});
+    await workpool.enqueueMutationBatch(
+      ctx,
+      api.workflow.cleanup,
+      nestedWorkflowIds.map((id) => ({ workflowId: id, force: true })),
+    );
+  }
 }
 
 export const sleep = internalQuery({

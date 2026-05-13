@@ -9,6 +9,7 @@ import {
   type FunctionArgs,
   type FunctionReference,
   type FunctionVisibility,
+  type GenericActionCtx,
   type GenericDataModel,
   type GenericMutationCtx,
   type GenericQueryCtx,
@@ -193,7 +194,7 @@ export async function start<
     "internal"
   >,
 >(
-  ctx: RunMutationCtx,
+  ctx: MutationCtx | ActionCtx,
   workflow: F,
   args: FunctionArgs<F>["args"],
   options?: StartOptions<Context>,
@@ -223,7 +224,7 @@ export async function start<
  * @returns The workflow status.
  */
 export async function getStatus(
-  ctx: RunQueryCtx,
+  ctx: QueryCtx | MutationCtx | ActionCtx,
   component: WorkflowComponent,
   workflowId: WorkflowId,
 ): Promise<WorkflowStatus> {
@@ -252,7 +253,7 @@ export async function getStatus(
  * @param workflowId - The workflow ID.
  */
 export async function cancel(
-  ctx: RunMutationCtx,
+  ctx: MutationCtx | ActionCtx,
   component: WorkflowComponent,
   workflowId: WorkflowId,
 ): Promise<void> {
@@ -283,7 +284,7 @@ export async function cancel(
  *   via the workpool instead of running immediately.
  */
 export async function restart(
-  ctx: RunMutationCtx,
+  ctx: MutationCtx | ActionCtx,
   component: WorkflowComponent,
   workflowId: WorkflowId,
   options?: {
@@ -316,7 +317,7 @@ export async function restart(
  *   If you provide an error string, awaiting the event will throw an error.
  */
 export async function sendEvent<T = null, Name extends string = string>(
-  ctx: RunMutationCtx,
+  ctx: MutationCtx | ActionCtx,
   component: WorkflowComponent,
   args: (
     | { workflowId: WorkflowId; name: Name; id?: EventId<Name> }
@@ -355,7 +356,7 @@ export async function sendEvent<T = null, Name extends string = string>(
  * @returns The event ID, which can be used to send the event or await it.
  */
 export async function createEvent<Name extends string>(
-  ctx: RunMutationCtx,
+  ctx: MutationCtx | ActionCtx,
   component: WorkflowComponent,
   args: { name: Name; workflowId: WorkflowId },
 ): Promise<EventId<Name>> {
@@ -377,7 +378,7 @@ export async function createEvent<Name extends string>(
  * @returns The pagination result with per-workflow data.
  */
 export async function list(
-  ctx: RunQueryCtx,
+  ctx: QueryCtx | MutationCtx | ActionCtx,
   component: WorkflowComponent,
   opts?: {
     order?: "asc" | "desc";
@@ -407,7 +408,7 @@ export async function list(
  * @returns The pagination result with per-workflow data.
  */
 export async function listByName(
-  ctx: RunQueryCtx,
+  ctx: QueryCtx | MutationCtx | ActionCtx,
   component: WorkflowComponent,
   name: string,
   opts?: {
@@ -439,7 +440,7 @@ export async function listByName(
  * @returns The pagination result with per-step data.
  */
 export async function listSteps(
-  ctx: RunQueryCtx,
+  ctx: QueryCtx | MutationCtx | ActionCtx,
   component: WorkflowComponent,
   workflowId: WorkflowId,
   opts?: {
@@ -467,7 +468,7 @@ export async function listSteps(
  * @returns - Whether the workflow's state was cleaned up.
  */
 export async function cleanup(
-  ctx: RunMutationCtx,
+  ctx: MutationCtx | ActionCtx,
   component: WorkflowComponent,
   workflowId: WorkflowId,
 ): Promise<boolean> {
@@ -574,7 +575,7 @@ export class WorkflowManager {
       "internal"
     >,
   >(
-    ctx: RunMutationCtx,
+    ctx: MutationCtx | ActionCtx,
     workflow: F,
     args: FunctionArgs<F>["args"],
     options?: CallbackOptions<Context> & {
@@ -621,7 +622,7 @@ export class WorkflowManager {
    * @returns The workflow status.
    */
   async status(
-    ctx: RunQueryCtx,
+    ctx: QueryCtx | MutationCtx | ActionCtx,
     workflowId: WorkflowId,
   ): Promise<WorkflowStatus> {
     return getStatus(ctx, this.component, workflowId);
@@ -650,7 +651,7 @@ export class WorkflowManager {
    *   via the workpool instead of running immediately.
    */
   async restart(
-    ctx: RunMutationCtx,
+    ctx: MutationCtx | ActionCtx,
     workflowId: WorkflowId,
     options?: {
       from?: number | string | FunctionReference<any, any>;
@@ -666,7 +667,7 @@ export class WorkflowManager {
    * @param ctx - The Convex context.
    * @param workflowId - The workflow ID.
    */
-  async cancel(ctx: RunMutationCtx, workflowId: WorkflowId) {
+  async cancel(ctx: MutationCtx | ActionCtx, workflowId: WorkflowId) {
     return cancel(ctx, this.component, workflowId);
   }
 
@@ -681,7 +682,7 @@ export class WorkflowManager {
    * @returns The pagination result with per-workflow data.
    */
   async list(
-    ctx: RunQueryCtx,
+    ctx: QueryCtx | MutationCtx | ActionCtx,
     opts?: {
       order?: "asc" | "desc";
       paginationOpts?: PaginationOptions;
@@ -702,7 +703,7 @@ export class WorkflowManager {
    * @returns The pagination result with per-workflow data.
    */
   async listByName(
-    ctx: RunQueryCtx,
+    ctx: QueryCtx | MutationCtx | ActionCtx,
     name: string,
     opts?: {
       order?: "asc" | "desc";
@@ -724,7 +725,7 @@ export class WorkflowManager {
    * @returns The pagination result with per-step data.
    */
   async listSteps(
-    ctx: RunQueryCtx,
+    ctx: QueryCtx | MutationCtx | ActionCtx,
     workflowId: WorkflowId,
     opts?: {
       order?: "asc" | "desc";
@@ -741,7 +742,10 @@ export class WorkflowManager {
    * @param workflowId - The workflow ID.
    * @returns - Whether the workflow's state was cleaned up.
    */
-  async cleanup(ctx: RunMutationCtx, workflowId: WorkflowId): Promise<boolean> {
+  async cleanup(
+    ctx: MutationCtx | ActionCtx,
+    workflowId: WorkflowId,
+  ): Promise<boolean> {
     return cleanup(ctx, this.component, workflowId);
   }
 
@@ -754,7 +758,7 @@ export class WorkflowManager {
    *   If you provide an error string, awaiting the event will throw an error.
    */
   async sendEvent<T = null, Name extends string = string>(
-    ctx: RunMutationCtx,
+    ctx: MutationCtx | ActionCtx,
     args: (
       | { workflowId: WorkflowId; name: Name; id?: EventId<Name> }
       | { workflowId?: undefined; name?: Name; id: EventId<Name> }
@@ -775,7 +779,7 @@ export class WorkflowManager {
    * @returns The event ID, which can be used to send the event or await it.
    */
   async createEvent<Name extends string>(
-    ctx: RunMutationCtx,
+    ctx: MutationCtx | ActionCtx,
     args: { name: Name; workflowId: WorkflowId },
   ): Promise<EventId<Name>> {
     return createEvent(ctx, this.component, args);
@@ -812,9 +816,12 @@ export function defineEvent<
   return spec;
 }
 
-type RunQueryCtx = {
-  runQuery: GenericQueryCtx<GenericDataModel>["runQuery"];
-};
-type RunMutationCtx = {
-  runMutation: GenericMutationCtx<GenericDataModel>["runMutation"];
-};
+type QueryCtx = Pick<GenericQueryCtx<GenericDataModel>, "runQuery">;
+type MutationCtx = Pick<
+  GenericMutationCtx<GenericDataModel>,
+  "runQuery" | "runMutation"
+>;
+type ActionCtx = Pick<
+  GenericActionCtx<GenericDataModel>,
+  "runQuery" | "runMutation" | "runAction"
+>;

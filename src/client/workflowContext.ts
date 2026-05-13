@@ -53,7 +53,13 @@ export type WorkflowCtx = {
    */
   runQuery<Query extends FunctionReference<"query", FunctionVisibility>>(
     query: Query,
-    ...args: OptionalRestArgs<RunOptions & InlineArgs, Query>
+    ...args: OptionalRestArgs<
+      RunOptions &
+        InlineArgs & {
+          transactionLimits?: TransactionLimits;
+        },
+      Query
+    >
   ): Promise<FunctionReturnType<Query>>;
 
   /**
@@ -67,7 +73,10 @@ export type WorkflowCtx = {
     Mutation extends FunctionReference<"mutation", FunctionVisibility>,
   >(
     mutation: Mutation,
-    ...args: OptionalRestArgs<RunOptions & InlineArgs, Mutation>
+    ...args: OptionalRestArgs<
+      RunOptions & InlineArgs & { transactionLimits?: TransactionLimits },
+      Mutation
+    >
   ): Promise<FunctionReturnType<Mutation>>;
 
   /**
@@ -258,4 +267,15 @@ async function run(
     default:
       throw new Error("Unknown result kind: " + (result as any).kind);
   }
+}
+
+// Exposed in future version of Convex
+interface TransactionLimits {
+  bytesRead?: number;
+  bytesWritten?: number;
+  databaseQueries?: number;
+  documentsRead?: number;
+  documentsWritten?: number;
+  functionsScheduled?: number;
+  scheduledFunctionArgsBytes?: number;
 }

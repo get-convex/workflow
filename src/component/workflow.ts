@@ -309,6 +309,8 @@ export async function restartHandler(
         );
       }
       fromStepNumber = found;
+      // Walk was descending; flip to ascending for deleteStepsFrom.
+      visited.reverse();
       prefetched = visited;
     }
     await deleteStepsFrom(ctx, args.workflowId, fromStepNumber, prefetched);
@@ -539,33 +541,30 @@ async function deleteStepsFrom(
   fromStepNumber: number,
   prefetched?: Doc<"steps">[],
 ) {
-  if (prefetched && prefetched.length > 0) {
-    for (let i = 0; i < prefetched.length; i += DELETE_STEPS_BATCH_SIZE) {
-      const batch = prefetched.slice(i, i + DELETE_STEPS_BATCH_SIZE);
-      await deleteStepBatch(ctx, batch);
-      if (await transactionBudgetMostlyConsumed(ctx)) {
-        await ctx.scheduler.runAfter(0, internal.workflow.cleanupContinue, {
-          workflowId,
-          fromStepNumber,
-        });
-        return;
-      }
-    }
-  }
+  // `prefetched` must be in ascending stepNumber order so each batch's last
+  // entry is the highest stepNumber processed.
+  let remaining = prefetched ?? [];
   while (true) {
-    const batch = await ctx.db
-      .query("steps")
-      .withIndex("workflow", (q) =>
-        q.eq("workflowId", workflowId).gte("stepNumber", fromStepNumber),
-      )
-      .take(DELETE_STEPS_BATCH_SIZE);
-    if (batch.length === 0) return;
+    let batch: Doc<"steps">[];
+    if (remaining.length > 0) {
+      batch = remaining.slice(0, DELETE_STEPS_BATCH_SIZE);
+      remaining = remaining.slice(DELETE_STEPS_BATCH_SIZE);
+    } else {
+      batch = await ctx.db
+        .query("steps")
+        .withIndex("workflow", (q) =>
+          q.eq("workflowId", workflowId).gte("stepNumber", fromStepNumber),
+        )
+        .take(DELETE_STEPS_BATCH_SIZE);
+      if (batch.length === 0) return;
+    }
     await deleteStepBatch(ctx, batch);
+    fromStepNumber = batch[batch.length - 1].stepNumber + 1;
     if (batch.length < DELETE_STEPS_BATCH_SIZE) return;
     if (await transactionBudgetMostlyConsumed(ctx)) {
       await ctx.scheduler.runAfter(0, internal.workflow.cleanupContinue, {
         workflowId,
-        fromStepNumber: batch[batch.length - 1].stepNumber + 1,
+        fromStepNumber,
       });
       return;
     }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1
+
+- Support the alpha workpool
+
 ## 0.4.0
 
 - Allows starting a workflow by calling it directly, like

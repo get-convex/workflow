@@ -5,6 +5,7 @@
 - Make `cleanup` resilient to workflows with many steps, events, and nested
   workflows by yielding to a scheduled continuation before transaction limits
   are hit (#255).
+- Reduces the preview size to ~16k when a step / event is too big
 
 ## 0.4.1
 

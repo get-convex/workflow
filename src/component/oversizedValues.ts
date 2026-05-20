@@ -1,8 +1,8 @@
 import { type Value, convexToJson, getConvexSize } from "convex/values";
 import type { RunResult } from "@convex-dev/workpool";
 
-export const MAX_RETURN_VALUE_SIZE = 800 << 10; // 800 KiB
-const PREVIEW_SIZE = 128 << 10; // 128 KB
+export const MAX_RETURN_VALUE_SIZE = 800 << 10;
+const PREVIEW_SIZE = 8 << 10;
 
 function truncatedPreview(returnValue: unknown): string {
   const json = JSON.stringify(convexToJson(returnValue as Value));

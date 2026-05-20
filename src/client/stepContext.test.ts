@@ -5,16 +5,12 @@ import type { StepRequest } from "./step.js";
 import { StepExecutor } from "./step.js";
 import type { JournalEntry } from "../component/schema.js";
 import { createWorkflowCtx } from "./workflowContext.js";
+import type { WorkflowId } from "../types.js";
+import { anyApi, type FunctionReference } from "convex/server";
 
 // Fake function reference that satisfies the type constraints.
 function fakeFuncRef(name: string) {
-  return Object.assign(() => {}, {
-    _type: "function" as const,
-    _args: {} as Record<string, never>,
-    _returnType: undefined as unknown,
-    _visibility: "internal" as const,
-    [Symbol.for("functionName")]: name,
-  });
+  return anyApi[name].default as FunctionReference<any, "internal">;
 }
 
 // Build a completed journal entry for replay.
@@ -31,7 +27,7 @@ function journalEntry(
   const base = {
     _id: `step-${Math.random().toString(36).slice(2)}`,
     _creationTime: Date.now(),
-    workflowId: "wf-test" as any,
+    workflowId: "wf-test",
     stepNumber: overrides.stepNumber ?? 0,
   };
   const stepCommon = {
@@ -65,7 +61,7 @@ function journalEntry(
         ...stepCommon,
         args: overrides.args ?? { eventId: undefined },
       },
-    } as unknown as JournalEntry;
+    } as JournalEntry;
   }
   return {
     ...base,
@@ -74,7 +70,7 @@ function journalEntry(
       handle: "handle",
       ...stepCommon,
     },
-  } as unknown as JournalEntry;
+  } as JournalEntry;
 }
 
 // Simulate the StepExecutor replay loop: read messages from the channel and
@@ -98,7 +94,7 @@ async function replayFromJournal(
 describe("StepExecutor + WorkflowCtx integration", () => {
   it("resolves a successful step", async () => {
     const channel = new BaseChannel<StepRequest>(0);
-    const ctx = createWorkflowCtx("wf-1" as any, channel);
+    const ctx = createWorkflowCtx("wf-1" as WorkflowId, channel);
 
     const entry = journalEntry({
       name: "test",
@@ -106,7 +102,7 @@ describe("StepExecutor + WorkflowCtx integration", () => {
     });
 
     const [result] = await Promise.all([
-      ctx.runAction(fakeFuncRef("test") as any, {}),
+      ctx.runAction(fakeFuncRef("test"), {}),
       replayFromJournal(channel, [entry]),
     ]);
 
@@ -123,7 +119,7 @@ describe("StepExecutor + WorkflowCtx integration", () => {
     });
 
     const [error] = await Promise.all([
-      ctx.runAction(fakeFuncRef("test") as any, {}).catch((e: Error) => e),
+      ctx.runAction(fakeFuncRef("test"), {}).catch((e: Error) => e),
       replayFromJournal(channel, [entry]),
     ]);
 
@@ -141,7 +137,7 @@ describe("StepExecutor + WorkflowCtx integration", () => {
     });
 
     const [error] = await Promise.all([
-      ctx.runAction(fakeFuncRef("test") as any, {}).catch((e: Error) => e),
+      ctx.runAction(fakeFuncRef("test"), {}).catch((e: Error) => e),
       replayFromJournal(channel, [entry]),
     ]);
 
@@ -169,8 +165,8 @@ describe("StepExecutor + WorkflowCtx integration", () => {
     ];
 
     const handler = async () => {
-      const a = await ctx.runAction(fakeFuncRef("step1") as any, { x: 1 });
-      const b = await ctx.runAction(fakeFuncRef("step2") as any, { x: 2 });
+      const a = await ctx.runAction(fakeFuncRef("step1"), { x: 1 });
+      const b = await ctx.runAction(fakeFuncRef("step2"), { x: 2 });
       return [a, b];
     };
 
@@ -202,11 +198,11 @@ describe("StepExecutor + WorkflowCtx integration", () => {
     const handler = async () => {
       let caught: string | undefined;
       try {
-        await ctx.runAction(fakeFuncRef("failing") as any, {});
+        await ctx.runAction(fakeFuncRef("failing"), {});
       } catch (e) {
         caught = (e as Error).message;
       }
-      const result = await ctx.runAction(fakeFuncRef("recovery") as any, {});
+      const result = await ctx.runAction(fakeFuncRef("recovery"), {});
       return { caught, result };
     };
 
@@ -240,8 +236,8 @@ describe("StepExecutor + WorkflowCtx integration", () => {
 
     const handler = async () => {
       return Promise.all([
-        ctx.runAction(fakeFuncRef("a") as any, { v: "a" }),
-        ctx.runAction(fakeFuncRef("b") as any, { v: "b" }),
+        ctx.runAction(fakeFuncRef("a"), { v: "a" }),
+        ctx.runAction(fakeFuncRef("b"), { v: "b" }),
       ]);
     };
 
@@ -274,8 +270,8 @@ describe("StepExecutor + WorkflowCtx integration", () => {
 
     const handler = async () => {
       return Promise.all([
-        ctx.runAction(fakeFuncRef("ok") as any, { v: "ok" }),
-        ctx.runAction(fakeFuncRef("bad") as any, { v: "bad" }),
+        ctx.runAction(fakeFuncRef("ok"), { v: "ok" }),
+        ctx.runAction(fakeFuncRef("bad"), { v: "bad" }),
       ]);
     };
 
@@ -298,7 +294,7 @@ describe("StepExecutor + WorkflowCtx integration", () => {
     });
 
     const [error] = await Promise.all([
-      ctx.runAction(fakeFuncRef("test") as any, {}).catch((e: Error) => e),
+      ctx.runAction(fakeFuncRef("test"), {}).catch((e: Error) => e),
       replayFromJournal(channel, [entry]),
     ]);
 
@@ -321,7 +317,7 @@ describe("StepExecutor + WorkflowCtx integration", () => {
     });
 
     const [result] = await Promise.all([
-      ctx.runMutation(fakeFuncRef("mut") as any, {}),
+      ctx.runMutation(fakeFuncRef("mut"), {}),
       replayFromJournal(channel, [entry]),
     ]);
 
@@ -338,7 +334,7 @@ describe("StepExecutor + WorkflowCtx integration", () => {
     });
 
     const [result] = await Promise.all([
-      ctx.runQuery(fakeFuncRef("qry") as any, {}),
+      ctx.runQuery(fakeFuncRef("qry"), {}),
       replayFromJournal(channel, [entry]),
     ]);
 
@@ -360,12 +356,12 @@ describe("unstableArgs", () => {
           ? {
               kind: "function",
               functionType: "action",
-              function: fakeFuncRef(opts.name) as any,
+              function: fakeFuncRef(opts.name),
               args: opts.args,
             }
           : {
               kind: "workflow",
-              function: fakeFuncRef(opts.name) as any,
+              function: fakeFuncRef(opts.name),
               args: opts.args,
             },
       retry: undefined,
@@ -473,15 +469,15 @@ describe("unstableArgs", () => {
     await Promise.all([
       (async () => {
         // With unstableArgs: true
-        await ctx.runQuery(fakeFuncRef("q") as any, {}, { unstableArgs: true });
-        await ctx.runMutation(fakeFuncRef("m") as any, {}, { unstableArgs: true });
-        await ctx.runAction(fakeFuncRef("a") as any, {}, { unstableArgs: true });
-        await ctx.runWorkflow(fakeFuncRef("w") as any, {}, { unstableArgs: true });
+        await ctx.runQuery(fakeFuncRef("q"), {}, { unstableArgs: true });
+        await ctx.runMutation(fakeFuncRef("m"), {}, { unstableArgs: true });
+        await ctx.runAction(fakeFuncRef("a"), {}, { unstableArgs: true });
+        await ctx.runWorkflow(fakeFuncRef("w"), {}, { unstableArgs: true });
         // Without unstableArgs (defaults to false)
-        await ctx.runQuery(fakeFuncRef("q2") as any, {});
-        await ctx.runMutation(fakeFuncRef("m2") as any, {});
-        await ctx.runAction(fakeFuncRef("a2") as any, {});
-        await ctx.runWorkflow(fakeFuncRef("w2") as any, {});
+        await ctx.runQuery(fakeFuncRef("q2"), {});
+        await ctx.runMutation(fakeFuncRef("m2"), {});
+        await ctx.runAction(fakeFuncRef("a2"), {});
+        await ctx.runWorkflow(fakeFuncRef("w2"), {});
       })(),
       drain(),
     ]);

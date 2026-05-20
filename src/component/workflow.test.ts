@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api } from "./_generated/api.js";
 import { initConvexTest } from "./setup.test.js";
 import type { Id } from "./_generated/dataModel.js";
+import { internalMutation } from "./_generated/server.js";
+import { v } from "convex/values";
 
 describe("workflow", () => {
   beforeEach(async () => {
@@ -18,7 +20,7 @@ describe("workflow", () => {
     const t = initConvexTest();
     const id = await t.mutation(api.workflow.create, {
       workflowName: "test",
-      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowHandle: "function://;workflow.test:noop",
       workflowArgs: { location: "San Francisco" },
       startAsync: true,
     });
@@ -33,7 +35,7 @@ describe("workflow", () => {
     const t = initConvexTest();
     const id = await t.mutation(api.workflow.create, {
       workflowName: "test",
-      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowHandle: "function://;workflow.test:noop",
       workflowArgs: { location: "San Francisco" },
       startAsync: true,
     });
@@ -48,7 +50,7 @@ describe("workflow", () => {
     const t = initConvexTest();
     const id = await t.mutation(api.workflow.create, {
       workflowName: "test",
-      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowHandle: "function://;workflow.test:noop",
       workflowArgs: { location: "San Francisco" },
       startAsync: true,
     });
@@ -76,7 +78,7 @@ describe("workflow", () => {
     const t = initConvexTest();
     const id = await t.mutation(api.workflow.create, {
       workflowName: "test",
-      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowHandle: "function://;workflow.test:noop",
       workflowArgs: {},
       startAsync: true,
     });
@@ -89,7 +91,7 @@ describe("workflow", () => {
     const t = initConvexTest();
     const id = await t.mutation(api.workflow.create, {
       workflowName: "test",
-      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowHandle: "function://;workflow.test:noop",
       workflowArgs: {},
       startAsync: true,
     });
@@ -102,7 +104,7 @@ describe("workflow", () => {
           step: {
             kind: "function" as const,
             functionType: "mutation" as const,
-            handle: "function://test",
+            handle: "function://;workflow.test:noop",
             name: `step${i}`,
             inProgress: false,
             argsSize: 0,
@@ -144,7 +146,7 @@ describe("workflow", () => {
     const t = initConvexTest();
     const id = await t.mutation(api.workflow.create, {
       workflowName: "test",
-      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowHandle: "function://;workflow.test:noop",
       workflowArgs: {},
       startAsync: true,
     });
@@ -158,7 +160,7 @@ describe("workflow", () => {
           step: {
             kind: "function" as const,
             functionType: "action" as const,
-            handle: "function://test",
+            handle: "function://;workflow.test:noop",
             name: names[i],
             inProgress: false,
             argsSize: 0,
@@ -198,7 +200,7 @@ describe("workflow", () => {
     const t = initConvexTest();
     const id = await t.mutation(api.workflow.create, {
       workflowName: "test",
-      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowHandle: "function://;workflow.test:noop",
       workflowArgs: {},
       startAsync: true,
     });
@@ -220,7 +222,7 @@ describe("workflow", () => {
     const t = initConvexTest();
     const id = await t.mutation(api.workflow.create, {
       workflowName: "test",
-      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowHandle: "function://;workflow.test:noop",
       workflowArgs: {},
       startAsync: true,
     });
@@ -242,7 +244,7 @@ describe("workflow", () => {
     const t = initConvexTest();
     const id = await t.mutation(api.workflow.create, {
       workflowName: "test",
-      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowHandle: "function://;workflow.test:noop",
       workflowArgs: {},
       startAsync: true,
     });
@@ -297,7 +299,7 @@ describe("workflow", () => {
     const t = initConvexTest();
     const id = await t.mutation(api.workflow.create, {
       workflowName: "test",
-      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowHandle: "function://;workflow.test:noop",
       workflowArgs: { location: "San Francisco" },
       startAsync: true,
     });
@@ -320,7 +322,7 @@ describe("workflow", () => {
     // Create a workflow
     const workflowId = await t.mutation(api.workflow.create, {
       workflowName: "test-with-event",
-      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowHandle: "function://;workflow.test:noop",
       workflowArgs: { location: "San Francisco" },
       startAsync: true,
     });
@@ -390,7 +392,7 @@ describe("workflow", () => {
     // Create a parent workflow
     const parentWorkflowId = await t.mutation(api.workflow.create, {
       workflowName: "parent-workflow",
-      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowHandle: "function://;workflow.test:noop",
       workflowArgs: { location: "San Francisco" },
       startAsync: true,
     });
@@ -405,7 +407,7 @@ describe("workflow", () => {
           step: {
             kind: "workflow" as const,
             name: "nested-workflow-step",
-            handle: "function://internal.example.exampleWorkflow",
+            handle: "function://;workflow.test:noop",
             inProgress: true,
             argsSize: 0,
             args: { location: "New York" },
@@ -478,7 +480,7 @@ describe("workflow", () => {
     // Create a workflow
     const workflowId = await t.mutation(api.workflow.create, {
       workflowName: "test-workflow",
-      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowHandle: "function://;workflow.test:noop",
       workflowArgs: { location: "San Francisco" },
       startAsync: true,
     });
@@ -492,7 +494,7 @@ describe("workflow", () => {
           step: {
             kind: "workflow" as const,
             name: "pending-nested-workflow",
-            handle: "function://internal.example.exampleWorkflow",
+            handle: "function://;workflow.test:noop",
             inProgress: true,
             argsSize: 0,
             args: { location: "Boston" },
@@ -522,7 +524,7 @@ describe("workflow", () => {
     // Create a workflow
     const workflowId = await t.mutation(api.workflow.create, {
       workflowName: "test-workflow",
-      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowHandle: "function://;workflow.test:noop",
       workflowArgs: { location: "San Francisco" },
       startAsync: true,
     });
@@ -559,13 +561,66 @@ describe("workflow", () => {
     });
   });
 
+  test("cleanup deletes large numbers of steps via async iteration", async () => {
+    const t = initConvexTest();
+
+    const workflowId = await t.mutation(api.workflow.create, {
+      workflowName: "test-many-steps",
+      workflowHandle: "function://;workflow.test:noop",
+      workflowArgs: {},
+      startAsync: true,
+    });
+
+    // Insert many steps so the async iteration walks through them all and
+    // (in environments that enforce limits) any continuation kicks in.
+    const stepCount = 100;
+    await t.run(async (ctx) => {
+      for (let i = 0; i < stepCount; i++) {
+        await ctx.db.insert("steps", {
+          workflowId,
+          stepNumber: i,
+          step: {
+            kind: "function" as const,
+            functionType: "mutation" as const,
+            handle: "function://;workflow.test:noop",
+            name: `step${i}`,
+            inProgress: false,
+            argsSize: 0,
+            args: {},
+            runResult: { kind: "success", returnValue: null },
+            startedAt: Date.now(),
+            completedAt: Date.now(),
+          },
+        });
+      }
+    });
+
+    await t.mutation(api.workflow.cancel, { workflowId });
+
+    const cleaned = await t.mutation(api.workflow.cleanup, { workflowId });
+    expect(cleaned).toBe(true);
+
+    // Drain any continuations scheduled when budget was halfway consumed.
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    await t.run(async (ctx) => {
+      const workflow = await ctx.db.get("workflows", workflowId);
+      expect(workflow).toBeNull();
+      const remaining = await ctx.db
+        .query("steps")
+        .withIndex("workflow", (q) => q.eq("workflowId", workflowId))
+        .collect();
+      expect(remaining).toHaveLength(0);
+    });
+  });
+
   test("cleanup with mixed event and workflow steps", async () => {
     const t = initConvexTest();
 
     // Create parent workflow
     const parentWorkflowId = await t.mutation(api.workflow.create, {
       workflowName: "parent-workflow",
-      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowHandle: "function://;workflow.test:noop",
       workflowArgs: { location: "San Francisco" },
       startAsync: true,
     });
@@ -596,7 +651,7 @@ describe("workflow", () => {
           step: {
             kind: "workflow" as const,
             name: "workflow-step",
-            handle: "function://internal.example.exampleWorkflow",
+            handle: "function://;workflow.test:noop",
             inProgress: true,
             argsSize: 0,
             args: { location: "New York" },
@@ -656,3 +711,5 @@ describe("workflow", () => {
     });
   });
 });
+
+export const noop = internalMutation({ args: v.any(), handler: () => {} });

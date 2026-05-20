@@ -7,6 +7,7 @@ import {
 } from "convex/server";
 import { type Infer, v } from "convex/values";
 import {
+  internalMutation,
   internalQuery,
   mutation,
   type MutationCtx,
@@ -477,14 +478,39 @@ export const cleanup = mutation({
     }
     logger.debug(`Cleaning up workflow ${workflowId}`, workflow);
     await ctx.db.delete("workflows", workflowId);
-    const journalEntries = await ctx.db
-      .query("steps")
-      .withIndex("workflow", (q) => q.eq("workflowId", workflowId))
-      .collect();
-    await deleteSteps(ctx, journalEntries);
+    await cleanupStepsFrom(ctx, workflowId, 0);
     return true;
   },
 });
+
+export const cleanupContinue = internalMutation({
+  args: {
+    workflowId: v.id("workflows"),
+    fromStepNumber: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await cleanupStepsFrom(ctx, args.workflowId, args.fromStepNumber);
+    return null;
+  },
+});
+
+const CLEANUP_BATCH_SIZE = 256;
+
+async function transactionBudgetMostlyConsumed(
+  ctx: MutationCtx,
+): Promise<boolean> {
+  const m = await ctx.meta.getTransactionMetrics();
+  return (
+    m.bytesRead.used > m.bytesRead.remaining ||
+    m.bytesWritten.used > m.bytesWritten.remaining ||
+    m.databaseQueries.used > m.databaseQueries.remaining ||
+    m.documentsRead.used > m.documentsRead.remaining ||
+    m.documentsWritten.used > m.documentsWritten.remaining ||
+    m.functionsScheduled.used > m.functionsScheduled.remaining ||
+    m.scheduledFunctionArgsBytes.used > m.scheduledFunctionArgsBytes.remaining
+  );
+}
 
 async function updateMaxParallelism(
   ctx: MutationCtx,
@@ -502,18 +528,51 @@ async function updateMaxParallelism(
   }
 }
 
-async function deleteSteps(ctx: MutationCtx, steps: Doc<"steps">[]) {
-  for (const entry of steps) {
-    await ctx.db.delete("steps", entry._id);
-    if (entry.step.kind === "event" && entry.step.eventId) {
-      await ctx.db.delete("events", entry.step.eventId);
-    } else if (entry.step.kind === "workflow" && entry.step.workflowId) {
-      const workpool = await getWorkpool(ctx, {});
-      await workpool.enqueueMutation(ctx, api.workflow.cleanup, {
-        workflowId: entry.step.workflowId,
-        force: true,
+async function cleanupStepsFrom(
+  ctx: MutationCtx,
+  workflowId: Id<"workflows">,
+  fromStepNumber: number,
+) {
+  while (true) {
+    const batch = await ctx.db
+      .query("steps")
+      .withIndex("workflow", (q) =>
+        q.eq("workflowId", workflowId).gte("stepNumber", fromStepNumber),
+      )
+      .take(CLEANUP_BATCH_SIZE);
+    if (batch.length === 0) return;
+    await deleteSteps(ctx, batch);
+    fromStepNumber = batch[batch.length - 1].stepNumber + 1;
+    if (batch.length < CLEANUP_BATCH_SIZE) return;
+    if (await transactionBudgetMostlyConsumed(ctx)) {
+      await ctx.scheduler.runAfter(0, internal.workflow.cleanupContinue, {
+        workflowId,
+        fromStepNumber,
       });
+      return;
     }
+  }
+}
+
+async function deleteSteps(ctx: MutationCtx, batch: Doc<"steps">[]) {
+  const nestedWorkflowIds: Id<"workflows">[] = [];
+  await Promise.all(
+    batch.map(async (entry) => {
+      await ctx.db.delete("steps", entry._id);
+      if (entry.step.kind === "event" && entry.step.eventId) {
+        await ctx.db.delete("events", entry.step.eventId);
+      } else if (entry.step.kind === "workflow" && entry.step.workflowId) {
+        nestedWorkflowIds.push(entry.step.workflowId);
+      }
+    }),
+  );
+  if (nestedWorkflowIds.length > 0) {
+    const workpool = await getWorkpool(ctx, {});
+    await workpool.enqueueMutationBatch(
+      ctx,
+      api.workflow.cleanup,
+      nestedWorkflowIds.map((id) => ({ workflowId: id, force: true })),
+    );
   }
 }
 

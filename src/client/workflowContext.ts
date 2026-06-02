@@ -34,9 +34,12 @@ type InlineArgs =
       inline: true;
       runAt?: never;
       runAfter?: never;
+      transactionLimits?: TransactionLimits;
     }
   | {
       inline?: false;
+      /** @deprecated Unsupported when inline is false */
+      transactionLimits?: TransactionLimits;
     };
 
 export type WorkflowCtx = {
@@ -53,13 +56,7 @@ export type WorkflowCtx = {
    */
   runQuery<Query extends FunctionReference<"query", FunctionVisibility>>(
     query: Query,
-    ...args: OptionalRestArgs<
-      RunOptions &
-        InlineArgs & {
-          transactionLimits?: TransactionLimits;
-        },
-      Query
-    >
+    ...args: OptionalRestArgs<RunOptions & InlineArgs, Query>
   ): Promise<FunctionReturnType<Query>>;
 
   /**
@@ -73,10 +70,7 @@ export type WorkflowCtx = {
     Mutation extends FunctionReference<"mutation", FunctionVisibility>,
   >(
     mutation: Mutation,
-    ...args: OptionalRestArgs<
-      RunOptions & InlineArgs & { transactionLimits?: TransactionLimits },
-      Mutation
-    >
+    ...args: OptionalRestArgs<RunOptions & InlineArgs, Mutation>
   ): Promise<FunctionReturnType<Mutation>>;
 
   /**

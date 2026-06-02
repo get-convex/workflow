@@ -13,6 +13,7 @@ import type { Validator } from "convex/values";
 import type { EventId, SchedulerOptions, WorkflowId } from "../types.js";
 import { safeFunctionName } from "./safeFunctionName.js";
 import type { StepRequest } from "./step.js";
+import type { TransactionLimits } from "./types.js";
 
 export type RunOptions = {
   /**
@@ -159,6 +160,7 @@ export function createWorkflowCtx(
         inline: false,
         unstableArgs: unstableArgs ?? false,
         schedulerOptions,
+        transactionLimits: undefined,
       });
     },
 
@@ -173,6 +175,7 @@ export function createWorkflowCtx(
         inline: false,
         unstableArgs: false,
         schedulerOptions: { runAfter: duration },
+        transactionLimits: undefined,
       });
     },
 
@@ -187,6 +190,7 @@ export function createWorkflowCtx(
         inline: false,
         unstableArgs: false,
         schedulerOptions: {},
+        transactionLimits: undefined,
       });
       if (event.validator) {
         return parse(event.validator, result);
@@ -203,9 +207,19 @@ async function runFunction<
   functionType: FunctionType,
   f: F,
   args: Record<string, unknown> | undefined,
-  opts?: RunOptions & { inline?: boolean } & RetryOption,
+  opts?: RunOptions & {
+    inline?: boolean;
+    transactionLimits?: TransactionLimits;
+  } & RetryOption,
 ): Promise<unknown> {
-  const { name, retry, inline, unstableArgs, ...schedulerOptions } = opts ?? {};
+  const {
+    name,
+    retry,
+    inline,
+    transactionLimits,
+    unstableArgs,
+    ...schedulerOptions
+  } = opts ?? {};
   if (
     inline &&
     schedulerOptions &&
@@ -215,6 +229,9 @@ async function runFunction<
   }
   if (inline && functionType === "action") {
     throw new Error("Cannot run an action inline.");
+  }
+  if (!inline && transactionLimits) {
+    throw new Error("Cannot set transaction limits for non-inline functions.");
   }
   return run(sender, {
     name: name ?? safeFunctionName(f),
@@ -227,6 +244,7 @@ async function runFunction<
     retry,
     inline: inline ?? false,
     unstableArgs: unstableArgs ?? false,
+    transactionLimits,
     schedulerOptions,
   });
 }
@@ -254,15 +272,4 @@ async function run(
     default:
       throw new Error("Unknown result kind: " + (result as any).kind);
   }
-}
-
-// Exposed in future version of Convex
-interface TransactionLimits {
-  bytesRead?: number;
-  bytesWritten?: number;
-  databaseQueries?: number;
-  documentsRead?: number;
-  documentsWritten?: number;
-  functionsScheduled?: number;
-  scheduledFunctionArgsBytes?: number;
 }

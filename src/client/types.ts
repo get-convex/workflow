@@ -11,3 +11,14 @@ export type IdsToStrings<T> =
       : T extends Record<string, Value | undefined>
         ? { [K in keyof T]: IdsToStrings<T[K]> }
         : T;
+
+// Exposed in future version of Convex
+export interface TransactionLimits {
+  bytesRead?: number;
+  bytesWritten?: number;
+  databaseQueries?: number;
+  documentsRead?: number;
+  documentsWritten?: number;
+  functionsScheduled?: number;
+  scheduledFunctionArgsBytes?: number;
+}

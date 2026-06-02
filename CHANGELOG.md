@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.3
+
+- Update peer deps for workpool to leverage the recent optimizations by default
+
 ## 0.4.2
 
 - Make `cleanup` resilient to workflows with many steps, events, and nested

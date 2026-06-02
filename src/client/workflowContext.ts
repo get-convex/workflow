@@ -2,6 +2,7 @@ import type { RetryOption, RunResult } from "@convex-dev/workpool";
 import { BaseChannel } from "async-channel";
 import { parse } from "convex-helpers/validators";
 import type {
+  ArgsAndOptions,
   FunctionArgs,
   FunctionReference,
   FunctionReturnType,
@@ -56,7 +57,7 @@ export type WorkflowCtx = {
    */
   runQuery<Query extends FunctionReference<"query", FunctionVisibility>>(
     query: Query,
-    ...args: OptionalRestArgs<RunOptions & InlineArgs, Query>
+    ...args: ArgsAndOptions<Query, RunOptions & InlineArgs>
   ): Promise<FunctionReturnType<Query>>;
 
   /**
@@ -70,7 +71,7 @@ export type WorkflowCtx = {
     Mutation extends FunctionReference<"mutation", FunctionVisibility>,
   >(
     mutation: Mutation,
-    ...args: OptionalRestArgs<RunOptions & InlineArgs, Mutation>
+    ...args: ArgsAndOptions<Mutation, RunOptions & InlineArgs>
   ): Promise<FunctionReturnType<Mutation>>;
 
   /**
@@ -82,7 +83,7 @@ export type WorkflowCtx = {
    */
   runAction<Action extends FunctionReference<"action", FunctionVisibility>>(
     action: Action,
-    ...args: OptionalRestArgs<RunOptions & RetryOption, Action>
+    ...args: ArgsAndOptions<Action, RunOptions & RetryOption>
   ): Promise<FunctionReturnType<Action>>;
 
   /**
@@ -126,14 +127,6 @@ export type WorkflowCtx = {
    */
   sleep(duration: number, opts?: { name?: string }): Promise<void>;
 };
-
-export type OptionalRestArgs<
-  Opts,
-  FuncRef extends FunctionReference<FunctionType, FunctionVisibility>,
-> =
-  FuncRef["_args"] extends Record<string, never>
-    ? [args?: Record<string, never>, opts?: Opts]
-    : [args: FuncRef["_args"], opts?: Opts];
 
 export function createWorkflowCtx(
   workflowId: WorkflowId,

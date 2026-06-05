@@ -173,14 +173,16 @@ export class StepExecutor {
           try {
             const result =
               target.functionType === "query"
-                ? await this.ctx.runQuery(
+                ? // cast until transactionLimits is shipped / peer dep
+                  await (this.ctx.runQuery as any)(
                     target.function as FunctionReference<
                       typeof target.functionType
                     >,
                     target.args,
                     { transactionLimits: message.transactionLimits },
                   )
-                : await this.ctx.runMutation(
+                : // cast until transactionLimits is shipped / peer dep
+                  await (this.ctx.runMutation as any)(
                     target.function as FunctionReference<
                       typeof target.functionType
                     >,

@@ -368,6 +368,7 @@ describe("unstableArgs", () => {
       inline: false,
       unstableArgs: opts.unstableArgs,
       schedulerOptions: {},
+      transactionLimits: undefined,
       resolve: () => {},
     };
   }

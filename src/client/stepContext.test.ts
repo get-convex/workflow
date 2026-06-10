@@ -7,7 +7,7 @@ import type { JournalEntry } from "../component/schema.js";
 import { createWorkflowCtx } from "./workflowContext.js";
 import type { WorkflowId } from "../types.js";
 import { anyApi, type FunctionReference } from "convex/server";
-import { initConvexTest } from "../component/setup.test.js";
+import { initConvexTest } from "./setup.test.js";
 
 // Fake function reference that satisfies the type constraints.
 function fakeFuncRef(name: string) {

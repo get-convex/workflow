@@ -36,11 +36,18 @@ type InlineArgs =
       inline: true;
       runAt?: never;
       runAfter?: never;
+      /**
+       * Per-transaction resource limits enforced on this inline step's
+       * transaction. Exceeding a limit throws a catchable error in the
+       * workflow handler.
+       *
+       * **Requires Convex >= 1.41.** Only supported for `inline` steps.
+       */
       transactionLimits?: TransactionLimits;
     }
   | {
       inline?: false;
-      /** @deprecated Unsupported when inline is false */
+      /** @deprecated `transactionLimits` is only supported when `inline` is true. */
       transactionLimits?: TransactionLimits;
     };
 

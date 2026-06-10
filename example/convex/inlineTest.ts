@@ -165,6 +165,47 @@ export const dependentInlineQueries = workflow
     return { first, second };
   });
 
+// ── Test 8: transactionLimits error is catchable ──
+// Runs an inline mutation with a transactionLimits cap so tight it must be
+// exceeded (writing any document exceeds documentsWritten: 0). The resulting
+// error is caught in the handler, and the workflow continues by running the
+// same mutation again without limits. Requires Convex >= 1.41 to enforce.
+export const catchTransactionLimit = workflow
+  .define({
+    args: { key: v.string() },
+    returns: v.object({ caught: v.boolean(), finalValue: v.number() }),
+  })
+  .handler(async (step, args) => {
+    let caught = false;
+    try {
+      await step.runMutation(
+        internal.inlineTest.incrementCounter,
+        { key: args.key },
+        { inline: true, transactionLimits: { documentsWritten: 0 } },
+      );
+    } catch (e) {
+      caught = true;
+      console.error(
+        "caught transaction limit error:",
+        e instanceof Error ? e.message : e,
+      );
+    }
+    // Continue: run the same mutation again, this time without any limits.
+    const finalValue = await step.runMutation(
+      internal.inlineTest.incrementCounter,
+      { key: args.key },
+      { inline: true },
+    );
+    return { caught, finalValue };
+  });
+
+export const catchTransactionLimitStatus = internalQuery({
+  args: { workflowId: v.string() },
+  handler: async (ctx, { workflowId }) => {
+    return await workflow.status(ctx, workflowId as any);
+  },
+});
+
 // ── Helper functions ──────────────────────────
 
 export const getCounter = internalQuery({

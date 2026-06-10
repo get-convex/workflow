@@ -1,4 +1,4 @@
-import { describe, it, expect, test } from "vitest";
+import { describe, it, expect, test, vi } from "vitest";
 import { BaseChannel } from "async-channel";
 import type { RunResult } from "@convex-dev/workpool";
 import type { StepRequest } from "./step.js";
@@ -491,5 +491,118 @@ describe("unstableArgs", () => {
     expect(calls[5].unstableArgs).toBe(false);
     expect(calls[6].unstableArgs).toBe(false);
     expect(calls[7].unstableArgs).toBe(false);
+  });
+});
+
+describe("transactionLimits", () => {
+  const limits = { documentsRead: 5, bytesWritten: 100 };
+
+  test("passes through inline runQuery/runMutation into the StepRequest", async () => {
+    const channel = new BaseChannel<StepRequest>(0);
+    const ctx = createWorkflowCtx("wf-test" as any, channel);
+
+    const calls: StepRequest[] = [];
+    const drain = async () => {
+      for (let i = 0; i < 3; i++) {
+        const msg = await channel.get();
+        calls.push(msg);
+        msg.resolve({ kind: "success", returnValue: null });
+      }
+    };
+
+    await Promise.all([
+      (async () => {
+        await ctx.runQuery(
+          fakeFuncRef("q"),
+          {},
+          { inline: true, transactionLimits: limits },
+        );
+        await ctx.runMutation(
+          fakeFuncRef("m"),
+          {},
+          { inline: true, transactionLimits: limits },
+        );
+        // Inline without transactionLimits defaults to undefined.
+        await ctx.runQuery(fakeFuncRef("q2"), {}, { inline: true });
+      })(),
+      drain(),
+    ]);
+
+    expect(calls[0].transactionLimits).toEqual(limits);
+    expect(calls[1].transactionLimits).toEqual(limits);
+    expect(calls[2].transactionLimits).toBeUndefined();
+  });
+
+  test("forwards transactionLimits to ctx.runQuery during inline execution", async () => {
+    const recorded: Array<{ args: unknown; opts: unknown }> = [];
+    const fakeCtx = {
+      runQuery: (_fn: unknown, args: unknown, opts: unknown) => {
+        recorded.push({ args, opts });
+        return Promise.resolve(123);
+      },
+      // The journal persistence call (component.journal.startSteps) also goes
+      // through runMutation; return an empty set of entries for it.
+      runMutation: () => Promise.resolve([]),
+    };
+    const executor = new StepExecutor(
+      "wf-test",
+      0,
+      fakeCtx as any,
+      { journal: { startSteps: "handle" } } as any,
+      [],
+      new BaseChannel<StepRequest>(0),
+      Date.now(),
+      undefined,
+    );
+
+    const message: StepRequest = {
+      name: "q",
+      target: {
+        kind: "function",
+        functionType: "query",
+        function: fakeFuncRef("q"),
+        args: { a: 1 },
+      },
+      retry: undefined,
+      inline: true,
+      unstableArgs: false,
+      transactionLimits: limits,
+      schedulerOptions: {},
+      resolve: () => {},
+    };
+
+    await executor.startSteps([message]);
+
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].args).toEqual({ a: 1 });
+    expect(recorded[0].opts).toEqual({ transactionLimits: limits });
+  });
+
+  test("rejects transactionLimits / inline where unsupported", async () => {
+    const channel = new BaseChannel<StepRequest>(0);
+    const ctx = createWorkflowCtx("wf-test" as any, channel);
+
+    // Actions cannot run inline.
+    await expect(
+      (ctx.runAction as any)(fakeFuncRef("a"), {}, { inline: true }),
+    ).rejects.toThrow("Cannot run an action inline.");
+
+    // transactionLimits is only valid for inline steps.
+    await expect(
+      (ctx.runMutation as any)(
+        fakeFuncRef("m"),
+        {},
+        { transactionLimits: limits },
+      ),
+    ).rejects.toThrow("Cannot set transaction limits for non-inline functions.");
+
+    // inline cannot be combined with scheduling.
+    await expect(
+      (ctx.runQuery as any)(
+        fakeFuncRef("q"),
+        {},
+        { inline: true, runAfter: 1000 },
+      ),
+    ).rejects.toThrow("Cannot combine `inline` with `runAt` or `runAfter`.");
   });
 });

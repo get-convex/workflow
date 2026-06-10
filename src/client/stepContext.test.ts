@@ -1,4 +1,4 @@
-import { describe, it, expect, test, vi } from "vitest";
+import { describe, it, expect, test } from "vitest";
 import { BaseChannel } from "async-channel";
 import type { RunResult } from "@convex-dev/workpool";
 import type { StepRequest } from "./step.js";
@@ -7,6 +7,7 @@ import type { JournalEntry } from "../component/schema.js";
 import { createWorkflowCtx } from "./workflowContext.js";
 import type { WorkflowId } from "../types.js";
 import { anyApi, type FunctionReference } from "convex/server";
+import { initConvexTest } from "../component/setup.test.js";
 
 // Fake function reference that satisfies the type constraints.
 function fakeFuncRef(name: string) {
@@ -571,7 +572,10 @@ describe("transactionLimits", () => {
       resolve: () => {},
     };
 
-    await executor.startSteps([message]);
+    // Inline execution calls `createFunctionHandle`, whose syscall is only
+    // available inside a backend context, so run within convex-test's `t.run`.
+    const t = initConvexTest();
+    await t.run(() => executor.startSteps([message]));
 
     expect(recorded).toHaveLength(1);
     expect(recorded[0].args).toEqual({ a: 1 });
@@ -594,7 +598,9 @@ describe("transactionLimits", () => {
         {},
         { transactionLimits: limits },
       ),
-    ).rejects.toThrow("Cannot set transaction limits for non-inline functions.");
+    ).rejects.toThrow(
+      "Cannot set transaction limits for non-inline functions.",
+    );
 
     // inline cannot be combined with scheduling.
     await expect(

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.4
+
+- Adds support for `transactionLimits` (requires convex >= 1.41) when running
+  inline queries / mutations.
+- Updates the `ctx` type to be more permissive in usage, and compatible with
+  updates to convex types up to 1.41.
+
 ## 0.4.3
 
 - Update peer deps for workpool to leverage the recent optimizations by default

@@ -2,6 +2,7 @@ import type { RetryOption, RunResult } from "@convex-dev/workpool";
 import { BaseChannel } from "async-channel";
 import { parse } from "convex-helpers/validators";
 import type {
+  ArgsAndOptions,
   FunctionArgs,
   FunctionReference,
   FunctionReturnType,
@@ -12,6 +13,7 @@ import type { Validator } from "convex/values";
 import type { EventId, SchedulerOptions, WorkflowId } from "../types.js";
 import { safeFunctionName } from "./safeFunctionName.js";
 import type { StepRequest } from "./step.js";
+import type { TransactionLimits } from "./types.js";
 
 export type RunOptions = {
   /**
@@ -34,9 +36,19 @@ type InlineArgs =
       inline: true;
       runAt?: never;
       runAfter?: never;
+      /**
+       * Per-transaction resource limits enforced on this inline step's
+       * transaction. Exceeding a limit throws a catchable error in the
+       * workflow handler.
+       *
+       * **Requires Convex >= 1.41.** Only supported for `inline` steps.
+       */
+      transactionLimits?: TransactionLimits;
     }
   | {
       inline?: false;
+      /** @deprecated `transactionLimits` is only supported when `inline` is true. */
+      transactionLimits?: TransactionLimits;
     };
 
 export type WorkflowCtx = {
@@ -53,7 +65,7 @@ export type WorkflowCtx = {
    */
   runQuery<Query extends FunctionReference<"query", FunctionVisibility>>(
     query: Query,
-    ...args: OptionalRestArgs<RunOptions & InlineArgs, Query>
+    ...args: ArgsAndOptions<Query, RunOptions & InlineArgs>
   ): Promise<FunctionReturnType<Query>>;
 
   /**
@@ -67,7 +79,7 @@ export type WorkflowCtx = {
     Mutation extends FunctionReference<"mutation", FunctionVisibility>,
   >(
     mutation: Mutation,
-    ...args: OptionalRestArgs<RunOptions & InlineArgs, Mutation>
+    ...args: ArgsAndOptions<Mutation, RunOptions & InlineArgs>
   ): Promise<FunctionReturnType<Mutation>>;
 
   /**
@@ -79,7 +91,7 @@ export type WorkflowCtx = {
    */
   runAction<Action extends FunctionReference<"action", FunctionVisibility>>(
     action: Action,
-    ...args: OptionalRestArgs<RunOptions & RetryOption, Action>
+    ...args: ArgsAndOptions<Action, RunOptions & RetryOption>
   ): Promise<FunctionReturnType<Action>>;
 
   /**
@@ -124,14 +136,6 @@ export type WorkflowCtx = {
   sleep(duration: number, opts?: { name?: string }): Promise<void>;
 };
 
-export type OptionalRestArgs<
-  Opts,
-  FuncRef extends FunctionReference<FunctionType, FunctionVisibility>,
-> =
-  FuncRef["_args"] extends Record<string, never>
-    ? [args?: Record<string, never>, opts?: Opts]
-    : [args: FuncRef["_args"], opts?: Opts];
-
 export function createWorkflowCtx(
   workflowId: WorkflowId,
   sender: BaseChannel<StepRequest>,
@@ -163,6 +167,7 @@ export function createWorkflowCtx(
         inline: false,
         unstableArgs: unstableArgs ?? false,
         schedulerOptions,
+        transactionLimits: undefined,
       });
     },
 
@@ -177,6 +182,7 @@ export function createWorkflowCtx(
         inline: false,
         unstableArgs: false,
         schedulerOptions: { runAfter: duration },
+        transactionLimits: undefined,
       });
     },
 
@@ -191,6 +197,7 @@ export function createWorkflowCtx(
         inline: false,
         unstableArgs: false,
         schedulerOptions: {},
+        transactionLimits: undefined,
       });
       if (event.validator) {
         return parse(event.validator, result);
@@ -207,9 +214,19 @@ async function runFunction<
   functionType: FunctionType,
   f: F,
   args: Record<string, unknown> | undefined,
-  opts?: RunOptions & { inline?: boolean } & RetryOption,
+  opts?: RunOptions & {
+    inline?: boolean;
+    transactionLimits?: TransactionLimits;
+  } & RetryOption,
 ): Promise<unknown> {
-  const { name, retry, inline, unstableArgs, ...schedulerOptions } = opts ?? {};
+  const {
+    name,
+    retry,
+    inline,
+    transactionLimits,
+    unstableArgs,
+    ...schedulerOptions
+  } = opts ?? {};
   if (
     inline &&
     schedulerOptions &&
@@ -219,6 +236,9 @@ async function runFunction<
   }
   if (inline && functionType === "action") {
     throw new Error("Cannot run an action inline.");
+  }
+  if (!inline && transactionLimits) {
+    throw new Error("Cannot set transaction limits for non-inline functions.");
   }
   return run(sender, {
     name: name ?? safeFunctionName(f),
@@ -231,6 +251,7 @@ async function runFunction<
     retry,
     inline: inline ?? false,
     unstableArgs: unstableArgs ?? false,
+    transactionLimits,
     schedulerOptions,
   });
 }

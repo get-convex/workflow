@@ -17,7 +17,10 @@ export const componentModules = import.meta.glob("../component/**/*.ts");
 export function initConvexTest<
   Schema extends SchemaDefinition<GenericSchema, boolean>,
 >(schema?: Schema) {
-  const t = convexTest(schema ?? defineSchema({}), modules);
+  const t = convexTest(schema ?? defineSchema({}), {
+    ...modules,
+    _generated: async () => ({}), // so convex-test thinks this is a real convex directory
+  });
   t.registerComponent("workflow", componentSchema, componentModules);
   return t;
 }

@@ -14,7 +14,11 @@ import {
 } from "convex/server";
 import { convexToJson, getConvexSize, type Value } from "convex/values";
 import { type JournalEntry, type Step } from "../component/schema.js";
-import type { IdsToStrings, WorkflowComponent } from "./types.js";
+import type {
+  IdsToStrings,
+  TransactionLimits,
+  WorkflowComponent,
+} from "./types.js";
 import { MAX_JOURNAL_SIZE, formatErrorWithStack } from "../shared.js";
 import type { EventId, SchedulerOptions } from "../types.js";
 import { pick } from "convex-helpers";
@@ -48,6 +52,7 @@ export type StepRequest = {
   retry: RetryBehavior | boolean | undefined;
   inline: boolean;
   unstableArgs: boolean;
+  transactionLimits: TransactionLimits | undefined;
   schedulerOptions: SchedulerOptions;
 
   resolve: (result: RunResult) => void;
@@ -168,17 +173,21 @@ export class StepExecutor {
           try {
             const result =
               target.functionType === "query"
-                ? await this.ctx.runQuery(
+                ? // cast until transactionLimits is shipped / peer dep
+                  await (this.ctx.runQuery as any)(
                     target.function as FunctionReference<
                       typeof target.functionType
                     >,
                     target.args,
+                    { transactionLimits: message.transactionLimits },
                   )
-                : await this.ctx.runMutation(
+                : // cast until transactionLimits is shipped / peer dep
+                  await (this.ctx.runMutation as any)(
                     target.function as FunctionReference<
                       typeof target.functionType
                     >,
                     target.args,
+                    { transactionLimits: message.transactionLimits },
                   );
             runResult = { kind: "success", returnValue: result ?? null };
           } catch (error: unknown) {

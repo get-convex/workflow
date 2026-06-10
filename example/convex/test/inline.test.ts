@@ -3,8 +3,8 @@
 import { getStatus, WorkflowManager } from "@convex-dev/workflow";
 import { assert } from "convex-helpers";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { components, internal } from "./_generated/api";
-import { initConvexTest } from "./setup.test";
+import { components, internal } from "../_generated/api";
+import { initConvexTest } from "../setup.test";
 
 const workflow = new WorkflowManager(components.workflow);
 
@@ -19,7 +19,7 @@ describe("inline queries and mutations", () => {
   test("sequential inline queries complete in one poll", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.inlineTest.sequentialInlineQueries, {
+      workflow.start(ctx, internal.test.inline.sequentialInlineQueries, {
         key: "seq_test",
       }),
     );
@@ -35,7 +35,7 @@ describe("inline queries and mutations", () => {
   test("parallel inline queries resolve in push order", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.inlineTest.parallelInlineQueries, {
+      workflow.start(ctx, internal.test.inline.parallelInlineQueries, {
         key: "par_test",
       }),
     );
@@ -58,7 +58,7 @@ describe("inline queries and mutations", () => {
   test("Promise.race picks first-pushed query", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.inlineTest.raceInlineQueries, {
+      workflow.start(ctx, internal.test.inline.raceInlineQueries, {
         key: "race_test",
       }),
     );
@@ -75,7 +75,7 @@ describe("inline queries and mutations", () => {
   test("inline mutations execute and return sequentially", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.inlineTest.inlineMutations, {
+      workflow.start(ctx, internal.test.inline.inlineMutations, {
         key: "mut_test",
       }),
     );
@@ -92,7 +92,7 @@ describe("inline queries and mutations", () => {
   test("mixed inline + action: query runs inline, action via workpool", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.inlineTest.mixedInlineAndAction, {
+      workflow.start(ctx, internal.test.inline.mixedInlineAndAction, {
         key: "mixed_test",
       }),
     );
@@ -113,7 +113,7 @@ describe("inline queries and mutations", () => {
   test("dependent inline queries: second uses result of first", async () => {
     const t = initConvexTest();
     const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.inlineTest.dependentInlineQueries, {
+      workflow.start(ctx, internal.test.inline.dependentInlineQueries, {
         key: "dep_test",
       }),
     );

@@ -1,11 +1,11 @@
 import { WorkflowManager } from "@convex-dev/workflow";
 import { v } from "convex/values";
-import { components, internal } from "./_generated/api.js";
+import { components, internal } from "../_generated/api.js";
 import {
   internalAction,
   internalMutation,
   internalQuery,
-} from "./_generated/server.js";
+} from "../_generated/server.js";
 
 export const workflow = new WorkflowManager(components.workflow);
 
@@ -18,12 +18,12 @@ export const sequentialInlineQueries = workflow
   })
   .handler(async (step, args) => {
     const a = await step.runQuery(
-      internal.inlineTest.getCounter,
+      internal.test.inline.getCounter,
       { key: args.key },
       { inline: true },
     );
     const b = await step.runQuery(
-      internal.inlineTest.getCounter,
+      internal.test.inline.getCounter,
       { key: args.key + "_other" },
       { inline: true },
     );
@@ -48,7 +48,7 @@ export const parallelInlineQueries = workflow
     const resolveOrder: string[] = [];
     const aPromise = step
       .runQuery(
-        internal.inlineTest.getCounter,
+        internal.test.inline.getCounter,
         { key: args.key },
         { inline: true },
       )
@@ -58,7 +58,7 @@ export const parallelInlineQueries = workflow
       });
     const bPromise = step
       .runQuery(
-        internal.inlineTest.getCounter,
+        internal.test.inline.getCounter,
         { key: args.key + "_other" },
         { inline: true },
       )
@@ -81,14 +81,14 @@ export const raceInlineQueries = workflow
   .handler(async (step, args) => {
     const aPromise = step
       .runQuery(
-        internal.inlineTest.getCounter,
+        internal.test.inline.getCounter,
         { key: args.key },
         { inline: true },
       )
       .then((val) => ({ winner: "a", value: val }));
     const bPromise = step
       .runQuery(
-        internal.inlineTest.getCounter,
+        internal.test.inline.getCounter,
         { key: args.key + "_other" },
         { inline: true },
       )
@@ -105,12 +105,12 @@ export const inlineMutations = workflow
   })
   .handler(async (step, args) => {
     const first = await step.runMutation(
-      internal.inlineTest.incrementCounter,
+      internal.test.inline.incrementCounter,
       { key: args.key },
       { inline: true },
     );
     const second = await step.runMutation(
-      internal.inlineTest.incrementCounter,
+      internal.test.inline.incrementCounter,
       { key: args.key },
       { inline: true },
     );
@@ -130,11 +130,11 @@ export const mixedInlineAndAction = workflow
   })
   .handler(async (step, args) => {
     const queryPromise = step.runQuery(
-      internal.inlineTest.getCounter,
+      internal.test.inline.getCounter,
       { key: args.key },
       { inline: true },
     );
-    const actionPromise = step.runAction(internal.inlineTest.someAction, {
+    const actionPromise = step.runAction(internal.test.inline.someAction, {
       label: args.key,
     });
     const [queryResult, actionResult] = await Promise.all([
@@ -153,12 +153,12 @@ export const dependentInlineQueries = workflow
   })
   .handler(async (step, args) => {
     const first = await step.runQuery(
-      internal.inlineTest.getCounter,
+      internal.test.inline.getCounter,
       { key: args.key },
       { inline: true },
     );
     const second = await step.runQuery(
-      internal.inlineTest.getCounter,
+      internal.test.inline.getCounter,
       { key: first === 0 ? args.key + "_zero" : args.key + "_nonzero" },
       { inline: true },
     );
@@ -179,7 +179,7 @@ export const catchTransactionLimit = workflow
     let caught = false;
     try {
       await step.runMutation(
-        internal.inlineTest.incrementCounter,
+        internal.test.inline.incrementCounter,
         { key: args.key },
         { inline: true, transactionLimits: { documentsWritten: 0 } },
       );
@@ -192,13 +192,16 @@ export const catchTransactionLimit = workflow
     }
     // Continue: run the same mutation again, this time without any limits.
     const finalValue = await step.runMutation(
-      internal.inlineTest.incrementCounter,
+      internal.test.inline.incrementCounter,
       { key: args.key },
       { inline: true },
     );
     return { caught, finalValue };
   });
 
+// Run the workflow directly to validate manually, e.g.:
+//   npx convex run test/inline:catchTransactionLimit '{"args":{"key":"foo"}}'
+// then read its result with this status query.
 export const catchTransactionLimitStatus = internalQuery({
   args: { workflowId: v.string() },
   handler: async (ctx, { workflowId }) => {

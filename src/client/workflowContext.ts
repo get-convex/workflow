@@ -14,6 +14,28 @@ import type { EventId, SchedulerOptions, WorkflowId } from "../types.js";
 import { safeFunctionName } from "./safeFunctionName.js";
 import type { StepRequest } from "./step.js";
 import type { TransactionLimits } from "./types.js";
+import { assert } from "convex-helpers";
+
+export type EventNameOrId =
+  | { name?: string; id: EventId }
+  | { id?: EventId; name: string };
+
+export type RaceResult<
+  T extends ReadonlyArray<
+    EventNameOrId & {
+      validator?: Validator<any, any, any>;
+    }
+  >,
+> = {
+  [K in keyof T]: T[K] extends {
+    name: infer N extends string;
+    validator: Validator<infer V, any, any>;
+  }
+    ? { id: EventId; name: N; value: V }
+    : T[K] extends { name: infer N extends string }
+      ? { id: EventId; name: N; value: unknown }
+      : { id: EventId; name: string; value: unknown };
+}[number];
 
 export type RunOptions = {
   /**
@@ -134,6 +156,34 @@ export type WorkflowCtx = {
    * @param opts - Optionally name the step. Default: "sleep"
    */
   sleep(duration: number, opts?: { name?: string }): Promise<void>;
+
+  /**
+   * Waits for any one of multiple events, returning the first that fires.
+   *
+   * Each event in the array must have a unique name. The workflow blocks
+   * until an event with one of the given names is sent, then returns the
+   * matched event's name and value.
+   *
+   * @param events - Array of event definitions, each with a unique `name`
+   *   and an optional `validator` to parse the event's payload.
+   * @param opts - Optional options, including a custom step `name` for
+   *   observability (defaults to `"race(name1, name2, ...)"`) and a
+   *   `timeout` in milliseconds after which the race rejects with an error.
+   */
+  raceEvents<
+    const T extends ReadonlyArray<
+      EventNameOrId & {
+        validator?: Validator<any, any, any>;
+      }
+    >,
+  >(
+    events: T,
+    opts?: {
+      name?: string;
+      timeout?: number;
+      failure?: "fail" | "retry" | "discard";
+    },
+  ): Promise<RaceResult<T>>;
 };
 
 export function createWorkflowCtx(
@@ -203,6 +253,66 @@ export function createWorkflowCtx(
         return parse(event.validator, result);
       }
       return result as any;
+    },
+
+    raceEvents: async <
+      T extends ReadonlyArray<
+        EventNameOrId & {
+          validator?: Validator<any, any, any>;
+        }
+      >,
+    >(
+      events: T,
+      opts?: {
+        name?: string;
+        timeout?: number;
+        failure?: "fail" | "retry" | "discard";
+      },
+    ) => {
+      assert(events.length > 0, "At least one event must be specified.");
+      assert(
+        new Set(events.map((e) => e.id ?? e.name)).size === events.length,
+        "All events must have a unique name or id.",
+      );
+      assert(
+        opts?.timeout === undefined ||
+          (opts.timeout > 0 && Number.isFinite(opts.timeout)),
+        "Timeout must be a positive number.",
+      );
+      assert(
+        events.every((e) => e.id || e.name),
+        "All events must have an ID or a name.",
+      );
+      const result = await run(sender, {
+        name:
+          opts?.name ?? `race(${events.map((e) => e.name ?? e.id).join(", ")})`,
+        target: {
+          kind: "race",
+          args: {
+            events: events.map(({ validator: _validator, ...rest }) => rest),
+            timeout: opts?.timeout,
+            failure: opts?.failure,
+          },
+        },
+        retry: undefined,
+        inline: false,
+        unstableArgs: false,
+        schedulerOptions: {},
+        transactionLimits: undefined,
+      });
+      const eventId = (result as any).eventId as EventId;
+      const eventName = (result as any).eventName as string;
+      const rawValue = (result as any).value;
+      // Prefer matching the winning spec by id (events raced by id may not
+      // carry a name), falling back to the event's name.
+      const winner =
+        events.find((e) => e.id !== undefined && e.id === eventId) ??
+        events.find((e) => e.name === eventName);
+      return {
+        id: eventId,
+        name: eventName,
+        value: winner?.validator ? parse(winner.validator, rawValue) : rawValue,
+      } as RaceResult<T>;
     },
   } satisfies WorkflowCtx;
 }

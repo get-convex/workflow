@@ -22,6 +22,7 @@ import type {
 import { MAX_JOURNAL_SIZE, formatErrorWithStack } from "../shared.js";
 import type { EventId, SchedulerOptions } from "../types.js";
 import { pick } from "convex-helpers";
+import type { EventNameOrId } from "./workflowContext.js";
 
 export type WorkerResult =
   | { type: "handlerDone"; runResult: RunResult }
@@ -48,6 +49,14 @@ export type StepRequest = {
     | {
         kind: "sleep";
         args: Record<string, never>;
+      }
+    | {
+        kind: "race";
+        args: {
+          events: Array<EventNameOrId>;
+          timeout?: number;
+          failure?: "fail" | "retry" | "discard";
+        };
       };
   retry: RetryBehavior | boolean | undefined;
   inline: boolean;
@@ -233,6 +242,18 @@ export class StepExecutor {
             step = {
               kind: "sleep" as const,
               ...commonFields,
+            };
+            break;
+          case "race":
+            step = {
+              kind: "race" as const,
+              timeout:
+                target.args.timeout !== undefined
+                  ? { ms: target.args.timeout }
+                  : undefined,
+              failure: target.args.failure,
+              ...commonFields,
+              args: target.args,
             };
             break;
           default:

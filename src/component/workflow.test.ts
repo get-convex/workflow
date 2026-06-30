@@ -6,6 +6,7 @@ import { initConvexTest } from "./setup.test.js";
 import type { Id } from "./_generated/dataModel.js";
 import { internalMutation } from "./_generated/server.js";
 import { v } from "convex/values";
+import { assert } from "convex-helpers";
 
 describe("workflow", () => {
   beforeEach(async () => {
@@ -709,6 +710,299 @@ describe("workflow", () => {
       expect(nested).toBeNull();
       expect(event).toBeNull();
     });
+  });
+
+  test("race by id transitions pre-created events to waiting then resolves", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.mutation(api.workflow.create, {
+      workflowName: "race-by-id",
+      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowArgs: {},
+      startAsync: true,
+    });
+
+    const idA = await t.mutation(api.event.create, {
+      name: "byIdA",
+      workflowId,
+    });
+    const idB = await t.mutation(api.event.create, {
+      name: "byIdB",
+      workflowId,
+    });
+
+    const entries = await t.mutation(api.journal.startSteps, {
+      workflowId,
+      generationNumber: 0,
+      steps: [
+        {
+          step: {
+            kind: "race" as const,
+            name: "race(byIdA, byIdB)",
+            inProgress: true,
+            argsSize: 0,
+            args: { events: [{ id: idA }, { id: idB }] },
+            startedAt: Date.now(),
+          },
+        },
+      ],
+    });
+    const raceStepId = entries[0]._id as Id<"steps">;
+
+    // Both pre-created events should now be "waiting" on the race step, and no
+    // duplicate events should have been created.
+    await t.run(async (ctx) => {
+      const all = await ctx.db
+        .query("events")
+        .withIndex("workflowId_state", (q) => q.eq("workflowId", workflowId))
+        .collect();
+      expect(all.length).toBe(2);
+      for (const event of all) {
+        expect(event.state.kind).toBe("waiting");
+        assert(event.state.kind === "waiting");
+        expect(event.state.stepId).toBe(raceStepId);
+      }
+      const step = await ctx.db.get(raceStepId);
+      assert(step && step.step.kind === "race");
+      expect(new Set(step.step.events?.map((e) => e.id))).toEqual(
+        new Set([idA, idB]),
+      );
+      expect(step.step.inProgress).toBe(true);
+    });
+
+    // Sending the first event by id wins the race; the loser is consumed.
+    await t.mutation(api.event.send, {
+      eventId: idA,
+      result: { kind: "success", returnValue: "winner" },
+    });
+
+    await t.run(async (ctx) => {
+      const step = await ctx.db.get(raceStepId);
+      assert(step && step.step.kind === "race");
+      expect(step.step.inProgress).toBe(false);
+      expect(step.step.raceWinnerEventId).toBe(idA);
+      expect(step.step.runResult).toEqual({
+        kind: "success",
+        returnValue: { eventName: "byIdA", eventId: idA, value: "winner" },
+      });
+      const eventA = await ctx.db.get(idA);
+      expect(eventA?.state.kind).toBe("consumed");
+      // The losing pre-created event is consumed (not deleted), so its id stays
+      // resolvable; it is keyed to the same race step as the winner.
+      const eventB = await ctx.db.get(idB);
+      expect(eventB?.state.kind).toBe("consumed");
+      assert(eventB?.state.kind === "consumed");
+      expect(eventB.state.stepId).toBe(raceStepId);
+    });
+  });
+
+  test("race synchronous completion consumes the winner and pre-created losers, leaves later-sent events alone", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.mutation(api.workflow.create, {
+      workflowName: "race-sync-cleanup",
+      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowArgs: {},
+      startAsync: true,
+    });
+
+    // A pre-created, never-sent event (id-based loser).
+    const idCreated = await t.mutation(api.event.create, {
+      name: "preCreated",
+      workflowId,
+    });
+    // Two events already "sent" before the race runs. The earliest-sent wins
+    // (default "fail" mode); the other was sent *after* the winner.
+    const winnerEventId = await t.mutation(api.event.send, {
+      workflowId,
+      name: "win",
+      result: { kind: "success", returnValue: "winner" },
+    });
+    const sentAfterWinnerId = await t.mutation(api.event.send, {
+      workflowId,
+      name: "loseSent",
+      result: { kind: "success", returnValue: "loser" },
+    });
+
+    const entries = await t.mutation(api.journal.startSteps, {
+      workflowId,
+      generationNumber: 0,
+      steps: [
+        {
+          step: {
+            kind: "race" as const,
+            name: "race(win, loseSent, preCreated)",
+            inProgress: true,
+            argsSize: 0,
+            args: {
+              events: [
+                { name: "win" },
+                { name: "loseSent" },
+                { id: idCreated },
+              ],
+            },
+            startedAt: Date.now(),
+          },
+        },
+      ],
+    });
+    const raceStepId = entries[0]._id as Id<"steps">;
+
+    await t.run(async (ctx) => {
+      const step = await ctx.db.get(raceStepId);
+      assert(step && step.step.kind === "race");
+      expect(step.step.inProgress).toBe(false);
+      expect(step.step.raceWinnerEventId).toBe(winnerEventId);
+      assert(step.step.runResult?.kind === "success");
+      expect(
+        (step.step.runResult.returnValue as { eventName: string }).eventName,
+      ).toBe("win");
+
+      // The winner and the never-sent pre-created event are consumed and keyed
+      // to the race step. The pre-created one is cleaned up because it was named
+      // explicitly by id; the winner because it won.
+      for (const id of [winnerEventId, idCreated]) {
+        const event = await ctx.db.get(id);
+        expect(event?.state.kind).toBe("consumed");
+        assert(event?.state.kind === "consumed");
+        expect(event.state.stepId).toBe(raceStepId);
+      }
+      // The event sent *after* the winner is left alone — it sits later on the
+      // timeline than the resolved race, exactly as if the race had been
+      // waiting and the event arrived a moment too late. It stays available for
+      // a later await/race.
+      const sentAfterWinner = await ctx.db.get(sentAfterWinnerId);
+      expect(sentAfterWinner?.state.kind).toBe("sent");
+    });
+  });
+
+  test("race discard consumes failures up to the winner, leaves events sent after it alone", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.mutation(api.workflow.create, {
+      workflowName: "race-discard-after-winner",
+      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowArgs: {},
+      startAsync: true,
+    });
+
+    // Sent in order: an error, then the winning success, then another success
+    // sent *after* the winner. Under "discard" the loop consumes the leading
+    // failure and stops at the first success; the event sent after it is later
+    // on the timeline and must be left untouched.
+    const erroredId = await t.mutation(api.event.send, {
+      workflowId,
+      name: "errored",
+      result: { kind: "failed", error: "boom" },
+    });
+    const winnerEventId = await t.mutation(api.event.send, {
+      workflowId,
+      name: "win",
+      result: { kind: "success", returnValue: "winner" },
+    });
+    const afterWinnerId = await t.mutation(api.event.send, {
+      workflowId,
+      name: "afterWinner",
+      result: { kind: "success", returnValue: "too late" },
+    });
+
+    const entries = await t.mutation(api.journal.startSteps, {
+      workflowId,
+      generationNumber: 0,
+      steps: [
+        {
+          step: {
+            kind: "race" as const,
+            name: "race(errored, win, afterWinner)",
+            inProgress: true,
+            argsSize: 0,
+            failure: "discard" as const,
+            args: {
+              events: [
+                { name: "errored" },
+                { name: "win" },
+                { name: "afterWinner" },
+              ],
+              failure: "discard",
+            },
+            startedAt: Date.now(),
+          },
+        },
+      ],
+    });
+    const raceStepId = entries[0]._id as Id<"steps">;
+
+    await t.run(async (ctx) => {
+      const step = await ctx.db.get(raceStepId);
+      assert(step && step.step.kind === "race");
+      expect(step.step.inProgress).toBe(false);
+      assert(step.step.runResult?.kind === "success");
+      expect(
+        (step.step.runResult.returnValue as { eventName: string }).eventName,
+      ).toBe("win");
+      expect(step.step.raceWinnerEventId).toBe(winnerEventId);
+
+      // The leading failure and the winner are consumed and keyed to the race
+      // step.
+      for (const id of [erroredId, winnerEventId]) {
+        const event = await ctx.db.get(id);
+        expect(event?.state.kind).toBe("consumed");
+        assert(event?.state.kind === "consumed");
+        expect(event.state.stepId).toBe(raceStepId);
+      }
+      // The success sent after the winner is left alone — it stays available
+      // for a later await/race rather than being swallowed by this race.
+      const afterWinner = await ctx.db.get(afterWinnerId);
+      expect(afterWinner?.state.kind).toBe("sent");
+    });
+  });
+
+  test("race by id throws when the event is already being awaited", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.mutation(api.workflow.create, {
+      workflowName: "race-by-id-conflict",
+      workflowHandle: "function://internal.example.exampleWorkflow",
+      workflowArgs: {},
+      startAsync: true,
+    });
+    const eventId = await t.mutation(api.event.create, {
+      name: "awaited",
+      workflowId,
+    });
+
+    // Await the event first so it is in the "waiting" state.
+    await t.mutation(api.journal.startSteps, {
+      workflowId,
+      generationNumber: 0,
+      steps: [
+        {
+          step: {
+            kind: "event" as const,
+            name: "awaited",
+            inProgress: true,
+            argsSize: 0,
+            args: { eventId },
+            startedAt: Date.now(),
+          },
+        },
+      ],
+    });
+
+    await expect(
+      t.mutation(api.journal.startSteps, {
+        workflowId,
+        generationNumber: 0,
+        steps: [
+          {
+            step: {
+              kind: "race" as const,
+              name: "race(awaited, other)",
+              inProgress: true,
+              argsSize: 0,
+              args: { events: [{ id: eventId }, { name: "other" }] },
+              startedAt: Date.now(),
+            },
+          },
+        ],
+      }),
+    ).rejects.toThrow(/already waiting/);
   });
 });
 

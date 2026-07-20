@@ -52,6 +52,16 @@ export type StepDefaults = {
   retry?: RetryBehavior | boolean;
 };
 
+export type ActionRunOptions = RunOptions &
+  RetryOption & {
+    /**
+     * Estimated milliseconds the action needs to finish. Action-driven
+     * workflows hand the step to the workpool when this does not fit in the
+     * current action runner's remaining budget.
+     */
+    timeRequired?: number;
+  };
+
 type InlineArgs =
   | {
       inline: true;
@@ -112,7 +122,7 @@ export type WorkflowCtx = {
    */
   runAction<Action extends FunctionReference<"action", FunctionVisibility>>(
     action: Action,
-    ...args: ArgsAndOptions<Action, RunOptions & RetryOption>
+    ...args: ArgsAndOptions<Action, ActionRunOptions>
   ): Promise<FunctionReturnType<Action>>;
 
   /**
@@ -212,6 +222,7 @@ export function createWorkflowCtx(
         unstableArgs: unstableArgs ?? defaults?.unstableArgs ?? false,
         schedulerOptions,
         transactionLimits: undefined,
+        timeRequired: undefined,
       }) as Promise<any>;
     },
 
@@ -227,6 +238,7 @@ export function createWorkflowCtx(
         unstableArgs: false,
         schedulerOptions: { runAfter: duration },
         transactionLimits: undefined,
+        timeRequired: undefined,
       });
     },
 
@@ -242,6 +254,7 @@ export function createWorkflowCtx(
         unstableArgs: false,
         schedulerOptions: {},
         transactionLimits: undefined,
+        timeRequired: undefined,
       });
       if (event.validator) {
         return parse(event.validator, result);
@@ -261,6 +274,7 @@ async function runFunction<
   opts?: RunOptions & {
     inline?: boolean;
     transactionLimits?: TransactionLimits;
+    timeRequired?: number;
   } & RetryOption,
   defaults?: StepDefaults,
 ): Promise<unknown> {
@@ -269,6 +283,7 @@ async function runFunction<
     retry,
     inline,
     transactionLimits,
+    timeRequired,
     unstableArgs,
     ...schedulerOptions
   } = opts ?? {};
@@ -285,6 +300,14 @@ async function runFunction<
   if (!inline && transactionLimits) {
     throw new Error("Cannot set transaction limits for non-inline functions.");
   }
+  if (timeRequired !== undefined) {
+    if (functionType !== "action") {
+      throw new Error("`timeRequired` is only supported for actions.");
+    }
+    if (!Number.isFinite(timeRequired) || timeRequired < 0) {
+      throw new Error("`timeRequired` must be a non-negative number.");
+    }
+  }
   return run(sender, {
     name: name ?? safeFunctionName(f),
     target: {
@@ -298,6 +321,7 @@ async function runFunction<
     unstableArgs: unstableArgs ?? defaults?.unstableArgs ?? false,
     transactionLimits,
     schedulerOptions,
+    timeRequired,
   });
 }
 

@@ -209,6 +209,47 @@ You can also call workflows directly from code, the CLI or dashboard:
 npx convex run example:exampleWorkflow '{ "args": { "exampleArg": "James" } }'
 ```
 
+#### Action-driven execution
+
+For workflows with several short steps, pass `executionMode: "action"` to keep
+executing queries, mutations, and actions from one long-lived action runner:
+
+```ts
+const workflowId = await start(
+  ctx,
+  internal.example.exampleWorkflow,
+  { exampleArg: "James" },
+  { executionMode: "action" },
+);
+```
+
+The runner defaults to a five-minute budget. Use the object form to choose a
+different budget (up to Convex's 30-minute action limit):
+
+```ts
+{ executionMode: { type: "action", maxDurationMs: 30_000 } }
+```
+
+The workflow handler remains a mutation. It journals pending steps and returns
+them to the runner, which executes each non-inline query, mutation, or action in
+its own function call before replaying the handler. Queries and mutations with
+`{ inline: true }` still share the handler mutation's transaction.
+
+Sleeps, events, nested workflows, scheduled steps, and work that no longer fits
+in the runner's budget are handed to the workpool. Completion resumes the same
+action-driven mode. You can give an action a conservative runtime estimate so
+the runner hands it off instead of starting it too close to its deadline:
+
+```ts
+await step.runAction(internal.example.longAction, args, {
+  timeRequired: 60_000,
+});
+```
+
+Action retries retain the normal workpool semantics. The runner makes the first
+attempt directly; after a retryable failure it hands the step to the workpool
+with that attempt consumed and the exponential backoff advanced.
+
 ### Handling the workflow's result with onComplete
 
 You can handle the workflow's result with `onComplete` by using the `start()`

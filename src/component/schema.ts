@@ -1,8 +1,14 @@
-import { vResultValidator, vWorkIdValidator } from "@convex-dev/workpool";
+import {
+  vResultValidator,
+  vRetryBehavior,
+  vWorkIdValidator,
+} from "@convex-dev/workpool";
 import { deprecated, literals } from "convex-helpers/validators";
 import { defineSchema, defineTable } from "convex/server";
 import { type Infer, v } from "convex/values";
 import { logLevel } from "./logging.js";
+import { vActionExecution } from "../execution.js";
+import { workpoolOptions } from "./workpoolOptions.js";
 
 export const vOnComplete = v.object({
   fnHandle: v.string(), // mutation
@@ -22,6 +28,8 @@ const workflowObject = {
 
   // Internal execution status, used to totally order mutations.
   generationNumber: v.number(),
+  execution: v.optional(vActionExecution),
+  workpoolOptions: v.optional(workpoolOptions),
 };
 
 export const workflowDocument = v.object({
@@ -73,6 +81,14 @@ const journalObject = {
   workflowId: v.id("workflows"),
   stepNumber: v.number(),
   step,
+  retry: v.optional(v.union(v.boolean(), vRetryBehavior)),
+  schedulerOptions: v.optional(
+    v.union(
+      v.object({ runAt: v.optional(v.number()) }),
+      v.object({ runAfter: v.optional(v.number()) }),
+    ),
+  ),
+  timeRequired: v.optional(v.number()),
 };
 
 export const journalDocument = v.object({

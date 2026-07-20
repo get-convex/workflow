@@ -1,6 +1,5 @@
 import {
   vResultValidator,
-  vRetryBehavior,
   vWorkIdValidator,
   Workpool,
   type RunResult,
@@ -17,21 +16,17 @@ import {
 import { type Infer, v } from "convex/values";
 import { components, internal } from "./_generated/api.js";
 import { internalMutation, type MutationCtx } from "./_generated/server.js";
-import { logLevel } from "./logging.js";
 import { getDefaultLogger } from "./utils.js";
 import { completeHandler } from "./workflow.js";
 import type { Doc } from "./_generated/dataModel.js";
-import { vWorkflowId, type WorkflowId } from "../types.js";
+import {
+  vWorkflowId,
+  type SchedulerOptions,
+  type WorkflowId,
+} from "../types.js";
 import { checkForOversizedResult } from "./oversizedValues.js";
-
-export const workpoolOptions = v.object({
-  logLevel: v.optional(logLevel),
-  maxParallelism: v.optional(v.number()),
-  defaultRetryBehavior: v.optional(vRetryBehavior),
-  retryActionsByDefault: v.optional(v.boolean()),
-});
-// type check
-const _: WorkpoolOptions = {} as Infer<typeof workpoolOptions>;
+export { workpoolOptions } from "./workpoolOptions.js";
+import { workpoolOptions } from "./workpoolOptions.js";
 
 export const DEFAULT_MAX_PARALLELISM = 25;
 export const DEFAULT_RETRY_BEHAVIOR = {
@@ -169,27 +164,76 @@ async function onCompleteHandler(
     }
     return;
   }
-  const workpool = await getWorkpool(ctx, args.context.workpoolOptions);
-  await enqueueWorkflow(ctx, workflow, workpool);
+  const effectiveWorkpoolOptions =
+    args.context.workpoolOptions ?? workflow.workpoolOptions;
+  const workpool = await getWorkpool(ctx, effectiveWorkpoolOptions);
+  const remaining = await ctx.db
+    .query("steps")
+    .withIndex("inProgress", (q) =>
+      q.eq("step.inProgress", true).eq("workflowId", workflowId),
+    )
+    .first();
+  if (!remaining) {
+    await enqueueWorkflow(ctx, workflow, workpool, effectiveWorkpoolOptions);
+  }
 }
 
 export async function enqueueWorkflow(
   ctx: MutationCtx,
   workflow: Doc<"workflows">,
   workpool: Workpool,
+  options?: WorkpoolOptions,
+  schedulerOptions?: SchedulerOptions,
 ) {
+  options ??= workflow.workpoolOptions;
   const { _id: workflowId, generationNumber, name, workflowHandle } = workflow;
-  await workpool.enqueueMutation(
-    ctx,
-    workflowHandle as FunctionHandle<"mutation">,
-    { workflowId, generationNumber },
-    {
-      name,
-      onComplete: internal.pool.handlerOnComplete,
-      context: { workflowId, generationNumber },
-    },
-  );
+  const onComplete = internal.pool.handlerOnComplete;
+  const context = { workflowId, generationNumber };
+  if (workflow.execution?.type === "action") {
+    await workpool.enqueueAction(
+      ctx,
+      internal.actionRunner.run,
+      {
+        workflowId,
+        generationNumber,
+        maxDurationMs: workflow.execution.maxDurationMs,
+        workpoolOptions: options,
+      },
+      { name, onComplete, context },
+    );
+  } else {
+    await workpool.enqueueMutation(
+      ctx,
+      workflowHandle as FunctionHandle<"mutation">,
+      { workflowId, generationNumber },
+      { name, onComplete, context, ...schedulerOptions },
+    );
+  }
 }
+
+export const enqueue = internalMutation({
+  args: {
+    workflowId: v.id("workflows"),
+    generationNumber: v.number(),
+    workpoolOptions: v.optional(workpoolOptions),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const workflow = await ctx.db.get("workflows", args.workflowId);
+    if (
+      !workflow ||
+      workflow.generationNumber !== args.generationNumber ||
+      workflow.runResult
+    ) {
+      return null;
+    }
+    const effectiveWorkpoolOptions =
+      args.workpoolOptions ?? workflow.workpoolOptions;
+    const workpool = await getWorkpool(ctx, effectiveWorkpoolOptions);
+    await enqueueWorkflow(ctx, workflow, workpool, effectiveWorkpoolOptions);
+    return null;
+  },
+});
 
 export type OnComplete =
   typeof onComplete extends RegisteredAction<

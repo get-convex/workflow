@@ -126,3 +126,107 @@ describe("inline queries and mutations", () => {
     expect(status.result).toEqual({ first: 0, second: 0 });
   });
 });
+
+describe("action-driven workflows", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("executes sequential queries, mutations, and actions from one runner", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.run((ctx) =>
+      workflow.start(
+        ctx,
+        internal.test.inline.actionDrivenSequence,
+        { key: "action_sequence" },
+        { executionMode: "action" },
+      ),
+    );
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const status = await t.run((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
+    assert(status.type === "completed");
+    expect(status.result).toEqual({
+      before: 0,
+      incremented: 1,
+      actionResult: "action:action_sequence",
+      after: 1,
+    });
+  });
+
+  test("hands a failed direct action to workpool with remaining retries", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.run((ctx) =>
+      workflow.start(
+        ctx,
+        internal.test.inline.actionDrivenRetry,
+        { key: "action_retry" },
+        { executionMode: "action" },
+      ),
+    );
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const status = await t.run((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
+    assert(status.type === "completed");
+    expect(status.result).toBe("attempt:2");
+  });
+
+  test("hands off actions whose requested time does not fit", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.run((ctx) =>
+      workflow.start(
+        ctx,
+        internal.test.inline.actionDrivenBudgetHandoff,
+        { label: "budget" },
+        { executionMode: { type: "action", maxDurationMs: 100 } },
+      ),
+    );
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const status = await t.run((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
+    assert(status.type === "completed");
+    expect(status.result).toBe("action:budget");
+  });
+
+  test("resumes the action runner after a sleep", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.run((ctx) =>
+      workflow.start(
+        ctx,
+        internal.test.inline.actionDrivenSleep,
+        { label: "after-sleep" },
+        { executionMode: "action" },
+      ),
+    );
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const status = await t.run((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
+    assert(status.type === "completed");
+    expect(status.result).toBe("action:after-sleep");
+  });
+
+  test("resumes after an action-driven nested workflow", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.run((ctx) =>
+      workflow.start(
+        ctx,
+        internal.nestedWorkflow.parentWorkflow,
+        { prompt: "nested" },
+        { executionMode: "action" },
+      ),
+    );
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const status = await t.run((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
+    assert(status.type === "completed");
+    expect(status.result).toBe(6);
+  });
+});

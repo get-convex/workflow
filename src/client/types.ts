@@ -15,21 +15,6 @@ export type InferFromOptionalValidator<ReturnsValidator> = [
   ? Infer<ReturnsValidator>
   : unknown;
 
-export type RunResult<Returns = unknown> =
-  | { kind: "success"; returnValue: Returns }
-  | { kind: "failed"; error: string }
-  | { kind: "canceled" };
-
-/**
- * The value returned by the workflow mutation.
- *
- * Direct calls return the workflow ID. Internal polls return `complete` when
- * the handler finishes, carrying its validated result for the workflow driver.
- */
-export type WorkflowMutationResult<Returns = unknown> =
-  | WorkflowId
-  | { kind: "complete"; runResult: RunResult<Returns> };
-
 type ReturnValueFromWorkflowMutation<Result> = Result extends {
   kind: "complete";
   runResult: infer CompletionResult;

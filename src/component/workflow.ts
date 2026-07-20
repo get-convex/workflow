@@ -15,7 +15,7 @@ import {
 } from "./_generated/server.js";
 import { type Logger, logLevel } from "./logging.js";
 import { getWorkflow } from "./model.js";
-import { getWorkpool } from "./pool.js";
+import { enqueueWorkflow, getWorkpool, workpoolOptions } from "./pool.js";
 import schema, {
   journalDocument,
   vOnComplete,
@@ -38,6 +38,7 @@ import { api, internal } from "./_generated/api.js";
 import { formatErrorWithStack } from "../shared.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { paginator } from "convex-helpers/server/pagination";
+import { vActionExecution } from "../execution.js";
 
 const createArgs = v.object({
   workflowName: v.string(),
@@ -47,6 +48,8 @@ const createArgs = v.object({
   onComplete: v.optional(vOnComplete),
   startAsync: v.optional(v.boolean()),
   createOnly: v.optional(v.boolean()),
+  execution: v.optional(vActionExecution),
+  workpoolOptions: v.optional(workpoolOptions),
   // TODO: ttl
 });
 export const create = mutation({
@@ -68,6 +71,8 @@ export async function createHandler(
     args: args.workflowArgs,
     generationNumber: 0,
     onComplete: args.onComplete,
+    execution: args.execution,
+    workpoolOptions: args.workpoolOptions,
   });
   console.debug(
     `Created workflow ${workflowId}:`,
@@ -79,17 +84,25 @@ export async function createHandler(
       !args.createOnly,
       "Cannot startAsync and createOnly at the same time",
     );
-    const workpool = await getWorkpool(ctx, args);
-    await workpool.enqueueMutation(
+    const effectiveWorkpoolOptions = {
+      ...args.workpoolOptions,
+      maxParallelism:
+        args.maxParallelism ?? args.workpoolOptions?.maxParallelism,
+    };
+    const workpool = await getWorkpool(ctx, effectiveWorkpoolOptions);
+    if (schedulerOptions && args.execution) {
+      throw new Error(
+        "Scheduler options are not supported when starting an action-driven workflow.",
+      );
+    }
+    const workflow = await ctx.db.get("workflows", workflowId);
+    assert(workflow, `Workflow not found: ${workflowId}`);
+    await enqueueWorkflow(
       ctx,
-      args.workflowHandle as FunctionHandle<"mutation">,
-      { workflowId, generationNumber: 0 },
-      {
-        name: args.workflowName,
-        onComplete: internal.pool.handlerOnComplete,
-        context: { workflowId, generationNumber: 0 },
-        ...schedulerOptions,
-      },
+      workflow,
+      workpool,
+      effectiveWorkpoolOptions,
+      schedulerOptions,
     );
   } else if (!args.createOnly) {
     // If we can't start it, may as well not create it, eh? Fail fast...
@@ -322,18 +335,11 @@ export async function restartHandler(
     from: args.from,
   });
 
-  if (args.startAsync) {
-    const workpool = await getWorkpool(ctx, {});
-    await workpool.enqueueMutation(
-      ctx,
-      workflow.workflowHandle as FunctionHandle<"mutation">,
-      { workflowId: args.workflowId, generationNumber },
-      {
-        name: workflow.name,
-        onComplete: internal.pool.handlerOnComplete,
-        context: { workflowId: args.workflowId, generationNumber },
-      },
-    );
+  if (args.startAsync || workflow.execution) {
+    const workpool = await getWorkpool(ctx, workflow.workpoolOptions);
+    const restarted = await ctx.db.get("workflows", args.workflowId);
+    assert(restarted, `Workflow not found: ${args.workflowId}`);
+    await enqueueWorkflow(ctx, restarted, workpool, workflow.workpoolOptions);
   } else {
     await ctx.runMutation(
       workflow.workflowHandle as FunctionHandle<"mutation">,

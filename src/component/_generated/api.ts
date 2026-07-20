@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as actionRunner from "../actionRunner.js";
 import type * as event from "../event.js";
 import type * as journal from "../journal.js";
 import type * as logging from "../logging.js";
@@ -16,6 +17,7 @@ import type * as oversizedValues from "../oversizedValues.js";
 import type * as pool from "../pool.js";
 import type * as utils from "../utils.js";
 import type * as workflow from "../workflow.js";
+import type * as workpoolOptions from "../workpoolOptions.js";
 
 import type {
   ApiFromModules,
@@ -25,6 +27,7 @@ import type {
 import { anyApi, componentsGeneric } from "convex/server";
 
 const fullApi: ApiFromModules<{
+  actionRunner: typeof actionRunner;
   event: typeof event;
   journal: typeof journal;
   logging: typeof logging;
@@ -33,6 +36,7 @@ const fullApi: ApiFromModules<{
   pool: typeof pool;
   utils: typeof utils;
   workflow: typeof workflow;
+  workpoolOptions: typeof workpoolOptions;
 }> = anyApi as any;
 
 /**

@@ -22,7 +22,7 @@ import { pick } from "convex-helpers";
 
 export type WorkerResult =
   | { type: "handlerDone"; runResult: RunResult }
-  | { type: "executorBlocked" };
+  | { type: "executorBlocked"; entries: JournalEntry[] };
 
 export type StepRequest = {
   name: string;
@@ -51,6 +51,7 @@ export type StepRequest = {
   unstableArgs: boolean;
   transactionLimits: TransactionLimits | undefined;
   schedulerOptions: SchedulerOptions;
+  timeRequired?: number;
 
   resolve: (result: RunResult) => void;
 };
@@ -67,6 +68,7 @@ export class StepExecutor {
     private receiver: BaseChannel<StepRequest>,
     private now: number,
     private workpoolOptions: WorkpoolOptions | undefined,
+    private deferExecution = false,
   ) {
     this.journalEntrySize = journalEntries.reduce(
       (size, entry) => size + getConvexSize(entry),
@@ -104,6 +106,7 @@ export class StepExecutor {
       }
       return {
         type: "executorBlocked",
+        entries,
       };
     }
   }
@@ -238,6 +241,7 @@ export class StepExecutor {
         return {
           retry: message.retry,
           schedulerOptions: message.schedulerOptions,
+          timeRequired: message.timeRequired,
           step,
         };
       }),
@@ -249,6 +253,7 @@ export class StepExecutor {
         generationNumber: this.generationNumber,
         steps,
         workpoolOptions: this.workpoolOptions,
+        deferExecution: this.deferExecution || undefined,
       },
     )) as JournalEntry[];
     for (const entry of entries) {

@@ -10,7 +10,7 @@ import type { PropertyValidators } from "convex/values";
 import { expectTypeOf, test } from "vitest";
 import type { WorkflowId } from "../types.js";
 import type { defineWorkflow, WorkflowManager } from "./index.js";
-import type { WorkflowMutationResult } from "./types.js";
+import type { WorkflowMutationResult } from "./workflowMutation.js";
 import type { WorkflowCtx } from "./workflowContext.js";
 
 // Type-level regression tests: a workflow's `returns` validator has to survive

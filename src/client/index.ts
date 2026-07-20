@@ -30,18 +30,18 @@ import { safeFunctionName } from "./safeFunctionName.js";
 import type {
   IdsToStrings,
   InferFromOptionalValidator,
-  RunResult,
   WorkflowComponent,
-  WorkflowMutationResult,
 } from "./types.js";
 import type { WorkflowCtx } from "./workflowContext.js";
-import { workflowMutation, type WorkflowArgs } from "./workflowMutation.js";
+import {
+  type RunResult,
+  type WorkflowMutationResult,
+  workflowMutation,
+  type WorkflowArgs,
+} from "./workflowMutation.js";
+import { normalizeExecutionMode, type ExecutionMode } from "../execution.js";
 
-export type {
-  RunResult,
-  WorkflowComponent,
-  WorkflowMutationResult,
-} from "./types.js";
+export type { WorkflowComponent } from "./types.js";
 export {
   vEventId,
   vWorkflowId,
@@ -55,7 +55,12 @@ export type {
   StepDefaults,
   WorkflowCtx,
 } from "./workflowContext.js";
-export type { WorkflowArgs } from "./workflowMutation.js";
+export type {
+  RunResult,
+  WorkflowArgs,
+  WorkflowMutationResult,
+} from "./workflowMutation.js";
+export type { ExecutionMode } from "../execution.js";
 export { vResultValidator } from "@convex-dev/workpool";
 
 export type CallbackOptions<Context = unknown> =
@@ -182,6 +187,11 @@ type StartOptions<Context = unknown> = CallbackOptions<Context> & {
    * @default false
    */
   startAsync?: boolean;
+  /**
+   * Run the workflow from a long-lived action which executes simple steps
+   * directly. Use the object form to override its five-minute budget.
+   */
+  executionMode?: ExecutionMode;
 };
 
 /**
@@ -226,6 +236,9 @@ export async function start<
   }
   if (options?.startAsync !== undefined) {
     formatted.startAsync = options.startAsync;
+  }
+  if (options?.executionMode !== undefined) {
+    formatted.executionMode = options.executionMode;
   }
   return (await ctx.runMutation(
     workflow as any,
@@ -613,6 +626,7 @@ export class WorkflowManager {
        * @default false
        */
       startAsync?: boolean;
+      executionMode?: ExecutionMode;
     },
   ): Promise<WorkflowId> {
     if (!options?.startAsync) {
@@ -632,6 +646,8 @@ export class WorkflowManager {
       maxParallelism: this.options?.workpoolOptions?.maxParallelism,
       onComplete,
       startAsync: true,
+      execution: normalizeExecutionMode(options.executionMode),
+      workpoolOptions: this.options?.workpoolOptions,
     });
     return workflowId as unknown as WorkflowId;
   }

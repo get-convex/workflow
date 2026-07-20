@@ -67,6 +67,10 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           journalEntries: Array<{
             _creationTime: number;
             _id: string;
+            retry?:
+              | boolean
+              | { base: number; initialBackoffMs: number; maxAttempts: number };
+            schedulerOptions?: { runAt?: number } | { runAfter?: number };
             step:
               | {
                   args: any;
@@ -128,6 +132,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   workId?: string;
                 };
             stepNumber: number;
+            timeRequired?: number;
             workflowId: string;
           }>;
           logLevel: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
@@ -136,6 +141,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             _creationTime: number;
             _id: string;
             args: any;
+            execution?: { maxDurationMs: number; type: "action" };
             generationNumber: number;
             logLevel?: any;
             name?: string;
@@ -147,6 +153,22 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             startedAt?: any;
             state?: any;
             workflowHandle: string;
+            workpoolOptions?: {
+              defaultRetryBehavior?: {
+                base: number;
+                initialBackoffMs: number;
+                maxAttempts: number;
+              };
+              logLevel?:
+                | "DEBUG"
+                | "TRACE"
+                | "INFO"
+                | "REPORT"
+                | "WARN"
+                | "ERROR";
+              maxParallelism?: number;
+              retryActionsByDefault?: boolean;
+            };
           };
         },
         Name
@@ -155,6 +177,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "mutation",
         "internal",
         {
+          deferExecution?: boolean;
           generationNumber: number;
           steps: Array<{
             retry?:
@@ -221,6 +244,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   startedAt: number;
                   workId?: string;
                 };
+            timeRequired?: number;
           }>;
           workflowId: string;
           workpoolOptions?: {
@@ -237,6 +261,10 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         Array<{
           _creationTime: number;
           _id: string;
+          retry?:
+            | boolean
+            | { base: number; initialBackoffMs: number; maxAttempts: number };
+          schedulerOptions?: { runAt?: number } | { runAfter?: number };
           step:
             | {
                 args: any;
@@ -298,6 +326,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 workId?: string;
               };
           stepNumber: number;
+          timeRequired?: number;
           workflowId: string;
         }>,
         Name
@@ -337,12 +366,23 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "internal",
         {
           createOnly?: boolean;
+          execution?: { maxDurationMs: number; type: "action" };
           maxParallelism?: number;
           onComplete?: { context?: any; fnHandle: string };
           startAsync?: boolean;
           workflowArgs: any;
           workflowHandle: string;
           workflowName: string;
+          workpoolOptions?: {
+            defaultRetryBehavior?: {
+              base: number;
+              initialBackoffMs: number;
+              maxAttempts: number;
+            };
+            logLevel?: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
+            maxParallelism?: number;
+            retryActionsByDefault?: boolean;
+          };
         },
         string,
         Name
@@ -355,6 +395,10 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           inProgress: Array<{
             _creationTime: number;
             _id: string;
+            retry?:
+              | boolean
+              | { base: number; initialBackoffMs: number; maxAttempts: number };
+            schedulerOptions?: { runAt?: number } | { runAfter?: number };
             step:
               | {
                   args: any;
@@ -416,6 +460,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   workId?: string;
                 };
             stepNumber: number;
+            timeRequired?: number;
             workflowId: string;
           }>;
           logLevel: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
@@ -423,6 +468,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             _creationTime: number;
             _id: string;
             args: any;
+            execution?: { maxDurationMs: number; type: "action" };
             generationNumber: number;
             logLevel?: any;
             name?: string;
@@ -434,6 +480,22 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             startedAt?: any;
             state?: any;
             workflowHandle: string;
+            workpoolOptions?: {
+              defaultRetryBehavior?: {
+                base: number;
+                initialBackoffMs: number;
+                maxAttempts: number;
+              };
+              logLevel?:
+                | "DEBUG"
+                | "TRACE"
+                | "INFO"
+                | "REPORT"
+                | "WARN"
+                | "ERROR";
+              maxParallelism?: number;
+              retryActionsByDefault?: boolean;
+            };
           };
         },
         Name

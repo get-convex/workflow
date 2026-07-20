@@ -1,5 +1,10 @@
 import { getConvexSize, v } from "convex/values";
-import { mutation, query } from "./_generated/server.js";
+import {
+  internalMutation,
+  mutation,
+  query,
+  type MutationCtx,
+} from "./_generated/server.js";
 import {
   journalDocument,
   type JournalEntry,
@@ -21,6 +26,12 @@ import { assert } from "convex-helpers";
 import { MAX_JOURNAL_SIZE } from "../shared.js";
 import { awaitEvent } from "./event.js";
 import { createHandler } from "./workflow.js";
+import type { Doc } from "./_generated/dataModel.js";
+
+const schedulerOptionsValidator = v.union(
+  v.object({ runAt: v.optional(v.number()) }),
+  v.object({ runAfter: v.optional(v.number()) }),
+);
 
 export const load = query({
   args: {
@@ -78,15 +89,12 @@ export const startSteps = mutation({
       v.object({
         step,
         retry: v.optional(v.union(v.boolean(), vRetryBehavior)),
-        schedulerOptions: v.optional(
-          v.union(
-            v.object({ runAt: v.optional(v.number()) }),
-            v.object({ runAfter: v.optional(v.number()) }),
-          ),
-        ),
+        schedulerOptions: v.optional(schedulerOptionsValidator),
+        timeRequired: v.optional(v.number()),
       }),
     ),
     workpoolOptions: v.optional(workpoolOptions),
+    deferExecution: v.optional(v.boolean()),
   },
   returns: v.array(journalDocument),
   handler: async (ctx, args): Promise<JournalEntry[]> => {
@@ -103,121 +111,42 @@ export const startSteps = mutation({
       .order("desc")
       .first();
     const stepNumberBase = maxEntry ? maxEntry.stepNumber + 1 : 0;
-    const workpool = await getWorkpool(ctx, args.workpoolOptions);
-    const onComplete = internal.pool.onComplete;
-
     const entries = await Promise.all(
       args.steps.map(async (stepArgs, index) => {
-        const { retry, schedulerOptions } = stepArgs;
         const stepNumber = stepNumberBase + index;
         const stepId = await ctx.db.insert("steps", {
           workflowId: workflow._id,
           stepNumber,
           step: stepArgs.step,
+          retry: stepArgs.retry,
+          schedulerOptions: stepArgs.schedulerOptions,
+          timeRequired: stepArgs.timeRequired,
         });
         let entry = await ctx.db.get("steps", stepId);
         assert(entry, "Step not found");
-        const step = entry.step;
-        const { name } = step;
         console.event("started", {
           workflowId: workflow._id,
           workflowName: workflow.name,
-          stepName: name,
+          stepName: entry.step.name,
           stepNumber,
         });
-        if (step.kind === "event") {
-          // Note: This modifies entry in place as well.
-          entry = await awaitEvent(ctx, entry, {
-            name,
-            eventId: step.args.eventId,
-          });
-          if (step.runResult) {
-            console.event("eventConsumed", {
-              workflowId: entry.workflowId,
-              workflowName: workflow.name,
-              status: step.runResult.kind,
-              eventName: step.name,
-              stepNumber: stepNumber,
-              durationMs: step.completedAt! - step.startedAt,
-            });
-          }
-        } else if (step.kind === "workflow") {
-          const workflowId = await createHandler(ctx, {
-            workflowName: step.name,
-            workflowHandle: step.handle,
-            workflowArgs: step.args,
-            maxParallelism: args.workpoolOptions?.maxParallelism,
-            onComplete: {
-              fnHandle: await createFunctionHandle(
-                internal.pool.nestedWorkflowOnComplete,
-              ),
-              context: {
-                stepId,
-                generationNumber,
-                workpoolOptions: args.workpoolOptions,
-              } satisfies OnCompleteContext,
-            },
-            startAsync: true,
-          });
-          step.workflowId = workflowId;
-        } else if (step.runResult) {
+        if (entry.step.runResult) {
           // Already completed inline by the caller — nothing to enqueue.
           console.event("stepCompleted", {
             workflowId: entry.workflowId,
             workflowName: workflow.name,
-            status: step.runResult.kind,
-            stepName: step.name,
+            status: entry.step.runResult.kind,
+            stepName: entry.step.name,
             stepNumber: stepNumber,
           });
-        } else if (step.kind === "sleep") {
-          const context: OnCompleteContext = {
-            generationNumber,
-            stepId,
-            workpoolOptions: args.workpoolOptions,
-          };
-          step.workId = await workpool.enqueueQuery(
+        } else if (!args.deferExecution) {
+          entry = await dispatchStep(
             ctx,
-            internal.workflow.sleep,
-            {},
-            { context, onComplete, name, ...schedulerOptions },
-          );
-        } else {
-          const context: OnCompleteContext = {
+            workflow,
+            entry,
             generationNumber,
-            stepId,
-            workpoolOptions: args.workpoolOptions,
-          };
-          let workId: WorkId;
-          switch (step.functionType) {
-            case "query": {
-              workId = await workpool.enqueueQuery(
-                ctx,
-                step.handle as FunctionHandle<"query">,
-                step.args,
-                { context, onComplete, name, ...schedulerOptions },
-              );
-              break;
-            }
-            case "mutation": {
-              workId = await workpool.enqueueMutation(
-                ctx,
-                step.handle as FunctionHandle<"mutation">,
-                step.args,
-                { context, onComplete, name, ...schedulerOptions },
-              );
-              break;
-            }
-            case "action": {
-              workId = await workpool.enqueueAction(
-                ctx,
-                step.handle as FunctionHandle<"action">,
-                step.args,
-                { context, onComplete, name, retry, ...schedulerOptions },
-              );
-              break;
-            }
-          }
-          step.workId = workId;
+            args.workpoolOptions,
+          );
         }
         await ctx.db.replace("steps", entry._id, entry);
 
@@ -227,3 +156,162 @@ export const startSteps = mutation({
     return entries;
   },
 });
+
+export const dispatchSteps = internalMutation({
+  args: {
+    workflowId: v.id("workflows"),
+    generationNumber: v.number(),
+    steps: v.array(
+      v.object({
+        stepId: v.id("steps"),
+        retry: v.optional(v.union(v.boolean(), vRetryBehavior)),
+        schedulerOptions: v.optional(schedulerOptionsValidator),
+      }),
+    ),
+    workpoolOptions: v.optional(workpoolOptions),
+  },
+  returns: v.array(journalDocument),
+  handler: async (ctx, args) => {
+    const workflow = await getWorkflow(
+      ctx,
+      args.workflowId,
+      args.generationNumber,
+    );
+    if (workflow.runResult !== undefined) {
+      throw new Error(`Workflow not running: ${args.workflowId}`);
+    }
+    return await Promise.all(
+      args.steps.map(async (requested) => {
+        let entry = await ctx.db.get("steps", requested.stepId);
+        assert(entry, `Step not found: ${requested.stepId}`);
+        assert(
+          entry.workflowId === workflow._id,
+          `Step ${requested.stepId} does not belong to ${workflow._id}`,
+        );
+        if (
+          !entry.step.inProgress ||
+          ((entry.step.kind === "function" || entry.step.kind === "sleep") &&
+            entry.step.workId)
+        ) {
+          return entry;
+        }
+        entry = await dispatchStep(
+          ctx,
+          workflow,
+          entry,
+          args.generationNumber,
+          args.workpoolOptions,
+          requested.retry,
+          requested.schedulerOptions,
+        );
+        await ctx.db.replace("steps", entry._id, entry);
+        return entry;
+      }),
+    );
+  },
+});
+
+async function dispatchStep(
+  ctx: MutationCtx,
+  workflow: Doc<"workflows">,
+  entry: Doc<"steps">,
+  generationNumber: number,
+  workpoolOpts: Parameters<typeof getWorkpool>[1],
+  retryOverride?: Doc<"steps">["retry"],
+  schedulerOptionsOverride?: Doc<"steps">["schedulerOptions"],
+): Promise<Doc<"steps">> {
+  workpoolOpts ??= workflow.workpoolOptions;
+  const stepDoc = entry.step;
+  const { name } = stepDoc;
+  const retry = retryOverride ?? entry.retry;
+  const schedulerOptions = schedulerOptionsOverride ?? entry.schedulerOptions;
+  const context: OnCompleteContext = {
+    generationNumber,
+    stepId: entry._id,
+    workpoolOptions: workpoolOpts,
+  };
+
+  if (stepDoc.kind === "event") {
+    entry = await awaitEvent(ctx, entry, {
+      name,
+      eventId: stepDoc.args.eventId,
+    });
+    if (entry.step.runResult) {
+      const console = await getDefaultLogger(ctx);
+      console.event("eventConsumed", {
+        workflowId: entry.workflowId,
+        workflowName: workflow.name,
+        status: entry.step.runResult.kind,
+        eventName: entry.step.name,
+        stepNumber: entry.stepNumber,
+        durationMs: entry.step.completedAt! - entry.step.startedAt,
+      });
+    }
+    return entry;
+  }
+
+  if (stepDoc.kind === "workflow") {
+    stepDoc.workflowId = await createHandler(ctx, {
+      workflowName: stepDoc.name,
+      workflowHandle: stepDoc.handle,
+      workflowArgs: stepDoc.args,
+      maxParallelism: workpoolOpts?.maxParallelism,
+      onComplete: {
+        fnHandle: await createFunctionHandle(
+          internal.pool.nestedWorkflowOnComplete,
+        ),
+        context,
+      },
+      startAsync: true,
+      execution: workflow.execution,
+      workpoolOptions: workpoolOpts,
+    });
+    return entry;
+  }
+
+  const workpool = await getWorkpool(ctx, workpoolOpts);
+  const onComplete = internal.pool.onComplete;
+  let workId: WorkId;
+  if (stepDoc.kind === "sleep") {
+    workId = await workpool.enqueueQuery(
+      ctx,
+      internal.workflow.sleep,
+      {},
+      {
+        context,
+        onComplete,
+        name,
+        ...schedulerOptions,
+      },
+    );
+  } else {
+    switch (stepDoc.functionType) {
+      case "query":
+        workId = await workpool.enqueueQuery(
+          ctx,
+          stepDoc.handle as FunctionHandle<"query">,
+          stepDoc.args,
+          { context, onComplete, name, ...schedulerOptions },
+        );
+        break;
+      case "mutation":
+        workId = await workpool.enqueueMutation(
+          ctx,
+          stepDoc.handle as FunctionHandle<"mutation">,
+          stepDoc.args,
+          { context, onComplete, name, ...schedulerOptions },
+        );
+        break;
+      case "action":
+        workId = await workpool.enqueueAction(
+          ctx,
+          stepDoc.handle as FunctionHandle<"action">,
+          stepDoc.args,
+          { context, onComplete, name, retry, ...schedulerOptions },
+        );
+        break;
+    }
+  }
+  stepDoc.workId = workId;
+  return entry;
+}

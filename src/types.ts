@@ -106,6 +106,8 @@ export type SchedulerOptions =
       runAt?: never;
     };
 
+export type { ExecutionMode } from "./execution.js";
+
 // The argument to "workflow.create" / calling the function directly
 export type OnComplete<Context = unknown> = {
   fnHandle: FunctionHandle<"mutation", OnCompleteArgs<Context>>;

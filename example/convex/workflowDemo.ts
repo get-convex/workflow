@@ -12,7 +12,7 @@ import {
 import { workflow } from "./example.js";
 
 const MIN_STEPS = 6;
-const MAX_STEPS = 18;
+const MAX_STEPS = 100;
 
 export const comparisonWorkflow = workflow
   .define({

@@ -92,7 +92,7 @@ export function App() {
               id="step-count"
               type="range"
               min="6"
-              max="18"
+              max="66"
               step="3"
               value={stepCount}
               onChange={(event) => setStepCount(Number(event.target.value))}

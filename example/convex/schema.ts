@@ -8,4 +8,10 @@ export default defineSchema({
     workflowId: vWorkflowId,
     out: v.any(),
   }).index("workflowId", ["workflowId"]),
+  workflowComparisons: defineTable({
+    traditionalWorkflowId: vWorkflowId,
+    actionWorkflowId: vWorkflowId,
+    stepCount: v.number(),
+    startedAt: v.number(),
+  }),
 });

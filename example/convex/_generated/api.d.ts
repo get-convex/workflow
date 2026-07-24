@@ -20,6 +20,7 @@ import type * as test_inline from "../test/inline.js";
 import type * as test_oldSyntax from "../test/oldSyntax.js";
 import type * as transcription from "../transcription.js";
 import type * as userConfirmation from "../userConfirmation.js";
+import type * as workflowDemo from "../workflowDemo.js";
 
 import type {
   ApiFromModules,
@@ -40,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   "test/oldSyntax": typeof test_oldSyntax;
   transcription: typeof transcription;
   userConfirmation: typeof userConfirmation;
+  workflowDemo: typeof workflowDemo;
 }>;
 
 /**

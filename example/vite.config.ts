@@ -11,7 +11,10 @@ export default defineConfig(({ mode }) => {
     envDir: rootDir,
     define: {
       "import.meta.env.VITE_CONVEX_URL": JSON.stringify(
-        env.VITE_CONVEX_URL ?? env.CONVEX_URL ?? "",
+        process.env.VITE_CONVEX_URL ??
+          env.VITE_CONVEX_URL ??
+          env.CONVEX_URL ??
+          "",
       ),
     },
   };

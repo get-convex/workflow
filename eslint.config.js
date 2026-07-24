@@ -8,7 +8,7 @@ import convexPlugin from "@convex-dev/eslint-plugin";
 export default [
   {
     ignores: [
-      "dist/**",
+      "**/dist/**",
       "eslint.config.js",
       "vitest.config.ts",
       "**/_generated/",

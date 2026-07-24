@@ -16,6 +16,7 @@
     "dev": "run-p -r 'dev:*'",
     "dev:backend": "convex dev --typecheck-components",
     "dev:frontend": "cd example && vite --clearScreen false",
+    "deploy:demo": "npx convex dev --once && npx @convex-dev/static-hosting upload --build --dist example/dist --build-command 'cd example && vite build'",
     "dev:build": "chokidar 'tsconfig*.json' 'src/**/*.ts' -i '**/*.test.ts' -c 'npm run build:codegen' --initial",
     "predev": "convex init && (path-exists dist || npm run build)",
     "build": "tsc --project ./tsconfig.build.json",
@@ -68,6 +69,7 @@
   },
   "devDependencies": {
     "@convex-dev/eslint-plugin": "^4.0.0",
+    "@convex-dev/static-hosting": "0.2.0",
     "@convex-dev/workpool": "0.4.7",
     "@edge-runtime/vm": "5.0.0",
     "@eslint/eslintrc": "3.3.5",

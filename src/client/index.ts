@@ -41,7 +41,11 @@ export {
   type WorkflowId,
   type WorkflowStep,
 } from "../types.js";
-export type { RunOptions, WorkflowCtx } from "./workflowContext.js";
+export type {
+  RunOptions,
+  StepDefaults,
+  WorkflowCtx,
+} from "./workflowContext.js";
 export type { WorkflowArgs } from "./workflowMutation.js";
 export { vResultValidator } from "@convex-dev/workpool";
 

@@ -476,9 +476,9 @@ export const scrapeAll = workflow.define({
   handler: async (step, { urls }) => {
     // Workpool embeds its config in its enqueue arguments, so changing e.g.
     // maxParallelism would otherwise fail replays of in-flight workflows.
-    const lenient = step.withOptions({ unstableArgs: true });
+    const lenientStep = step.withOptions({ unstableArgs: true });
     for (const url of urls) {
-      await pool.enqueueAction(lenient, internal.scrape.page, { url });
+      await pool.enqueueAction(lenientStep, internal.scrape.page, { url });
     }
   },
 });

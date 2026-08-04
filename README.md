@@ -447,6 +447,47 @@ If a step reads or writes a large amount of data, it's better to leave it
 running through the work pool (the default) so it gets its own transaction
 budget.
 
+### Unstable step arguments and default step options
+
+On replay, each step's arguments are validated against the journal, and a
+mismatch fails the workflow with a determinism violation. If a step's arguments
+are legitimately non-deterministic (e.g. derived from a caught stack trace) or
+can change between deploys, you can opt that step out of argument validation
+with `unstableArgs` (the step name and kind are still validated):
+
+```ts
+await step.runMutation(internal.example.recordError, { message }, {
+  unstableArgs: true,
+});
+```
+
+Sometimes a library makes the step call on your behalf, so there's no call
+site at which to pass options. For example, another component's client may
+call `ctx.runMutation` internally with its own config embedded in the
+arguments, which would fail replays of in-flight workflows when that config
+changes. For this, `step.withOptions(...)` derives a new step context that
+applies default options to every step run through it:
+
+```ts
+const pool = new Workpool(components.scrapePool, { maxParallelism: 10 });
+
+export const scrapeAll = workflow.define({
+  args: { urls: v.array(v.string()) },
+  handler: async (step, { urls }) => {
+    // Workpool embeds its config in its enqueue arguments, so changing e.g.
+    // maxParallelism would otherwise fail replays of in-flight workflows.
+    const lenientStep = step.withOptions({ unstableArgs: true });
+    for (const url of urls) {
+      await pool.enqueueAction(lenientStep, internal.scrape.page, { url });
+    }
+  },
+});
+```
+
+`withOptions` supports `unstableArgs` and a default `retry` behavior for
+actions. Per-call options always take precedence, the original `step` context
+is unaffected, and calls can be chained (later defaults win).
+
 ### Checking a workflow's status
 
 Calling a workflow returns a `WorkflowId` string, which can then be used for

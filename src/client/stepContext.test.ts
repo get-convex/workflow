@@ -495,6 +495,89 @@ describe("unstableArgs", () => {
   });
 });
 
+describe("withOptions", () => {
+  async function collectCalls(
+    run: (ctx: ReturnType<typeof createWorkflowCtx>) => Promise<void>,
+    count: number,
+  ): Promise<StepRequest[]> {
+    const channel = new BaseChannel<StepRequest>(0);
+    const ctx = createWorkflowCtx("wf-test" as any, channel);
+    const calls: StepRequest[] = [];
+    const drain = async () => {
+      for (let i = 0; i < count; i++) {
+        const msg = await channel.get();
+        calls.push(msg);
+        msg.resolve({ kind: "success", returnValue: null });
+      }
+    };
+    await Promise.all([run(ctx), drain()]);
+    return calls;
+  }
+
+  test("applies unstableArgs to all step kinds", async () => {
+    const calls = await collectCalls(async (ctx) => {
+      const lenient = ctx.withOptions({ unstableArgs: true });
+      await lenient.runQuery(fakeFuncRef("q"), {});
+      await lenient.runMutation(fakeFuncRef("m"), {});
+      await lenient.runAction(fakeFuncRef("a"), {});
+      await lenient.runWorkflow(fakeFuncRef("w"), {});
+    }, 4);
+    expect(calls.map((c) => c.unstableArgs)).toEqual([true, true, true, true]);
+  });
+
+  test("per-call options override defaults", async () => {
+    const calls = await collectCalls(async (ctx) => {
+      const lenient = ctx.withOptions({ unstableArgs: true });
+      await lenient.runMutation(fakeFuncRef("m"), {}, { unstableArgs: false });
+      const strict = ctx.withOptions({ unstableArgs: false });
+      await strict.runMutation(fakeFuncRef("m2"), {}, { unstableArgs: true });
+    }, 2);
+    expect(calls[0].unstableArgs).toBe(false);
+    expect(calls[1].unstableArgs).toBe(true);
+  });
+
+  test("does not affect the original ctx", async () => {
+    const calls = await collectCalls(async (ctx) => {
+      ctx.withOptions({ unstableArgs: true });
+      await ctx.runMutation(fakeFuncRef("m"), {});
+    }, 1);
+    expect(calls[0].unstableArgs).toBe(false);
+  });
+
+  test("chaining merges defaults, later wins", async () => {
+    const retry = { maxAttempts: 3, initialBackoffMs: 10, base: 2 };
+    const calls = await collectCalls(async (ctx) => {
+      const derived = ctx
+        .withOptions({ unstableArgs: true })
+        .withOptions({ retry });
+      await derived.runAction(fakeFuncRef("a"), {});
+      const overridden = derived.withOptions({ unstableArgs: false });
+      await overridden.runAction(fakeFuncRef("a2"), {});
+    }, 2);
+    expect(calls[0].unstableArgs).toBe(true);
+    expect(calls[0].retry).toEqual(retry);
+    expect(calls[1].unstableArgs).toBe(false);
+    expect(calls[1].retry).toEqual(retry);
+  });
+
+  test("retry default only applies to actions", async () => {
+    const calls = await collectCalls(async (ctx) => {
+      const withRetry = ctx.withOptions({ retry: true });
+      await withRetry.runAction(fakeFuncRef("a"), {});
+      await withRetry.runMutation(fakeFuncRef("m"), {});
+      await withRetry.runQuery(fakeFuncRef("q"), {});
+      await withRetry.runWorkflow(fakeFuncRef("w"), {});
+      // Per-call retry on an action still wins over the default.
+      await withRetry.runAction(fakeFuncRef("a2"), {}, { retry: false });
+    }, 5);
+    expect(calls[0].retry).toBe(true);
+    expect(calls[1].retry).toBeUndefined();
+    expect(calls[2].retry).toBeUndefined();
+    expect(calls[3].retry).toBeUndefined();
+    expect(calls[4].retry).toBe(false);
+  });
+});
+
 describe("transactionLimits", () => {
   const limits = { documentsRead: 5, bytesWritten: 100 };
 

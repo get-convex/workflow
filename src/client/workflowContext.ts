@@ -1,4 +1,8 @@
-import type { RetryOption, RunResult } from "@convex-dev/workpool";
+import type {
+  RetryBehavior,
+  RetryOption,
+  RunResult,
+} from "@convex-dev/workpool";
 import { BaseChannel } from "async-channel";
 import { parse } from "convex-helpers/validators";
 import type {
@@ -30,6 +34,23 @@ export type RunOptions = {
    */
   unstableArgs?: boolean;
 } & SchedulerOptions;
+
+/**
+ * Options applied to every step run through a `WorkflowCtx` derived with
+ * {@link WorkflowCtx.withOptions}. Per-call options take precedence.
+ */
+export type StepDefaults = {
+  /**
+   * If true, the journal will not validate that step arguments match on
+   * replay. See {@link RunOptions.unstableArgs}.
+   */
+  unstableArgs?: boolean;
+  /**
+   * Default retry behavior for action steps. Ignored for queries, mutations,
+   * workflows, sleeps, and events. See workpool's {@link RetryOption}.
+   */
+  retry?: RetryBehavior | boolean;
+};
 
 type InlineArgs =
   | {
@@ -134,24 +155,47 @@ export type WorkflowCtx = {
    * @param opts - Optionally name the step. Default: "sleep"
    */
   sleep(duration: number, opts?: { name?: string }): Promise<void>;
+
+  /**
+   * Derive a new `WorkflowCtx` that applies the given options to every step
+   * it runs, unless overridden at the call site. The original ctx is
+   * unaffected.
+   *
+   * This is especially useful when a library makes step calls on your behalf
+   * (e.g. another component's client calling `ctx.runMutation` internally),
+   * so you have no call site at which to pass options like `unstableArgs`:
+   *
+   * ```ts
+   * // Workpool embeds its config (e.g. maxParallelism) in its enqueue args,
+   * // so config changes would otherwise fail replays of in-flight workflows.
+   * const lenient = step.withOptions({ unstableArgs: true });
+   * await pool.enqueueAction(lenient, internal.scrape.page, { url });
+   * ```
+   *
+   * Chaining is supported; later defaults override earlier ones.
+   */
+  withOptions(defaults: StepDefaults): WorkflowCtx;
 };
 
 export function createWorkflowCtx(
   workflowId: WorkflowId,
   sender: BaseChannel<StepRequest>,
-) {
+  defaults?: StepDefaults,
+): WorkflowCtx {
   return {
     workflowId,
+    withOptions: (opts) =>
+      createWorkflowCtx(workflowId, sender, { ...defaults, ...opts }),
     runQuery: async (query, args, opts?) => {
-      return runFunction(sender, "query", query, args, opts);
+      return runFunction(sender, "query", query, args, opts, defaults);
     },
 
     runMutation: async (mutation, args, opts?) => {
-      return runFunction(sender, "mutation", mutation, args, opts);
+      return runFunction(sender, "mutation", mutation, args, opts, defaults);
     },
 
     runAction: async (action, args, opts?) => {
-      return runFunction(sender, "action", action, args, opts);
+      return runFunction(sender, "action", action, args, opts, defaults);
     },
 
     runWorkflow: async (workflow, args, opts?) => {
@@ -165,7 +209,7 @@ export function createWorkflowCtx(
         },
         retry: undefined,
         inline: false,
-        unstableArgs: unstableArgs ?? false,
+        unstableArgs: unstableArgs ?? defaults?.unstableArgs ?? false,
         schedulerOptions,
         transactionLimits: undefined,
       });
@@ -218,6 +262,7 @@ async function runFunction<
     inline?: boolean;
     transactionLimits?: TransactionLimits;
   } & RetryOption,
+  defaults?: StepDefaults,
 ): Promise<unknown> {
   const {
     name,
@@ -248,9 +293,9 @@ async function runFunction<
       function: f,
       args: args ?? {},
     },
-    retry,
+    retry: retry ?? (functionType === "action" ? defaults?.retry : undefined),
     inline: inline ?? false,
-    unstableArgs: unstableArgs ?? false,
+    unstableArgs: unstableArgs ?? defaults?.unstableArgs ?? false,
     transactionLimits,
     schedulerOptions,
   });

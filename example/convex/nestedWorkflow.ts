@@ -24,6 +24,7 @@ export const parentWorkflow = workflow
 export const child = workflow
   .define({
     args: { foo: v.string() },
+    returns: v.number(),
   })
   .handler(async (_ctx, args) => {
     console.log("Starting child workflow");

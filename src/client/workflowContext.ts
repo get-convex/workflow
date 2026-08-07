@@ -17,7 +17,7 @@ import type { Validator } from "convex/values";
 import type { EventId, SchedulerOptions, WorkflowId } from "../types.js";
 import { safeFunctionName } from "./safeFunctionName.js";
 import type { StepRequest } from "./step.js";
-import type { TransactionLimits } from "./types.js";
+import type { TransactionLimits, WorkflowReturnType } from "./types.js";
 
 export type RunOptions = {
   /**
@@ -126,7 +126,7 @@ export type WorkflowCtx = {
     workflow: Workflow,
     args: FunctionArgs<Workflow>["args"],
     opts?: RunOptions,
-  ): Promise<FunctionReturnType<Workflow>>;
+  ): Promise<WorkflowReturnType<Workflow>>;
 
   /**
    * Blocks until a matching event is sent to this workflow.
@@ -212,7 +212,7 @@ export function createWorkflowCtx(
         unstableArgs: unstableArgs ?? defaults?.unstableArgs ?? false,
         schedulerOptions,
         transactionLimits: undefined,
-      });
+      }) as Promise<any>;
     },
 
     sleep: async (duration, opts?) => {

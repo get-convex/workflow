@@ -6,53 +6,25 @@ import {
   createFunctionHandle,
   internalMutationGeneric,
   makeFunctionReference,
-  type FunctionHandle,
   type RegisteredMutation,
+  type ReturnValueForOptionalValidator,
 } from "convex/server";
 import {
   asObjectValidator,
   v,
-  type ObjectType,
   type PropertyValidators,
+  type Validator,
 } from "convex/values";
 import { createLogger } from "../component/logging.js";
 import { type JournalEntry } from "../component/schema.js";
 import { formatErrorWithStack } from "../shared.js";
-import { vWorkflowId, type OnCompleteArgs, type WorkflowId } from "../types.js";
+import { vWorkflowId, type WorkflowId } from "../types.js";
 import { setupEnvironment } from "./environment.js";
 import type { WorkflowDefinition, WorkflowHandler } from "./index.js";
 import { StepExecutor, type StepRequest, type WorkerResult } from "./step.js";
-import { type WorkflowComponent } from "./types.js";
+import { type WorkflowArgs, type WorkflowComponent } from "./types.js";
 import { createWorkflowCtx } from "./workflowContext.js";
 
-export type WorkflowArgs<V extends PropertyValidators, Context = unknown> = {
-  /**
-   * The arguments to pass to the Workflow handler.
-   */
-  args: ObjectType<V>;
-  /**
-   * Whether to enqueue the Workflow for asynchronous execution only.
-   * By default it will start evaluating the handler's first step in the
-   * current transaction.
-   */
-  startAsync?: boolean;
-} & (
-  | {
-      /**
-       * A function handle (created with createFunctionHandle) that will be
-       * called when the Workflow completes.
-       */
-      onComplete: FunctionHandle<"mutation", OnCompleteArgs<Context>>;
-      /**
-       * Context forwarded to the `onComplete` mutation.
-       */
-      context: Context;
-    }
-  | {
-      onComplete?: undefined;
-      context?: undefined;
-    }
-);
 const vWorkflowArgs = v.union(
   v.object({
     workflowId: vWorkflowId,
@@ -71,13 +43,21 @@ const vWorkflowArgs = v.union(
 // function handle to the workflow component for execution. This function runs
 // one "poll" of the workflow, replaying its execution from the journal until
 // it blocks next.
-export function workflowMutation<ArgsValidator extends PropertyValidators>(
+export function workflowMutation<
+  ArgsValidator extends PropertyValidators,
+  Context,
+  ReturnsValidator extends Validator<any, "required", any> | void,
+>(
   component: WorkflowComponent,
-  registered: WorkflowDefinition<ArgsValidator> & {
-    handler: WorkflowHandler<ArgsValidator, any>;
+  registered: WorkflowDefinition<ArgsValidator, ReturnsValidator> & {
+    handler: WorkflowHandler<ArgsValidator, ReturnsValidator>;
   },
   defaultWorkpoolOptions?: WorkpoolOptions,
-): RegisteredMutation<"internal", WorkflowArgs<ArgsValidator>, WorkflowId> {
+): RegisteredMutation<
+  "internal",
+  WorkflowArgs<ArgsValidator, Context, ReturnsValidator>,
+  WorkflowId
+> {
   const workpoolOptions = {
     ...defaultWorkpoolOptions,
     ...registered.workpoolOptions,
@@ -257,7 +237,13 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
       }
       return workflowId;
     },
-  });
+  }) as RegisteredMutation<
+    "internal",
+    WorkflowArgs<ArgsValidator>,
+    WorkflowId
+  > & {
+    _workflowReturns: ReturnValueForOptionalValidator<ReturnsValidator>;
+  };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

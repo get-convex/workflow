@@ -28,11 +28,11 @@ import type {
   WorkflowStep,
 } from "../types.js";
 import { safeFunctionName } from "./safeFunctionName.js";
-import type { IdsToStrings, WorkflowComponent } from "./types.js";
-export type { WorkflowComponent } from "./types.js";
+import type { IdsToStrings, WorkflowArgs, WorkflowComponent } from "./types.js";
 import type { WorkflowCtx } from "./workflowContext.js";
-import { workflowMutation, type WorkflowArgs } from "./workflowMutation.js";
+import { workflowMutation } from "./workflowMutation.js";
 
+export type { WorkflowArgs, WorkflowComponent } from "./types.js";
 export {
   vEventId,
   vWorkflowId,
@@ -46,7 +46,6 @@ export type {
   StepDefaults,
   WorkflowCtx,
 } from "./workflowContext.js";
-export type { WorkflowArgs } from "./workflowMutation.js";
 export { vResultValidator } from "@convex-dev/workpool";
 
 export type CallbackOptions<Context = unknown> =
@@ -148,7 +147,7 @@ export function defineWorkflow<
       step: WorkflowCtx,
       args: ObjectType<AV>,
     ) => Promise<ReturnValueForOptionalValidator<RV>>,
-  ): RegisteredMutation<"internal", WorkflowArgs<AV>, WorkflowId>;
+  ): RegisteredMutation<"internal", WorkflowArgs<AV, RV>, WorkflowId>;
 } {
   return {
     handler: (fn) =>
@@ -511,7 +510,14 @@ export class WorkflowManager {
     workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator> & {
       handler: WorkflowHandler<ArgsValidator, ReturnsValidator>;
     },
-  ): RegisteredMutation<"internal", WorkflowArgs<ArgsValidator>, WorkflowId>;
+  ): RegisteredMutation<
+    "internal",
+    WorkflowArgs<
+      ArgsValidator,
+      ReturnValueForOptionalValidator<ReturnsValidator>
+    >,
+    WorkflowId
+  >;
   define<
     ArgsValidator extends PropertyValidators,
     ReturnsValidator extends Validator<unknown, "required", string> | void,
@@ -527,7 +533,14 @@ export class WorkflowManager {
         step: WorkflowCtx,
         args: ObjectType<ArgsValidator>,
       ) => Promise<ReturnValueForOptionalValidator<ReturnsValidator>>,
-    ): RegisteredMutation<"internal", WorkflowArgs<ArgsValidator>, WorkflowId>;
+    ): RegisteredMutation<
+      "internal",
+      WorkflowArgs<
+        ArgsValidator,
+        ReturnValueForOptionalValidator<ReturnsValidator>
+      >,
+      WorkflowId
+    >;
   };
   define<
     ArgsValidator extends PropertyValidators,

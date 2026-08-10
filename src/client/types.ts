@@ -5,8 +5,10 @@ import type {
 } from "convex/server";
 import type {
   GenericId,
+  Infer,
   ObjectType,
   PropertyValidators,
+  Validator,
   Value,
 } from "convex/values";
 import type { ComponentApi } from "../component/_generated/component.js";
@@ -16,8 +18,8 @@ export type WorkflowComponent = ComponentApi;
 
 export type WorkflowArgs<
   V extends PropertyValidators,
-  Returns,
   Context = unknown,
+  Returns = unknown,
 > = {
   /**
    * The arguments to pass to the Workflow handler.
@@ -30,7 +32,8 @@ export type WorkflowArgs<
    */
   startAsync?: boolean;
   /**
-   * @deprecated Not currently used, other than to hold the return value type
+   * @deprecated Not an input. Only present to carry the workflow's return type,
+   * so a parent workflow's `runWorkflow` can recover it. Passing a value throws.
    */
   result?: Returns;
 } & (
@@ -51,10 +54,26 @@ export type WorkflowArgs<
     }
 );
 
+/**
+ * The value a workflow handler resolves to, according to its `returns`
+ * validator. Defaults to `unknown` if the workflow has no `returns` validator.
+ */
+export type InferFromOptionalValidator<ReturnsValidator> = [
+  ReturnsValidator,
+] extends [Validator<any, any, any>]
+  ? Infer<ReturnsValidator>
+  : unknown;
+
+/**
+ * Recover a workflow's return type from its function reference.
+ *
+ * The mutation itself resolves to a `WorkflowId`, so the return type rides
+ * along in the args type (see `result` above) and is read back out here.
+ */
 export type WorkflowReturnType<
   Workflow extends FunctionReference<"mutation", any, any>,
 > =
-  FunctionArgs<Workflow> extends WorkflowArgs<any, infer Returns>
+  FunctionArgs<Workflow> extends WorkflowArgs<any, any, infer Returns>
     ? Returns
     : unknown;
 

@@ -28,7 +28,12 @@ import type {
   WorkflowStep,
 } from "../types.js";
 import { safeFunctionName } from "./safeFunctionName.js";
-import type { IdsToStrings, WorkflowArgs, WorkflowComponent } from "./types.js";
+import type {
+  IdsToStrings,
+  InferFromOptionalValidator,
+  WorkflowArgs,
+  WorkflowComponent,
+} from "./types.js";
 import type { WorkflowCtx } from "./workflowContext.js";
 import { workflowMutation } from "./workflowMutation.js";
 
@@ -147,7 +152,11 @@ export function defineWorkflow<
       step: WorkflowCtx,
       args: ObjectType<AV>,
     ) => Promise<ReturnValueForOptionalValidator<RV>>,
-  ): RegisteredMutation<"internal", WorkflowArgs<AV, RV>, WorkflowId>;
+  ): RegisteredMutation<
+    "internal",
+    WorkflowArgs<AV, unknown, InferFromOptionalValidator<RV>>,
+    WorkflowId
+  >;
 } {
   return {
     handler: (fn) =>
@@ -514,7 +523,8 @@ export class WorkflowManager {
     "internal",
     WorkflowArgs<
       ArgsValidator,
-      ReturnValueForOptionalValidator<ReturnsValidator>
+      unknown,
+      InferFromOptionalValidator<ReturnsValidator>
     >,
     WorkflowId
   >;
@@ -537,7 +547,8 @@ export class WorkflowManager {
       "internal",
       WorkflowArgs<
         ArgsValidator,
-        ReturnValueForOptionalValidator<ReturnsValidator>
+        unknown,
+        InferFromOptionalValidator<ReturnsValidator>
       >,
       WorkflowId
     >;

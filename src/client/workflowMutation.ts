@@ -123,6 +123,23 @@ export function workflowMutation<
     ...registered.workpoolOptions,
   };
   return internalMutationGeneric({
+    args: v.object({
+      // Declared on the mutation itself, so that anything deriving types from the
+      // validators (static codegen, function specs) sees the real shape.
+      //
+      // The two shapes are merged into one all-optional object rather than kept as a
+      // union b/c Convex args must be an object.
+      // The handler re-checks against the real union below, for better errors.
+      ...vWorkflowArgs.members[0].partial().fields,
+      ...vWorkflowArgs.members[1].partial().fields,
+      // Never an actual input, exists solely to provide a better error message when
+      // the workflow is called directly with args instead of nesting in { args }.
+      docs: v.optional(
+        v.literal(
+          "To call a workflow directly, nest its arguments: { args: { ...yourWorkflowArgs } }",
+        ),
+      ),
+    }),
     returns: vWorkflowReturns(registered.returns ?? undefined),
     handler: async (
       ctx,

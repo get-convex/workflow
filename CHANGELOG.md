@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.5
+
+- Adds `lenientCtx = step.withOptions({ unstableArgs: true })` to return a new
+  WorkflowCtx that can be passed to libraries that have unstable arguments. All
+  calls on the scoped `lenientCtx` will have the specified options applied to
+  the relevant calls. This can also be used to provide a default retry policy
+  for actions scheduled with the scoped WorkflowCtx.
+
 ## 0.4.4
 
 - Adds support for `transactionLimits` (requires convex >= 1.41) when running

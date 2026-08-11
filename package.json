@@ -67,7 +67,7 @@
     "async-channel": "^0.2.0"
   },
   "devDependencies": {
-    "@convex-dev/eslint-plugin": "^2.0.0",
+    "@convex-dev/eslint-plugin": "^3.0.0",
     "@convex-dev/workpool": "0.4.7",
     "@edge-runtime/vm": "5.0.0",
     "@eslint/eslintrc": "3.3.5",

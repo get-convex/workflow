@@ -490,7 +490,19 @@ export class WorkflowManager {
   ) {}
 
   /**
-   * Define a new workflow.
+   * Define a new workflow, specifying the args and returns, then handler.
+   *
+   * This approach is recommended over defining the handler inline to avoid
+   * circular types.
+   *
+   * @example
+   * ```ts
+   * export const doSomething = defineWorkflow({
+   *   args: { amount: v.number() },
+   *   returns: v.object({ total: v.number() }),
+   * }).handler(async (step, args) => {
+   *   ...workflow implementation
+   * });
    *
    * Start the workflow from a mutation or action:
    * ```ts
@@ -509,14 +521,8 @@ export class WorkflowManager {
     ReturnsValidator extends Validator<unknown, "required", string> | void,
   >(
     workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator> & {
-      handler: WorkflowHandler<ArgsValidator, ReturnsValidator>;
+      handler?: never;
     },
-  ): RegisteredMutation<"internal", WorkflowArgs<ArgsValidator>, WorkflowId>;
-  define<
-    ArgsValidator extends PropertyValidators,
-    ReturnsValidator extends Validator<unknown, "required", string> | void,
-  >(
-    workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator>,
   ): {
     /**
      * Define the workflow handler function.
@@ -529,6 +535,20 @@ export class WorkflowManager {
       ) => Promise<ReturnValueForOptionalValidator<ReturnsValidator>>,
     ): RegisteredMutation<"internal", WorkflowArgs<ArgsValidator>, WorkflowId>;
   };
+  /**
+   * Define a new workflow.
+   *
+   * @param workflow - The workflow definition.
+   * @returns The workflow mutation.
+   */
+  define<
+    ArgsValidator extends PropertyValidators,
+    ReturnsValidator extends Validator<unknown, "required", string> | void,
+  >(
+    workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator> & {
+      handler: WorkflowHandler<ArgsValidator, ReturnsValidator>;
+    },
+  ): RegisteredMutation<"internal", WorkflowArgs<ArgsValidator>, WorkflowId>;
   define<
     ArgsValidator extends PropertyValidators,
     ReturnsValidator extends Validator<unknown, "required", string> | void,

@@ -132,6 +132,7 @@ export function workflowMutation<
       // The handler re-checks against the real union below, for better errors.
       ...vWorkflowArgs.members[0].partial().fields,
       ...vWorkflowArgs.members[1].partial().fields,
+      args: v.optional(asObjectValidator(registered.args ?? v.any())),
       // Never an actual input, exists solely to provide a better error message when
       // the workflow is called directly with args instead of nesting in { args }.
       docs: v.optional(

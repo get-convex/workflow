@@ -100,7 +100,6 @@ type CodegenRef<R> = FunctionReference<
     fn?: string;
     generationNumber?: number;
     onComplete?: string;
-    result?: R;
     startAsync?: boolean;
     workflowId?: string;
   },

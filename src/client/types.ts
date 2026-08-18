@@ -1,58 +1,9 @@
-import type {
-  FunctionArgs,
-  FunctionHandle,
-  FunctionReference,
-} from "convex/server";
-import type {
-  GenericId,
-  Infer,
-  ObjectType,
-  PropertyValidators,
-  Validator,
-  Value,
-} from "convex/values";
+import type { FunctionReference, FunctionReturnType } from "convex/server";
+import type { GenericId, Infer, Validator, Value } from "convex/values";
 import type { ComponentApi } from "../component/_generated/component.js";
-import type { OnCompleteArgs } from "../types.js";
+import type { WorkflowId } from "../types.js";
 
 export type WorkflowComponent = ComponentApi;
-
-export type WorkflowArgs<
-  V extends PropertyValidators,
-  Context = unknown,
-  Returns = unknown,
-> = {
-  /**
-   * The arguments to pass to the Workflow handler.
-   */
-  args: ObjectType<V>;
-  /**
-   * Whether to enqueue the Workflow for asynchronous execution only.
-   * By default it will start evaluating the handler's first step in the
-   * current transaction.
-   */
-  startAsync?: boolean;
-  /**
-   * @deprecated Not an input. Only present to carry the workflow's return type,
-   * so a parent workflow's `runWorkflow` can recover it. Passing a value throws.
-   */
-  result?: Returns;
-} & (
-  | {
-      /**
-       * A function handle (created with createFunctionHandle) that will be
-       * called when the Workflow completes.
-       */
-      onComplete: FunctionHandle<"mutation", OnCompleteArgs<Context>>;
-      /**
-       * Context forwarded to the `onComplete` mutation.
-       */
-      context: Context;
-    }
-  | {
-      onComplete?: undefined;
-      context?: undefined;
-    }
-);
 
 /**
  * The value a workflow handler resolves to, according to its `returns`
@@ -64,18 +15,42 @@ export type InferFromOptionalValidator<ReturnsValidator> = [
   ? Infer<ReturnsValidator>
   : unknown;
 
+export type RunResult<Returns = unknown> =
+  | { kind: "success"; returnValue: Returns }
+  | { kind: "failed"; error: string }
+  | { kind: "canceled" };
+
+/**
+ * The value returned by the workflow mutation.
+ *
+ * Direct calls return the workflow ID. Internal polls return `complete` when
+ * the handler finishes, carrying its validated result for the workflow driver.
+ */
+export type WorkflowMutationResult<Returns = unknown> =
+  | WorkflowId
+  | { kind: "complete"; runResult: RunResult<Returns> };
+
+type ReturnValueFromWorkflowMutation<Result> = Result extends {
+  kind: "complete";
+  runResult: infer CompletionResult;
+}
+  ? CompletionResult extends {
+      kind: "success";
+      returnValue: infer Returns;
+    }
+    ? Returns
+    : never
+  : never;
+
 /**
  * Recover a workflow's return type from its function reference.
  *
- * The mutation itself resolves to a `WorkflowId`, so the return type rides
- * along in the args type (see `result` above) and is read back out here.
+ * The internal poll's `complete` result carries the handler's validated return
+ * value. Other branches of the mutation's return union are ignored.
  */
 export type WorkflowReturnType<
   Workflow extends FunctionReference<"mutation", any, any>,
-> =
-  FunctionArgs<Workflow> extends WorkflowArgs<any, any, infer Returns>
-    ? Returns
-    : unknown;
+> = ReturnValueFromWorkflowMutation<FunctionReturnType<Workflow>>;
 
 export type IdsToStrings<T> =
   T extends GenericId<string>

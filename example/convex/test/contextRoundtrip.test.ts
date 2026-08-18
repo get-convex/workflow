@@ -31,6 +31,7 @@ describe("context round-trips through failure paths", () => {
           startAsync: true,
         },
       );
+      assert(typeof wfId === "string");
       await ctx.db.insert("flows", {
         workflowId: wfId,
         in: "directThrow",
@@ -101,6 +102,7 @@ describe("context round-trips through failure paths", () => {
           startAsync: true,
         },
       );
+      assert(typeof wfId === "string");
       await ctx.db.insert("flows", {
         workflowId: wfId,
         in: "directOversized",

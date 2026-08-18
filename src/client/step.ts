@@ -1,8 +1,4 @@
-import type {
-  RetryBehavior,
-  RunResult,
-  WorkpoolOptions,
-} from "@convex-dev/workpool";
+import type { RetryBehavior, WorkpoolOptions } from "@convex-dev/workpool";
 import { BaseChannel } from "async-channel";
 import {
   createFunctionHandle,
@@ -16,6 +12,7 @@ import { convexToJson, getConvexSize, type Value } from "convex/values";
 import { type JournalEntry, type Step } from "../component/schema.js";
 import type {
   IdsToStrings,
+  RunResult,
   TransactionLimits,
   WorkflowComponent,
 } from "./types.js";

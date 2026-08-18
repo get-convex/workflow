@@ -1,5 +1,4 @@
 import type {
-  RunResult,
   WorkpoolOptions,
   WorkpoolRetryOptions,
 } from "@convex-dev/workpool";
@@ -31,13 +30,18 @@ import { safeFunctionName } from "./safeFunctionName.js";
 import type {
   IdsToStrings,
   InferFromOptionalValidator,
-  WorkflowArgs,
+  RunResult,
   WorkflowComponent,
+  WorkflowMutationResult,
 } from "./types.js";
 import type { WorkflowCtx } from "./workflowContext.js";
-import { workflowMutation } from "./workflowMutation.js";
+import { workflowMutation, type WorkflowArgs } from "./workflowMutation.js";
 
-export type { WorkflowArgs, WorkflowComponent } from "./types.js";
+export type {
+  RunResult,
+  WorkflowComponent,
+  WorkflowMutationResult,
+} from "./types.js";
 export {
   vEventId,
   vWorkflowId,
@@ -51,6 +55,7 @@ export type {
   StepDefaults,
   WorkflowCtx,
 } from "./workflowContext.js";
+export type { WorkflowArgs } from "./workflowMutation.js";
 export { vResultValidator } from "@convex-dev/workpool";
 
 export type CallbackOptions<Context = unknown> =
@@ -131,9 +136,10 @@ export type WorkflowStatus =
  * ```ts
  * const workflowId = await start(ctx, internal.myFile.myWorkflow, { amount: 42 });
  * ```
- * Or call it directly:
- * ```ts
- * const workflowId = await ctx.runMutation(internal.myFile.myWorkflow, { args: { ...myArgs } });
+ *
+ * Or run it manually from the CLI:
+ * ```sh
+ * npx convex run myFile:myWorkflow '{ args: { amount: 42 } }'
  * ```
  */
 export function defineWorkflow<
@@ -154,8 +160,8 @@ export function defineWorkflow<
     ) => Promise<ReturnValueForOptionalValidator<RV>>,
   ): RegisteredMutation<
     "internal",
-    WorkflowArgs<AV, unknown, InferFromOptionalValidator<RV>>,
-    WorkflowId
+    WorkflowArgs<AV>,
+    WorkflowMutationResult<InferFromOptionalValidator<RV>>
   >;
 } {
   return {
@@ -504,10 +510,6 @@ export class WorkflowManager {
    * ```ts
    * const workflowId = await start(ctx, internal.myFile.myWorkflow, { ...myArgs });
    * ```
-   * Or call it directly:
-   * ```ts
-   * const workflowId = await ctx.runMutation(internal.myFile.myWorkflow, { args: { ...myArgs } });
-   * ```
    *
    * @param workflow - The workflow definition.
    * @returns The workflow mutation.
@@ -521,12 +523,8 @@ export class WorkflowManager {
     },
   ): RegisteredMutation<
     "internal",
-    WorkflowArgs<
-      ArgsValidator,
-      unknown,
-      InferFromOptionalValidator<ReturnsValidator>
-    >,
-    WorkflowId
+    WorkflowArgs<ArgsValidator>,
+    WorkflowMutationResult<InferFromOptionalValidator<ReturnsValidator>>
   >;
   define<
     ArgsValidator extends PropertyValidators,
@@ -545,12 +543,8 @@ export class WorkflowManager {
       ) => Promise<ReturnValueForOptionalValidator<ReturnsValidator>>,
     ): RegisteredMutation<
       "internal",
-      WorkflowArgs<
-        ArgsValidator,
-        unknown,
-        InferFromOptionalValidator<ReturnsValidator>
-      >,
-      WorkflowId
+      WorkflowArgs<ArgsValidator>,
+      WorkflowMutationResult<InferFromOptionalValidator<ReturnsValidator>>
     >;
   };
   define<

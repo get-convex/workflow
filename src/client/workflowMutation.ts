@@ -1,4 +1,4 @@
-import { type RunResult, type WorkpoolOptions } from "@convex-dev/workpool";
+import { type WorkpoolOptions } from "@convex-dev/workpool";
 import { BaseChannel } from "async-channel";
 import { assert } from "convex-helpers";
 import { validate, ValidationError } from "convex-helpers/validators";
@@ -6,47 +6,97 @@ import {
   createFunctionHandle,
   internalMutationGeneric,
   makeFunctionReference,
+  type FunctionHandle,
   type RegisteredMutation,
 } from "convex/server";
 import {
   asObjectValidator,
   v,
+  type ObjectType,
   type PropertyValidators,
   type Validator,
 } from "convex/values";
 import { createLogger } from "../component/logging.js";
 import { type JournalEntry } from "../component/schema.js";
 import { formatErrorWithStack } from "../shared.js";
-import { vWorkflowId, type WorkflowId } from "../types.js";
+import { vWorkflowId, type OnCompleteArgs, type WorkflowId } from "../types.js";
 import { setupEnvironment } from "./environment.js";
 import type { WorkflowDefinition, WorkflowHandler } from "./index.js";
 import { StepExecutor, type StepRequest, type WorkerResult } from "./step.js";
 import {
   type InferFromOptionalValidator,
-  type WorkflowArgs,
+  type RunResult,
   type WorkflowComponent,
+  type WorkflowMutationResult,
 } from "./types.js";
 import { createWorkflowCtx } from "./workflowContext.js";
 
-const workflowArgsValidator = (
+export type WorkflowArgs<V extends PropertyValidators, Context = unknown> = {
+  /**
+   * The arguments to pass to the Workflow handler.
+   */
+  args: ObjectType<V>;
+  /**
+   * Whether to enqueue the Workflow for asynchronous execution only.
+   * By default it will start evaluating the handler's first step in the
+   * current transaction.
+   */
+  startAsync?: boolean;
+} & (
+  | {
+      /**
+       * A function handle (created with createFunctionHandle) that will be
+       * called when the Workflow completes.
+       */
+      onComplete: FunctionHandle<"mutation", OnCompleteArgs<Context>>;
+      /**
+       * Context forwarded to the `onComplete` mutation.
+       */
+      context: Context;
+    }
+  | {
+      onComplete?: undefined;
+      context?: undefined;
+    }
+);
+
+const vWorkflowArgs = v.union(
+  v.object({
+    workflowId: vWorkflowId,
+    generationNumber: v.number(),
+  }),
+  v.object({
+    fn: v.optional(v.string()),
+    args: v.any(),
+    startAsync: v.optional(v.boolean()),
+    onComplete: v.optional(v.string()),
+    context: v.optional(v.any()),
+  }),
+);
+
+const vRunResult = (
   returns: Validator<any, "required", any> | PropertyValidators | undefined,
 ) =>
   v.union(
     v.object({
-      workflowId: vWorkflowId,
-      generationNumber: v.number(),
+      kind: v.literal("success"),
+      returnValue: returns ? asObjectValidator(returns) : v.any(),
     }),
     v.object({
-      fn: v.optional(v.string()),
-      args: v.any(),
-      startAsync: v.optional(v.boolean()),
-      onComplete: v.optional(v.string()),
-      context: v.optional(v.any()),
-      /**
-       * @deprecated Not an input. Only present to carry the workflow's return type,
-       * so a parent workflow's `runWorkflow` can recover it. Passing a value throws.
-       */
-      result: v.optional(returns ? asObjectValidator(returns) : v.any()),
+      kind: v.literal("failed"),
+      error: v.string(),
+    }),
+    v.object({ kind: v.literal("canceled") }),
+  );
+
+const vWorkflowReturns = (
+  returns: Validator<any, "required", any> | PropertyValidators | undefined,
+) =>
+  v.union(
+    vWorkflowId,
+    v.object({
+      kind: v.literal("complete"),
+      runResult: vRunResult(returns),
     }),
   );
 
@@ -65,32 +115,21 @@ export function workflowMutation<
   defaultWorkpoolOptions?: WorkpoolOptions,
 ): RegisteredMutation<
   "internal",
-  WorkflowArgs<
-    ArgsValidator,
-    unknown,
-    InferFromOptionalValidator<ReturnsValidator>
-  >,
-  WorkflowId
+  WorkflowArgs<ArgsValidator>,
+  WorkflowMutationResult<InferFromOptionalValidator<ReturnsValidator>>
 > {
   const workpoolOptions = {
     ...defaultWorkpoolOptions,
     ...registered.workpoolOptions,
   };
-  const vWorkflowArgs = workflowArgsValidator(registered.returns ?? undefined);
   return internalMutationGeneric({
-    handler: async (ctx, args): Promise<WorkflowId> => {
-      // Checked before validation so a mistyped `result` still lands here
-      // rather than on the (much less helpful) validator error.
-      if ("result" in args && args.result !== undefined) {
-        throw new Error(
-          `[workflow] Error: 'result' is not an input to a workflow. It only ` +
-            `appears in the args type to carry the workflow's return value ` +
-            `type, so that a parent workflow's step.runWorkflow() can see it. ` +
-            `Remove it. To read a workflow's return value, await ` +
-            `step.runWorkflow() from a parent workflow, pass an onComplete ` +
-            `handler, or call getStatus().`,
-        );
-      }
+    returns: vWorkflowReturns(registered.returns ?? undefined),
+    handler: async (
+      ctx,
+      args,
+    ): Promise<
+      WorkflowMutationResult<InferFromOptionalValidator<ReturnsValidator>>
+    > => {
       if (!validate(vWorkflowArgs, args)) {
         if (!("workflowId" in args) && !("args" in args)) {
           const console = createLogger(workpoolOptions?.logLevel);
@@ -252,6 +291,9 @@ export function workflowMutation<
               generationNumber,
               runResult: result.runResult,
             });
+            if (!("args" in args)) {
+              return { kind: "complete", runResult: result.runResult };
+            }
             break;
           }
           case "executorBlocked": {
@@ -266,12 +308,8 @@ export function workflowMutation<
     },
   }) as RegisteredMutation<
     "internal",
-    WorkflowArgs<
-      ArgsValidator,
-      unknown,
-      InferFromOptionalValidator<ReturnsValidator>
-    >,
-    WorkflowId
+    WorkflowArgs<ArgsValidator>,
+    WorkflowMutationResult<InferFromOptionalValidator<ReturnsValidator>>
   >;
 }
 

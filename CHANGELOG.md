@@ -4,12 +4,7 @@
   child workflow's return value (per its `returns` validator) instead of the
   child's `WorkflowId`, which is what it has always resolved to at runtime. A
   workflow with no `returns` validator resolves to `unknown`. Code that relied
-  on the old (incorrect) type will need updating. Passing `result` when calling
-  a workflow throws. It appears in the args type only to carry the workflow's
-  return value type.
-- The exported `WorkflowArgs` type takes a third, optional type parameter:
-  `WorkflowArgs<Args, Context = unknown, Returns = unknown>`. Existing
-  `WorkflowArgs<Args>` and `WorkflowArgs<Args, Context>` usages are unaffected.
+  on the old (incorrect) type will need updating.
 
 ## 0.4.5
 

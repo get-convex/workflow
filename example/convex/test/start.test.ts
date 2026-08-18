@@ -21,6 +21,7 @@ describe("direct workflow call", () => {
       internal.catchError.catchErrorWorkflow,
       { args: { manualRetries: 0 } },
     );
+    assert(typeof workflowId === "string");
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     const status = await t.run((ctx) =>
       getStatus(ctx, components.workflow, workflowId),
@@ -35,6 +36,7 @@ describe("direct workflow call", () => {
     const workflowId = await t.mutation(internal.nestedWorkflow.child, {
       args: { foo: "hello" },
     });
+    assert(typeof workflowId === "string");
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     const status = await t.run((ctx) =>
       getStatus(ctx, components.workflow, workflowId),
@@ -52,6 +54,7 @@ describe("direct workflow call", () => {
         args: { prompt: "hello" },
       },
     );
+    assert(typeof workflowId === "string");
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     const status = await t.run((ctx) =>
       getStatus(ctx, components.workflow, workflowId),
@@ -60,28 +63,43 @@ describe("direct workflow call", () => {
     expect(status.result).toBe(5);
   });
 
-  test("passing `result` throws a legible error", async () => {
-    // `result` is in the args type only to carry the return type. Passing one
-    // is a bug, so say so rather than failing on the arg validator.
+  test("an internal poll returns the validated completion result", async () => {
     const t = initConvexTest();
-    await expect(
-      t.mutation(internal.nestedWorkflow.child, {
-        args: { foo: "hello" },
-        result: 123,
-      }),
-    ).rejects.toThrow("'result' is not an input to a workflow");
+    const workflowId = await t.mutation(internal.nestedWorkflow.child, {
+      args: { foo: "hello" },
+      startAsync: true,
+    });
+    assert(typeof workflowId === "string");
+
+    const result = await t.mutation(internal.nestedWorkflow.child, {
+      workflowId,
+      generationNumber: 0,
+    } as any);
+    expect(result).toEqual({
+      kind: "complete",
+      runResult: { kind: "success", returnValue: 5 },
+    });
   });
 
-  test("a mistyped `result` gets the same error, not a validator error", async () => {
+  test("manual return validation preserves its error message", async () => {
     const t = initConvexTest();
-    await expect(
-      t.mutation(internal.nestedWorkflow.child, {
-        args: { foo: "hello" },
-        // `child` declares `returns: v.number()`, so this also fails the arg
-        // validator -- the explicit check has to win.
-        result: "not a number" as unknown as number,
-      }),
-    ).rejects.toThrow("'result' is not an input to a workflow");
+    const workflowId = await t.mutation(internal.nestedWorkflow.invalidReturn, {
+      args: {},
+      startAsync: true,
+    });
+    assert(typeof workflowId === "string");
+
+    const result = await t.mutation(internal.nestedWorkflow.invalidReturn, {
+      workflowId,
+      generationNumber: 0,
+    } as any);
+    assert(typeof result !== "string");
+    expect(result.kind).toBe("complete");
+    assert(result.kind === "complete");
+    expect(result.runResult.kind).toBe("failed");
+    assert(result.runResult.kind === "failed");
+    expect(result.runResult.error).toContain("Invalid return value:");
+    expect(result.runResult.error).toContain("Expected `number`");
   });
 });
 

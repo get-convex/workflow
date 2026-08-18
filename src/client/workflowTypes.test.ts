@@ -10,12 +10,13 @@ import type { PropertyValidators } from "convex/values";
 import { expectTypeOf, test } from "vitest";
 import type { WorkflowId } from "../types.js";
 import type { defineWorkflow, WorkflowManager } from "./index.js";
+import type { WorkflowMutationResult } from "./types.js";
 import type { WorkflowCtx } from "./workflowContext.js";
 
 // Type-level regression tests: a workflow's `returns` validator has to survive
-// the trip through the registered mutation's *args* type so that a parent
+// the trip through the registered mutation's return type so that a parent
 // workflow's `runWorkflow` resolves to the child's return value rather than to
-// the WorkflowId the mutation itself hands back.
+// the WorkflowId returned by direct calls.
 
 declare const _ctx: WorkflowCtx;
 
@@ -48,9 +49,13 @@ type Managed<AV extends PropertyValidators, RV extends Returns> = ReturnType<
   >["handler"]
 >;
 
-test("the mutation itself still resolves to a WorkflowId", () => {
+test("the mutation exposes its validated completion result", () => {
   expectTypeOf<Defined<{ foo: VString }, VFloat64>>().toExtend<
-    RegisteredMutation<"internal", { args: { foo: string } }, WorkflowId>
+    RegisteredMutation<
+      "internal",
+      { args: { foo: string } },
+      WorkflowMutationResult<number>
+    >
   >();
 });
 
@@ -82,5 +87,31 @@ test("a `v.null()` return does not leak undefined/void", () => {
   // here, but a completed workflow always stores a concrete value.
   expectTypeOf<
     RunWorkflowResult<Defined<Record<string, never>, VNull>>
+  >().toEqualTypeOf<null>();
+});
+
+type CodegenRef<R> = FunctionReference<
+  "mutation",
+  "internal",
+  { args?: unknown; workflowId?: string; generationNumber?: number },
+  | WorkflowId
+  | {
+      kind: "complete";
+      runResult:
+        | { kind: "success"; returnValue: R }
+        | { kind: "failed"; error: string }
+        | { kind: "canceled" };
+    }
+>;
+
+test("the return type survives statically generated function types", () => {
+  expectTypeOf<
+    Awaited<ReturnType<typeof _ctx.runWorkflow<CodegenRef<number>>>>
+  >().toEqualTypeOf<number>();
+  expectTypeOf<
+    Awaited<ReturnType<typeof _ctx.runWorkflow<CodegenRef<{ total: number }>>>>
+  >().toEqualTypeOf<{ total: number }>();
+  expectTypeOf<
+    Awaited<ReturnType<typeof _ctx.runWorkflow<CodegenRef<null>>>>
   >().toEqualTypeOf<null>();
 });

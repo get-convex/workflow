@@ -31,6 +31,15 @@ export const child = workflow
     return args.foo.length;
   });
 
+export const invalidReturn = workflow
+  .define({
+    args: {},
+    returns: v.number(),
+  })
+  .handler(async () => {
+    return "not a number" as unknown as number;
+  });
+
 export const step = internalMutation({
   args: { foo: v.string() },
   handler: async (_ctx, args) => {

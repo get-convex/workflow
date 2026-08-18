@@ -1,8 +1,4 @@
-import type {
-  RetryBehavior,
-  RetryOption,
-  RunResult,
-} from "@convex-dev/workpool";
+import type { RetryBehavior, RetryOption } from "@convex-dev/workpool";
 import { BaseChannel } from "async-channel";
 import { parse } from "convex-helpers/validators";
 import type {
@@ -17,7 +13,11 @@ import type { Validator } from "convex/values";
 import type { EventId, SchedulerOptions, WorkflowId } from "../types.js";
 import { safeFunctionName } from "./safeFunctionName.js";
 import type { StepRequest } from "./step.js";
-import type { TransactionLimits, WorkflowReturnType } from "./types.js";
+import type {
+  RunResult,
+  TransactionLimits,
+  WorkflowReturnType,
+} from "./types.js";
 
 export type RunOptions = {
   /**

@@ -5,12 +5,12 @@ import {
   query,
   type MutationCtx,
 } from "./_generated/server.js";
+import { vStepWithIds } from "./schema.js";
 import {
   journalDocument,
   type JournalEntry,
-  step,
   workflowDocument,
-} from "./schema.js";
+} from "../validators.js";
 import { getWorkflow } from "./model.js";
 import { logLevel } from "../logging.js";
 import { vRetryBehavior, type WorkId } from "@convex-dev/workpool";
@@ -87,7 +87,7 @@ export const startSteps = mutation({
     generationNumber: v.number(),
     steps: v.array(
       v.object({
-        step,
+        step: vStepWithIds,
         retry: v.optional(v.union(v.boolean(), vRetryBehavior)),
         schedulerOptions: v.optional(schedulerOptionsValidator),
         timeRequired: v.optional(v.number()),

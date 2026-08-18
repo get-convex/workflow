@@ -1,121 +1,15 @@
-import {
-  vResultValidator,
-  vRetryBehavior,
-  vWorkIdValidator,
-} from "@convex-dev/workpool";
-import { deprecated, literals } from "convex-helpers/validators";
+import { vResultValidator, vWorkIdValidator } from "@convex-dev/workpool";
 import { defineSchema, defineTable } from "convex/server";
-import { type Infer, v, type Validator } from "convex/values";
+import { v } from "convex/values";
 import { logLevel } from "../logging.js";
-import { vActionExecution } from "../execution.js";
-import { workpoolOptions } from "../workpoolOptions.js";
+import { vJournalFields, vWorkflowFields } from "../validators.js";
 
-export const vOnComplete = v.object({
-  fnHandle: v.string(), // mutation
-  context: v.optional(v.any()),
-});
+// The `steps` shape as stored here, with real ids. `../validators.js` has the
+// same shape with string ids, for the app side of the component boundary.
+const journalFields = vJournalFields(v.id("workflows"), v.id("events"));
 
-const workflowObject = {
-  name: v.optional(v.string()),
-  workflowHandle: v.string(),
-  args: v.any(),
-  onComplete: v.optional(vOnComplete),
-  logLevel: deprecated,
-  startedAt: deprecated,
-  state: deprecated,
-  // undefined until it's completed
-  runResult: v.optional(vResultValidator),
-
-  // Internal execution status, used to totally order mutations.
-  generationNumber: v.number(),
-  execution: v.optional(vActionExecution),
-  workpoolOptions: v.optional(workpoolOptions),
-};
-
-export const workflowDocument = v.object({
-  _id: v.string(),
-  _creationTime: v.number(),
-  ...workflowObject,
-});
-export type Workflow = Infer<typeof workflowDocument>;
-
-const stepCommonFields = {
-  name: v.string(),
-  inProgress: v.boolean(),
-  argsSize: v.number(),
-  args: v.any(),
-  runResult: v.optional(vResultValidator),
-  startedAt: v.number(),
-  completedAt: v.optional(v.number()),
-};
-
-// v.id(table) is validated against the schema of whichever component the
-// function is defined in, so ids are only usable inside this component. The
-// variants taking v.string() are for validators that cross into the app, where
-// these tables don't exist. See `journalDocument`.
-const stepVariants = <
-  WorkflowId extends Validator<string, "required", any>,
-  EventId extends Validator<string, "required", any>,
->(
-  vWorkflowsId: WorkflowId,
-  vEventsId: EventId,
-) =>
-  v.union(
-    v.object({
-      kind: v.optional(v.literal("function")),
-      functionType: literals("query", "mutation", "action"),
-      handle: v.string(),
-      workId: v.optional(vWorkIdValidator),
-      ...stepCommonFields,
-    }),
-    v.object({
-      kind: v.literal("workflow"),
-      handle: v.string(),
-      workflowId: v.optional(vWorkflowsId),
-      ...stepCommonFields,
-    }),
-    v.object({
-      kind: v.literal("event"),
-      ...stepCommonFields,
-      eventId: v.optional(vEventsId),
-      args: v.object({ eventId: v.optional(vEventsId) }),
-    }),
-    v.object({
-      kind: v.literal("sleep"),
-      workId: v.optional(vWorkIdValidator),
-      ...stepCommonFields,
-    }),
-  );
-
-export const step = stepVariants(v.id("workflows"), v.id("events"));
-export type Step = Infer<typeof step>;
-
-const journalObject = {
-  workflowId: v.id("workflows"),
-  stepNumber: v.number(),
-  step,
-  retry: v.optional(v.union(v.boolean(), vRetryBehavior)),
-  schedulerOptions: v.optional(
-    v.union(
-      v.object({ runAt: v.optional(v.number()) }),
-      v.object({ runAfter: v.optional(v.number()) }),
-    ),
-  ),
-  timeRequired: v.optional(v.number()),
-};
-
-// The document shape as seen outside this component: the workflow mutation
-// takes journal entries as args and returns them, and it's defined in the app,
-// where `v.id("workflows")` / `v.id("events")` don't resolve. Ids are plain
-// strings here for the same reason `_id` is.
-export const journalDocument = v.object({
-  _id: v.string(),
-  _creationTime: v.number(),
-  ...journalObject,
-  workflowId: v.string(),
-  step: stepVariants(v.string(), v.string()),
-});
-export type JournalEntry = Infer<typeof journalDocument>;
+/** The step union with this component's ids, for its own function args. */
+export const vStepWithIds = journalFields.step;
 
 export const event = {
   workflowId: v.id("workflows"),
@@ -149,8 +43,8 @@ export default defineSchema({
     logLevel: v.optional(logLevel),
     maxParallelism: v.optional(v.number()),
   }),
-  workflows: defineTable(workflowObject).index("name", ["name"]),
-  steps: defineTable(journalObject)
+  workflows: defineTable(vWorkflowFields).index("name", ["name"]),
+  steps: defineTable(journalFields)
     .index("workflow", ["workflowId", "stepNumber"])
     .index("inProgress", ["step.inProgress", "workflowId"]),
   events: defineTable(event).index("workflowId_state", [

@@ -18,7 +18,7 @@ import {
   type ActionCtx,
   type MutationCtx,
 } from "./_generated/server.js";
-import { journalDocument, type JournalEntry } from "./schema.js";
+import { journalDocument, type JournalEntry } from "../validators.js";
 import { getWorkflow } from "./model.js";
 import { getDefaultLogger } from "./utils.js";
 import type {

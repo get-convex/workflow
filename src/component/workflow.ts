@@ -16,12 +16,13 @@ import {
 import { type Logger, logLevel } from "../logging.js";
 import { getWorkflow } from "./model.js";
 import { enqueueWorkflow, getWorkpool, workpoolOptions } from "./pool.js";
-import schema, {
+import schema from "./schema.js";
+import {
   journalDocument,
   vOnComplete,
   workflowDocument,
   type JournalEntry,
-} from "./schema.js";
+} from "../validators.js";
 import { getDefaultLogger } from "./utils.js";
 import {
   type WorkflowId,

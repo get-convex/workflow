@@ -9,7 +9,7 @@ import {
   type GenericMutationCtx,
 } from "convex/server";
 import { convexToJson, getConvexSize, type Value } from "convex/values";
-import { type JournalEntry, type Step } from "../component/schema.js";
+import { type JournalEntry, type Step } from "../validators.js";
 import type {
   IdsToStrings,
   TransactionLimits,

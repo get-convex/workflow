@@ -18,7 +18,7 @@ import {
   type ReturnValueForOptionalValidator,
 } from "convex/server";
 import type { ObjectType, PropertyValidators, Validator } from "convex/values";
-import type { Step } from "../component/schema.js";
+import type { Step } from "../validators.js";
 import type {
   EventId,
   OnCompleteArgs,

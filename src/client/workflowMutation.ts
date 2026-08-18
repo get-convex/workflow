@@ -17,13 +17,17 @@ import {
   type PropertyValidators,
   type Validator,
 } from "convex/values";
-import { createLogger } from "../logging.js";
+import {
+  createLogger,
+  logLevel as logLevelValidator,
+  type LogLevel,
+} from "../logging.js";
 import {
   journalDocument,
   type JournalEntry,
   type Workflow,
   workflowDocument,
-} from "../component/schema.js";
+} from "../validators.js";
 import { formatErrorWithStack } from "../shared.js";
 import { vWorkflowId, type OnCompleteArgs, type WorkflowId } from "../types.js";
 import {
@@ -31,10 +35,6 @@ import {
   vExecutionMode,
   type ExecutionMode,
 } from "../execution.js";
-import {
-  logLevel as logLevelValidator,
-  type LogLevel,
-} from "../logging.js";
 import { setupEnvironment } from "./environment.js";
 import type { WorkflowDefinition, WorkflowHandler } from "./index.js";
 import { StepExecutor, type StepRequest, type WorkerResult } from "./step.js";

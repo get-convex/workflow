@@ -139,7 +139,7 @@ export const getStatus = query({
   },
 });
 
-function publicWorkflowId(workflowId: Id<"workflows">): WorkflowId {
+function publicWorkflowId(workflowId: Id<"workflows"> | string): WorkflowId {
   return workflowId as any;
 }
 

@@ -31,31 +31,31 @@ export const startAll = mutation({
       ctx,
       internal.example.myWorkflow,
       { location: "San Jose" },
-      { startAsync: true },
+      { startAsync: true, executionMode: "action" },
     );
     const catchError = await workflow.start(
       ctx,
       internal.catchError.catchErrorWorkflow,
       { manualRetries: 2 },
-      { startAsync: true },
+      { startAsync: true, executionMode: "action" },
     );
     const nested = await workflow.start(
       ctx,
       internal.nestedWorkflow.parentWorkflow,
       { prompt: "hello world" },
-      { startAsync: true },
+      { startAsync: true, executionMode: "action" },
     );
     const signals = await workflow.start(
       ctx,
       internal.passingSignals.signalWorkflow,
       {},
-      { startAsync: true },
+      { startAsync: true, executionMode: "action" },
     );
     const confirmation = await workflow.start(
       ctx,
       internal.userConfirmation.confirmationWorkflow,
       { prompt: "test prompt" },
-      { startAsync: true },
+      { startAsync: true, executionMode: "action" },
     );
     return { weather, catchError, nested, signals, confirmation };
   },

@@ -11,16 +11,21 @@ import { formatErrorWithStack } from "../shared.js";
 import { checkForOversizedResult } from "./oversizedValues.js";
 import { DEFAULT_RETRY_BEHAVIOR, workpoolOptions } from "./pool.js";
 import { api, internal } from "./_generated/api.js";
-import type { Doc } from "./_generated/dataModel.js";
+import type { Doc, Id } from "./_generated/dataModel.js";
 import {
   internalAction,
   internalMutation,
   type ActionCtx,
   type MutationCtx,
 } from "./_generated/server.js";
-import { journalDocument } from "./schema.js";
+import { journalDocument, type JournalEntry } from "./schema.js";
 import { getWorkflow } from "./model.js";
 import { getDefaultLogger } from "./utils.js";
+import type {
+  WorkflowMutationArgs,
+  WorkflowMutationResult,
+} from "../client/workflowMutation.js";
+import type { WorkflowId } from "../types.js";
 
 const ACTION_RUNNER_MAX_RESERVE_MS = 5_000;
 
@@ -56,8 +61,11 @@ export const run = internalAction({
       journalEntries: loaded.journalEntries,
       logLevel: loaded.logLevel,
     };
-    const workflowHandle = loaded.workflow
-      .workflowHandle as FunctionHandle<"mutation">;
+    const workflowHandle = loaded.workflow.workflowHandle as FunctionHandle<
+      "mutation",
+      WorkflowMutationArgs,
+      WorkflowMutationResult
+    >;
     const effectiveWorkpoolOptions =
       args.workpoolOptions ?? loaded.workflow.workpoolOptions;
 
@@ -71,20 +79,18 @@ export const run = internalAction({
         return null;
       }
 
-      const result = (await ctx.runMutation(workflowHandle, {
-        workflowId: args.workflowId,
+      const result = await ctx.runMutation(workflowHandle, {
+        workflowId: args.workflowId as unknown as WorkflowId,
         generationNumber: args.generationNumber,
         actionState,
-      })) as
-        | { type: "completed" }
-        | { type: "blocked" }
-        | { type: "steps"; entries: Doc<"steps">[] };
-      if (result.type !== "steps") {
+      });
+      assert(typeof result !== "string" && "kind" in result);
+      if (result.kind !== "steps") {
         return null;
       }
 
-      const direct: Doc<"steps">[] = [];
-      const dispatch: Doc<"steps">[] = [];
+      const direct: JournalEntry[] = [];
+      const dispatch: JournalEntry[] = [];
       for (const entry of result.entries) {
         const scheduled = entry.schedulerOptions
           ? ("runAt" in entry.schedulerOptions &&
@@ -110,7 +116,7 @@ export const run = internalAction({
           direct.map((entry) =>
             executeDirectStep(
               ctx,
-              entry,
+              entry as Doc<"steps">,
               args.generationNumber,
               effectiveWorkpoolOptions,
             ),
@@ -121,7 +127,9 @@ export const run = internalAction({
           : ctx.runMutation(internal.journal.dispatchSteps, {
               workflowId: args.workflowId,
               generationNumber: args.generationNumber,
-              steps: dispatch.map((entry) => ({ stepId: entry._id })),
+              steps: dispatch.map((entry) => ({
+                stepId: entry._id as Id<"steps">,
+              })),
               workpoolOptions: effectiveWorkpoolOptions,
             }),
       ]);
@@ -132,7 +140,7 @@ export const run = internalAction({
         ]),
       );
       const completedBatch = result.entries.map((entry) => {
-        const updated = byId.get(entry._id);
+        const updated = byId.get(entry._id as Id<"steps">);
         assert(updated, `Missing action result for step ${entry._id}`);
         return updated;
       });

@@ -13,11 +13,8 @@ import type { Validator } from "convex/values";
 import type { EventId, SchedulerOptions, WorkflowId } from "../types.js";
 import { safeFunctionName } from "./safeFunctionName.js";
 import type { StepRequest } from "./step.js";
-import type {
-  RunResult,
-  TransactionLimits,
-  WorkflowReturnType,
-} from "./types.js";
+import type { TransactionLimits, WorkflowReturnType } from "./types.js";
+import type { RunResult } from "./workflowMutation.js";
 
 export type RunOptions = {
   /**

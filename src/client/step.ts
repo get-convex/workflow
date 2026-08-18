@@ -12,13 +12,13 @@ import { convexToJson, getConvexSize, type Value } from "convex/values";
 import { type JournalEntry, type Step } from "../component/schema.js";
 import type {
   IdsToStrings,
-  RunResult,
   TransactionLimits,
   WorkflowComponent,
 } from "./types.js";
 import { MAX_JOURNAL_SIZE, formatErrorWithStack } from "../shared.js";
 import type { EventId, SchedulerOptions } from "../types.js";
 import { pick } from "convex-helpers";
+import type { RunResult } from "./workflowMutation.js";
 
 export type WorkerResult =
   | { type: "handlerDone"; runResult: RunResult }

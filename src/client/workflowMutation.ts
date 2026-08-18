@@ -12,6 +12,7 @@ import {
 import {
   asObjectValidator,
   v,
+  type Infer,
   type ObjectType,
   type PropertyValidators,
   type Validator,
@@ -94,6 +95,7 @@ const vWorkflowArgs = v.union(
     executionMode: v.optional(vExecutionMode),
   }),
 );
+export type WorkflowMutationArgs = Infer<typeof vWorkflowArgs>;
 
 export type RunResult<Returns = unknown> =
   | { kind: "success"; returnValue: Returns }

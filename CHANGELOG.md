@@ -1,5 +1,7 @@
 # Changelog
 
+## 0.4.6
+
 - Fixes the type of `step.runWorkflow(child, args)`: it now resolves to the
   child workflow's return value (per its `returns` validator) instead of the
   child's `WorkflowId`, which is what it has always resolved to at runtime. A

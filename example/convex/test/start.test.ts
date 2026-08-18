@@ -17,9 +17,10 @@ describe("direct workflow call", () => {
 
   test("calling workflow mutation directly starts and completes", async () => {
     const t = initConvexTest();
-    const workflowId = await t.mutation(
-      internal.catchError.catchErrorWorkflow,
-      { args: { manualRetries: 0 } },
+    const workflowId = await t.mutation((ctx) =>
+      start(ctx, internal.catchError.catchErrorWorkflow, {
+        manualRetries: 0,
+      }),
     );
     assert(typeof workflowId === "string");
     await t.finishAllScheduledFunctions(vi.runAllTimers);
@@ -33,9 +34,9 @@ describe("direct workflow call", () => {
 
   test("direct call to nested child workflow", async () => {
     const t = initConvexTest();
-    const workflowId = await t.mutation(internal.nestedWorkflow.child, {
-      args: { foo: "hello" },
-    });
+    const workflowId = await t.mutation((ctx) =>
+      start(ctx, internal.nestedWorkflow.child, { foo: "hello" }),
+    );
     assert(typeof workflowId === "string");
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     const status = await t.run((ctx) =>
@@ -48,11 +49,10 @@ describe("direct workflow call", () => {
 
   test("parent workflow returns the nested child's return value", async () => {
     const t = initConvexTest();
-    const workflowId = await t.mutation(
-      internal.nestedWorkflow.parentWorkflow,
-      {
-        args: { prompt: "hello" },
-      },
+    const workflowId = await t.mutation((ctx) =>
+      start(ctx, internal.nestedWorkflow.parentWorkflow, {
+        prompt: "hello",
+      }),
     );
     assert(typeof workflowId === "string");
     await t.finishAllScheduledFunctions(vi.runAllTimers);
@@ -65,10 +65,18 @@ describe("direct workflow call", () => {
 
   test("an internal poll returns the validated completion result", async () => {
     const t = initConvexTest();
-    const workflowId = await t.mutation(internal.nestedWorkflow.child, {
-      args: { foo: "hello" },
-      startAsync: true,
-    });
+    const workflowId = await t.mutation((ctx) =>
+      start(
+        ctx,
+        internal.nestedWorkflow.child,
+        {
+          foo: "hello",
+        },
+        {
+          startAsync: true,
+        },
+      ),
+    );
     assert(typeof workflowId === "string");
 
     const result = await t.mutation(internal.nestedWorkflow.child, {

@@ -66,7 +66,6 @@ const vWorkflowArgs = v.union(
     generationNumber: v.number(),
   }),
   v.object({
-    fn: v.optional(v.string()),
     args: v.any(),
     startAsync: v.optional(v.boolean()),
     onComplete: v.optional(v.string()),
@@ -123,6 +122,24 @@ export function workflowMutation<
     ...registered.workpoolOptions,
   };
   return internalMutationGeneric({
+    args: v.object({
+      // Declared on the mutation itself, so that anything deriving types from the
+      // validators (static codegen, function specs) sees the real shape.
+      //
+      // The two shapes are merged into one all-optional object rather than kept as a
+      // union b/c Convex args must be an object.
+      // The handler re-checks against the real union below, for better errors.
+      ...vWorkflowArgs.members[0].partial().fields,
+      ...vWorkflowArgs.members[1].partial().fields,
+      args: v.optional(asObjectValidator(registered.args ?? v.any())),
+      // Never an actual input, exists solely to provide a better error message when
+      // the workflow is called directly with args instead of nesting in { args }.
+      docs: v.optional(
+        v.literal(
+          "To call a workflow directly, nest its arguments: { args: { ...yourWorkflowArgs } }",
+        ),
+      ),
+    }),
     returns: vWorkflowReturns(registered.returns ?? undefined),
     handler: async (
       ctx,
@@ -144,21 +161,6 @@ export function workflowMutation<
       // Direct call { args: {...}, onComplete?, context?, startAsync? }
       if ("args" in args) {
         const metadata = await ctx.meta.getFunctionMetadata();
-        // CLI/dashboard format { fn: "path/to:fn", args: {...} } (deprecated)
-        if ("fn" in args && typeof args.fn === "string") {
-          const console = createLogger(workpoolOptions?.logLevel);
-          if (args.fn !== metadata.name) {
-            console.error(
-              `[workflow] Error: calling workflow with { fn: "${args.fn}", args } ` +
-                `but the function name does not match the workflow name ${metadata.name}. Use { args: { ...yourArgs } } without "fn" to start this workflow, ` +
-                `or use the start() function.`,
-            );
-            throw new Error(`Invalid workflow function reference: ${args.fn}`);
-          }
-          console.warn(
-            `[workflow] Deprecation warning: calling a workflow with { fn, args } is deprecated. You no longer need to pass "fn". Use { args: { ...yourArgs } } to start a workflow directly.`,
-          );
-        }
         const fn = makeFunctionReference(metadata.name);
         const onComplete =
           typeof args.onComplete === "string"
@@ -245,7 +247,7 @@ export function workflowMutation<
           let runResult: RunResult;
           try {
             if (registered.args) {
-              validate(v.object(registered.args), workflow.args, {
+              validate(asObjectValidator(registered.args), workflow.args, {
                 throw: true,
                 db: ctx.db,
               });

@@ -93,7 +93,16 @@ test("a `v.null()` return does not leak undefined/void", () => {
 type CodegenRef<R> = FunctionReference<
   "mutation",
   "internal",
-  { args?: unknown; workflowId?: string; generationNumber?: number },
+  {
+    args?: any;
+    context?: any;
+    docs?: string;
+    fn?: string;
+    generationNumber?: number;
+    onComplete?: string;
+    startAsync?: boolean;
+    workflowId?: string;
+  },
   | WorkflowId
   | {
       kind: "complete";

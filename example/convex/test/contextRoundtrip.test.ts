@@ -3,6 +3,7 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 import { createFunctionHandle } from "convex/server";
 import { assert } from "convex-helpers";
+import { type WorkflowId } from "@convex-dev/workflow";
 import { workflow } from "../example";
 import { internal } from "../_generated/api";
 import { initConvexTest } from "../setup.test";
@@ -22,7 +23,7 @@ describe("context round-trips through failure paths", () => {
       const onCompleteHandle = await createFunctionHandle(
         internal.test.contextRoundtrip.captureOnComplete,
       );
-      const wfId = await ctx.runMutation(
+      const wfId = (await ctx.runMutation(
         internal.test.contextRoundtrip.throwingWorkflow,
         {
           args: {},
@@ -30,7 +31,7 @@ describe("context round-trips through failure paths", () => {
           context: ctxValue,
           startAsync: true,
         },
-      );
+      )) as WorkflowId;
       assert(typeof wfId === "string");
       await ctx.db.insert("flows", {
         workflowId: wfId,
@@ -93,7 +94,7 @@ describe("context round-trips through failure paths", () => {
       const onCompleteHandle = await createFunctionHandle(
         internal.test.contextRoundtrip.captureOnComplete,
       );
-      const wfId = await ctx.runMutation(
+      const wfId = (await ctx.runMutation(
         internal.oversized.largeReturnWorkflow,
         {
           args: {},
@@ -101,7 +102,7 @@ describe("context round-trips through failure paths", () => {
           context: ctxValue,
           startAsync: true,
         },
-      );
+      )) as WorkflowId;
       assert(typeof wfId === "string");
       await ctx.db.insert("flows", {
         workflowId: wfId,

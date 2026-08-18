@@ -5,6 +5,10 @@
   child's `WorkflowId`, which is what it has always resolved to at runtime. A
   workflow with no `returns` validator resolves to `unknown`. Code that relied
   on the old (incorrect) type will need updating.
+- Workflow mutations now declare an argument validator, so statically generated
+  API types describe their real shape instead of `any`. Malformed calls are
+  rejected by argument validation rather than reaching the handler, so some
+  errors are now Convex validator errors rather than workflow-specific ones.
 
 ## 0.4.5
 

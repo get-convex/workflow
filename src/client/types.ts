@@ -1,7 +1,56 @@
+import type { FunctionReference, FunctionReturnType } from "convex/server";
+import type { GenericId, Infer, Validator, Value } from "convex/values";
 import type { ComponentApi } from "../component/_generated/component.js";
-import type { GenericId, Value } from "convex/values";
+import type { WorkflowId } from "../types.js";
 
 export type WorkflowComponent = ComponentApi;
+
+/**
+ * The value a workflow handler resolves to, according to its `returns`
+ * validator. Defaults to `unknown` if the workflow has no `returns` validator.
+ */
+export type InferFromOptionalValidator<ReturnsValidator> = [
+  ReturnsValidator,
+] extends [Validator<any, any, any>]
+  ? Infer<ReturnsValidator>
+  : unknown;
+
+export type RunResult<Returns = unknown> =
+  | { kind: "success"; returnValue: Returns }
+  | { kind: "failed"; error: string }
+  | { kind: "canceled" };
+
+/**
+ * The value returned by the workflow mutation.
+ *
+ * Direct calls return the workflow ID. Internal polls return `complete` when
+ * the handler finishes, carrying its validated result for the workflow driver.
+ */
+export type WorkflowMutationResult<Returns = unknown> =
+  | WorkflowId
+  | { kind: "complete"; runResult: RunResult<Returns> };
+
+type ReturnValueFromWorkflowMutation<Result> = Result extends {
+  kind: "complete";
+  runResult: infer CompletionResult;
+}
+  ? CompletionResult extends {
+      kind: "success";
+      returnValue: infer Returns;
+    }
+    ? Returns
+    : never
+  : never;
+
+/**
+ * Recover a workflow's return type from its function reference.
+ *
+ * The internal poll's `complete` result carries the handler's validated return
+ * value. Other branches of the mutation's return union are ignored.
+ */
+export type WorkflowReturnType<
+  Workflow extends FunctionReference<"mutation", any, any>,
+> = ReturnValueFromWorkflowMutation<FunctionReturnType<Workflow>>;
 
 export type IdsToStrings<T> =
   T extends GenericId<string>

@@ -1,4 +1,4 @@
-import { type RunResult, type WorkpoolOptions } from "@convex-dev/workpool";
+import { type WorkpoolOptions } from "@convex-dev/workpool";
 import { BaseChannel } from "async-channel";
 import { assert } from "convex-helpers";
 import { validate, ValidationError } from "convex-helpers/validators";
@@ -14,6 +14,7 @@ import {
   v,
   type ObjectType,
   type PropertyValidators,
+  type Validator,
 } from "convex/values";
 import { createLogger } from "../component/logging.js";
 import { type JournalEntry } from "../component/schema.js";
@@ -22,7 +23,12 @@ import { vWorkflowId, type OnCompleteArgs, type WorkflowId } from "../types.js";
 import { setupEnvironment } from "./environment.js";
 import type { WorkflowDefinition, WorkflowHandler } from "./index.js";
 import { StepExecutor, type StepRequest, type WorkerResult } from "./step.js";
-import { type WorkflowComponent } from "./types.js";
+import {
+  type InferFromOptionalValidator,
+  type RunResult,
+  type WorkflowComponent,
+  type WorkflowMutationResult,
+} from "./types.js";
 import { createWorkflowCtx } from "./workflowContext.js";
 
 export type WorkflowArgs<V extends PropertyValidators, Context = unknown> = {
@@ -53,6 +59,7 @@ export type WorkflowArgs<V extends PropertyValidators, Context = unknown> = {
       context?: undefined;
     }
 );
+
 const vWorkflowArgs = v.union(
   v.object({
     workflowId: vWorkflowId,
@@ -67,23 +74,62 @@ const vWorkflowArgs = v.union(
   }),
 );
 
+const vRunResult = (
+  returns: Validator<any, "required", any> | PropertyValidators | undefined,
+) =>
+  v.union(
+    v.object({
+      kind: v.literal("success"),
+      returnValue: returns ? asObjectValidator(returns) : v.any(),
+    }),
+    v.object({
+      kind: v.literal("failed"),
+      error: v.string(),
+    }),
+    v.object({ kind: v.literal("canceled") }),
+  );
+
+const vWorkflowReturns = (
+  returns: Validator<any, "required", any> | PropertyValidators | undefined,
+) =>
+  v.union(
+    vWorkflowId,
+    v.object({
+      kind: v.literal("complete"),
+      runResult: vRunResult(returns),
+    }),
+  );
+
 // This function is defined in the calling component but then gets passed by
 // function handle to the workflow component for execution. This function runs
 // one "poll" of the workflow, replaying its execution from the journal until
 // it blocks next.
-export function workflowMutation<ArgsValidator extends PropertyValidators>(
+export function workflowMutation<
+  ArgsValidator extends PropertyValidators,
+  ReturnsValidator extends Validator<any, "required", any> | void,
+>(
   component: WorkflowComponent,
-  registered: WorkflowDefinition<ArgsValidator> & {
-    handler: WorkflowHandler<ArgsValidator, any>;
+  registered: WorkflowDefinition<ArgsValidator, ReturnsValidator> & {
+    handler: WorkflowHandler<ArgsValidator, ReturnsValidator>;
   },
   defaultWorkpoolOptions?: WorkpoolOptions,
-): RegisteredMutation<"internal", WorkflowArgs<ArgsValidator>, WorkflowId> {
+): RegisteredMutation<
+  "internal",
+  WorkflowArgs<ArgsValidator>,
+  WorkflowMutationResult<InferFromOptionalValidator<ReturnsValidator>>
+> {
   const workpoolOptions = {
     ...defaultWorkpoolOptions,
     ...registered.workpoolOptions,
   };
   return internalMutationGeneric({
-    handler: async (ctx, args): Promise<WorkflowId> => {
+    returns: vWorkflowReturns(registered.returns ?? undefined),
+    handler: async (
+      ctx,
+      args,
+    ): Promise<
+      WorkflowMutationResult<InferFromOptionalValidator<ReturnsValidator>>
+    > => {
       if (!validate(vWorkflowArgs, args)) {
         if (!("workflowId" in args) && !("args" in args)) {
           const console = createLogger(workpoolOptions?.logLevel);
@@ -245,6 +291,9 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
               generationNumber,
               runResult: result.runResult,
             });
+            if (!("args" in args)) {
+              return { kind: "complete", runResult: result.runResult };
+            }
             break;
           }
           case "executorBlocked": {
@@ -257,7 +306,11 @@ export function workflowMutation<ArgsValidator extends PropertyValidators>(
       }
       return workflowId;
     },
-  });
+  }) as RegisteredMutation<
+    "internal",
+    WorkflowArgs<ArgsValidator>,
+    WorkflowMutationResult<InferFromOptionalValidator<ReturnsValidator>>
+  >;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

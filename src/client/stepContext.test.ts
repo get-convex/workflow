@@ -1,6 +1,6 @@
 import { describe, it, expect, test } from "vitest";
 import { BaseChannel } from "async-channel";
-import type { RunResult } from "@convex-dev/workpool";
+import type { RunResult } from "./types.js";
 import type { StepRequest } from "./step.js";
 import { StepExecutor } from "./step.js";
 import type { JournalEntry } from "../component/schema.js";

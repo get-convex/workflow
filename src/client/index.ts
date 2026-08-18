@@ -1,5 +1,4 @@
 import type {
-  RunResult,
   WorkpoolOptions,
   WorkpoolRetryOptions,
 } from "@convex-dev/workpool";
@@ -28,11 +27,21 @@ import type {
   WorkflowStep,
 } from "../types.js";
 import { safeFunctionName } from "./safeFunctionName.js";
-import type { IdsToStrings, WorkflowComponent } from "./types.js";
-export type { WorkflowComponent } from "./types.js";
+import type {
+  IdsToStrings,
+  InferFromOptionalValidator,
+  RunResult,
+  WorkflowComponent,
+  WorkflowMutationResult,
+} from "./types.js";
 import type { WorkflowCtx } from "./workflowContext.js";
 import { workflowMutation, type WorkflowArgs } from "./workflowMutation.js";
 
+export type {
+  RunResult,
+  WorkflowComponent,
+  WorkflowMutationResult,
+} from "./types.js";
 export {
   vEventId,
   vWorkflowId,
@@ -127,9 +136,10 @@ export type WorkflowStatus =
  * ```ts
  * const workflowId = await start(ctx, internal.myFile.myWorkflow, { amount: 42 });
  * ```
- * Or call it directly:
- * ```ts
- * const workflowId = await ctx.runMutation(internal.myFile.myWorkflow, { args: { ...myArgs } });
+ *
+ * Or run it manually from the CLI:
+ * ```sh
+ * npx convex run myFile:myWorkflow '{ args: { amount: 42 } }'
  * ```
  */
 export function defineWorkflow<
@@ -148,7 +158,11 @@ export function defineWorkflow<
       step: WorkflowCtx,
       args: ObjectType<AV>,
     ) => Promise<ReturnValueForOptionalValidator<RV>>,
-  ): RegisteredMutation<"internal", WorkflowArgs<AV>, WorkflowId>;
+  ): RegisteredMutation<
+    "internal",
+    WorkflowArgs<AV>,
+    WorkflowMutationResult<InferFromOptionalValidator<RV>>
+  >;
 } {
   return {
     handler: (fn) =>
@@ -496,10 +510,6 @@ export class WorkflowManager {
    * ```ts
    * const workflowId = await start(ctx, internal.myFile.myWorkflow, { ...myArgs });
    * ```
-   * Or call it directly:
-   * ```ts
-   * const workflowId = await ctx.runMutation(internal.myFile.myWorkflow, { args: { ...myArgs } });
-   * ```
    *
    * @param workflow - The workflow definition.
    * @returns The workflow mutation.
@@ -511,7 +521,11 @@ export class WorkflowManager {
     workflow: WorkflowDefinition<ArgsValidator, ReturnsValidator> & {
       handler: WorkflowHandler<ArgsValidator, ReturnsValidator>;
     },
-  ): RegisteredMutation<"internal", WorkflowArgs<ArgsValidator>, WorkflowId>;
+  ): RegisteredMutation<
+    "internal",
+    WorkflowArgs<ArgsValidator>,
+    WorkflowMutationResult<InferFromOptionalValidator<ReturnsValidator>>
+  >;
   define<
     ArgsValidator extends PropertyValidators,
     ReturnsValidator extends Validator<unknown, "required", string> | void,
@@ -527,7 +541,11 @@ export class WorkflowManager {
         step: WorkflowCtx,
         args: ObjectType<ArgsValidator>,
       ) => Promise<ReturnValueForOptionalValidator<ReturnsValidator>>,
-    ): RegisteredMutation<"internal", WorkflowArgs<ArgsValidator>, WorkflowId>;
+    ): RegisteredMutation<
+      "internal",
+      WorkflowArgs<ArgsValidator>,
+      WorkflowMutationResult<InferFromOptionalValidator<ReturnsValidator>>
+    >;
   };
   define<
     ArgsValidator extends PropertyValidators,

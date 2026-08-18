@@ -21,6 +21,7 @@ describe("direct workflow call", () => {
       internal.catchError.catchErrorWorkflow,
       { args: { manualRetries: 0 } },
     );
+    assert(typeof workflowId === "string");
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     const status = await t.run((ctx) =>
       getStatus(ctx, components.workflow, workflowId),
@@ -35,6 +36,7 @@ describe("direct workflow call", () => {
     const workflowId = await t.mutation(internal.nestedWorkflow.child, {
       args: { foo: "hello" },
     });
+    assert(typeof workflowId === "string");
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     const status = await t.run((ctx) =>
       getStatus(ctx, components.workflow, workflowId),
@@ -42,6 +44,62 @@ describe("direct workflow call", () => {
     expect(status.type).toBe("completed");
     assert(status.type === "completed");
     expect(status.result).toBe(5);
+  });
+
+  test("parent workflow returns the nested child's return value", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.mutation(
+      internal.nestedWorkflow.parentWorkflow,
+      {
+        args: { prompt: "hello" },
+      },
+    );
+    assert(typeof workflowId === "string");
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const status = await t.run((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
+    assert(status.type === "completed");
+    expect(status.result).toBe(5);
+  });
+
+  test("an internal poll returns the validated completion result", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.mutation(internal.nestedWorkflow.child, {
+      args: { foo: "hello" },
+      startAsync: true,
+    });
+    assert(typeof workflowId === "string");
+
+    const result = await t.mutation(internal.nestedWorkflow.child, {
+      workflowId,
+      generationNumber: 0,
+    } as any);
+    expect(result).toEqual({
+      kind: "complete",
+      runResult: { kind: "success", returnValue: 5 },
+    });
+  });
+
+  test("manual return validation preserves its error message", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.mutation(internal.nestedWorkflow.invalidReturn, {
+      args: {},
+      startAsync: true,
+    });
+    assert(typeof workflowId === "string");
+
+    const result = await t.mutation(internal.nestedWorkflow.invalidReturn, {
+      workflowId,
+      generationNumber: 0,
+    } as any);
+    assert(typeof result !== "string");
+    expect(result.kind).toBe("complete");
+    assert(result.kind === "complete");
+    expect(result.runResult.kind).toBe("failed");
+    assert(result.runResult.kind === "failed");
+    expect(result.runResult.error).toContain("Invalid return value:");
+    expect(result.runResult.error).toContain("Expected `number`");
   });
 });
 

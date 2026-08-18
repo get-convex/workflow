@@ -24,10 +24,20 @@ export const parentWorkflow = workflow
 export const child = workflow
   .define({
     args: { foo: v.string() },
+    returns: v.number(),
   })
   .handler(async (_ctx, args) => {
     console.log("Starting child workflow");
     return args.foo.length;
+  });
+
+export const invalidReturn = workflow
+  .define({
+    args: {},
+    returns: v.number(),
+  })
+  .handler(async () => {
+    return "not a number" as unknown as number;
   });
 
 export const step = internalMutation({

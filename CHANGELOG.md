@@ -1,5 +1,11 @@
 # Changelog
 
+- Fixes the type of `step.runWorkflow(child, args)`: it now resolves to the
+  child workflow's return value (per its `returns` validator) instead of the
+  child's `WorkflowId`, which is what it has always resolved to at runtime. A
+  workflow with no `returns` validator resolves to `unknown`. Code that relied
+  on the old (incorrect) type will need updating.
+
 ## 0.4.5
 
 - Adds `lenientCtx = step.withOptions({ unstableArgs: true })` to return a new

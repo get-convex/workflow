@@ -247,7 +247,7 @@ export function workflowMutation<
           let runResult: RunResult;
           try {
             if (registered.args) {
-              validate(v.object(registered.args), workflow.args, {
+              validate(asObjectValidator(registered.args), workflow.args, {
                 throw: true,
                 db: ctx.db,
               });

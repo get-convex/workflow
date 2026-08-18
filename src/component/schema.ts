@@ -6,9 +6,9 @@ import {
 import { deprecated, literals } from "convex-helpers/validators";
 import { defineSchema, defineTable } from "convex/server";
 import { type Infer, v, type Validator } from "convex/values";
-import { logLevel } from "./logging.js";
+import { logLevel } from "../logging.js";
 import { vActionExecution } from "../execution.js";
-import { workpoolOptions } from "./workpoolOptions.js";
+import { workpoolOptions } from "../workpoolOptions.js";
 
 export const vOnComplete = v.object({
   fnHandle: v.string(), // mutation

@@ -25,8 +25,8 @@ import {
   type WorkflowId,
 } from "../types.js";
 import { checkForOversizedResult } from "./oversizedValues.js";
-export { workpoolOptions } from "./workpoolOptions.js";
-import { workpoolOptions } from "./workpoolOptions.js";
+export { workpoolOptions } from "../workpoolOptions.js";
+import { workpoolOptions } from "../workpoolOptions.js";
 
 export const DEFAULT_MAX_PARALLELISM = 25;
 export const DEFAULT_RETRY_BEHAVIOR = {

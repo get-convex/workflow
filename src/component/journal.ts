@@ -12,7 +12,7 @@ import {
   workflowDocument,
 } from "./schema.js";
 import { getWorkflow } from "./model.js";
-import { logLevel } from "./logging.js";
+import { logLevel } from "../logging.js";
 import { vRetryBehavior, type WorkId } from "@convex-dev/workpool";
 import {
   getWorkpool,

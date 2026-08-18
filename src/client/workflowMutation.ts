@@ -17,7 +17,7 @@ import {
   type PropertyValidators,
   type Validator,
 } from "convex/values";
-import { createLogger } from "../component/logging.js";
+import { createLogger } from "../logging.js";
 import {
   journalDocument,
   type JournalEntry,
@@ -34,7 +34,7 @@ import {
 import {
   logLevel as logLevelValidator,
   type LogLevel,
-} from "../component/logging.js";
+} from "../logging.js";
 import { setupEnvironment } from "./environment.js";
 import type { WorkflowDefinition, WorkflowHandler } from "./index.js";
 import { StepExecutor, type StepRequest, type WorkerResult } from "./step.js";

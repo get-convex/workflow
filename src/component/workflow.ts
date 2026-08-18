@@ -13,7 +13,7 @@ import {
   type MutationCtx,
   query,
 } from "./_generated/server.js";
-import { type Logger, logLevel } from "./logging.js";
+import { type Logger, logLevel } from "../logging.js";
 import { getWorkflow } from "./model.js";
 import { enqueueWorkflow, getWorkpool, workpoolOptions } from "./pool.js";
 import schema, {

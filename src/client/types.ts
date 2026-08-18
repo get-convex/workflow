@@ -1,5 +1,5 @@
 import type { FunctionReference, FunctionReturnType } from "convex/server";
-import type { GenericId, Infer, Validator, Value } from "convex/values";
+import type { Infer, Validator } from "convex/values";
 import type { ComponentApi } from "../component/_generated/component.js";
 import type { WorkflowId } from "../types.js";
 
@@ -36,15 +36,6 @@ type ReturnValueFromWorkflowMutation<Result> = Result extends {
 export type WorkflowReturnType<
   Workflow extends FunctionReference<"mutation", any, any>,
 > = ReturnValueFromWorkflowMutation<FunctionReturnType<Workflow>>;
-
-export type IdsToStrings<T> =
-  T extends GenericId<string>
-    ? string
-    : T extends (infer U)[]
-      ? IdsToStrings<U>[]
-      : T extends Record<string, Value | undefined>
-        ? { [K in keyof T]: IdsToStrings<T[K]> }
-        : T;
 
 /**
  * Per-transaction resource limits for an inline query or mutation.

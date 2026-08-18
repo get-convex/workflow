@@ -27,11 +27,7 @@ import type {
   WorkflowStep,
 } from "../types.js";
 import { safeFunctionName } from "./safeFunctionName.js";
-import type {
-  IdsToStrings,
-  InferFromOptionalValidator,
-  WorkflowComponent,
-} from "./types.js";
+import type { InferFromOptionalValidator, WorkflowComponent } from "./types.js";
 import type { WorkflowCtx } from "./workflowContext.js";
 import {
   type RunResult,
@@ -119,7 +115,7 @@ export type WorkflowHandler<
 ) => Promise<ReturnValueForOptionalValidator<ReturnsValidator>>;
 
 export type WorkflowStatus =
-  | { type: "inProgress"; running: IdsToStrings<Step>[] }
+  | { type: "inProgress"; running: Step[] }
   | { type: "completed"; result: unknown }
   | { type: "canceled" }
   | { type: "failed"; error: string };
@@ -263,7 +259,7 @@ export async function getStatus(
     component.workflow.getStatus,
     { workflowId },
   );
-  const running = inProgress.map((entry) => entry.step as IdsToStrings<Step>);
+  const running = inProgress.map((entry) => entry.step as Step);
   switch (workflow.runResult?.kind) {
     case undefined:
       return { type: "inProgress", running };

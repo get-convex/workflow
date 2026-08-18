@@ -10,11 +10,7 @@ import {
 } from "convex/server";
 import { convexToJson, getConvexSize, type Value } from "convex/values";
 import { type JournalEntry, type Step } from "../validators.js";
-import type {
-  IdsToStrings,
-  TransactionLimits,
-  WorkflowComponent,
-} from "./types.js";
+import type { TransactionLimits, WorkflowComponent } from "./types.js";
 import { MAX_JOURNAL_SIZE, formatErrorWithStack } from "../shared.js";
 import type { EventId, SchedulerOptions } from "../types.js";
 import { pick } from "convex-helpers";
@@ -204,7 +200,7 @@ export class StepExecutor {
           startedAt: this.now,
           completedAt: runResult ? this.now : undefined,
         } satisfies Omit<Step, "kind">;
-        let step: IdsToStrings<Step>;
+        let step: Step;
         switch (target.kind) {
           case "function":
             step = {

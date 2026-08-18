@@ -66,7 +66,6 @@ const vWorkflowArgs = v.union(
     generationNumber: v.number(),
   }),
   v.object({
-    fn: v.optional(v.string()),
     args: v.any(),
     startAsync: v.optional(v.boolean()),
     onComplete: v.optional(v.string()),
@@ -162,21 +161,6 @@ export function workflowMutation<
       // Direct call { args: {...}, onComplete?, context?, startAsync? }
       if ("args" in args) {
         const metadata = await ctx.meta.getFunctionMetadata();
-        // CLI/dashboard format { fn: "path/to:fn", args: {...} } (deprecated)
-        if ("fn" in args && typeof args.fn === "string") {
-          const console = createLogger(workpoolOptions?.logLevel);
-          if (args.fn !== metadata.name) {
-            console.error(
-              `[workflow] Error: calling workflow with { fn: "${args.fn}", args } ` +
-                `but the function name does not match the workflow name ${metadata.name}. Use { args: { ...yourArgs } } without "fn" to start this workflow, ` +
-                `or use the start() function.`,
-            );
-            throw new Error(`Invalid workflow function reference: ${args.fn}`);
-          }
-          console.warn(
-            `[workflow] Deprecation warning: calling a workflow with { fn, args } is deprecated. You no longer need to pass "fn". Use { args: { ...yourArgs } } to start a workflow directly.`,
-          );
-        }
         const fn = makeFunctionReference(metadata.name);
         const onComplete =
           typeof args.onComplete === "string"

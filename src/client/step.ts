@@ -240,9 +240,12 @@ export class StepExecutor {
         }
         return {
           retry: message.retry,
-          schedulerOptions: message.schedulerOptions,
           timeRequired: message.timeRequired,
           step,
+          ...(message.schedulerOptions.runAfter ||
+          message.schedulerOptions.runAt
+            ? { schedulerOptions: message.schedulerOptions }
+            : {}),
         };
       }),
     );

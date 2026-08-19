@@ -54,6 +54,10 @@ export type StepRequest = {
 
 export class StepExecutor {
   private journalEntrySize: number;
+  // Every entry created during this poll, in stepNumber order. The action
+  // runner appends these to its cached journal, so entries that completed
+  // inline must be included even though they never block the executor.
+  private createdEntries: JournalEntry[] = [];
 
   constructor(
     private workflowId: string,
@@ -102,7 +106,7 @@ export class StepExecutor {
       }
       return {
         type: "executorBlocked",
-        entries,
+        entries: this.createdEntries,
       };
     }
   }
@@ -255,6 +259,7 @@ export class StepExecutor {
         deferExecution: this.deferExecution || undefined,
       },
     )) as JournalEntry[];
+    this.createdEntries.push(...entries);
     for (const entry of entries) {
       this.journalEntrySize += getConvexSize(entry);
       if (this.journalEntrySize > MAX_JOURNAL_SIZE) {

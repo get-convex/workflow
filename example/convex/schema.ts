@@ -14,4 +14,15 @@ export default defineSchema({
     stepCount: v.number(),
     startedAt: v.number(),
   }),
+  workflowHarnessCommits: defineTable({
+    runId: v.string(),
+    operationId: v.string(),
+    kind: v.union(v.literal("mutation"), v.literal("action")),
+    value: v.string(),
+  }).index("by_runId_and_operationId", ["runId", "operationId"]),
+  workflowHarnessActionAttempts: defineTable({
+    runId: v.string(),
+    operationId: v.string(),
+    attempts: v.number(),
+  }).index("by_runId_and_operationId", ["runId", "operationId"]),
 });

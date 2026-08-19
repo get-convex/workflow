@@ -27,6 +27,7 @@
     "format": "prettier -w .",
     "all": "run-p -r 'dev:*' 'test:watch'",
     "test": "vitest run --typecheck",
+    "test:workflow-harness": "WORKFLOW_HARNESS_REPORT=1 vitest run --typecheck example/convex/test/randomized.test.ts",
     "test:watch": "vitest --typecheck --clearScreen false",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:coverage": "vitest run --coverage --coverage.reporter=text",

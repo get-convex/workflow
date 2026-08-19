@@ -362,7 +362,7 @@ export function workflowMutation<
               generationNumber,
               runResult: result.runResult,
             });
-            if (actionState) {
+            if (!("args" in args)) {
               return { kind: "complete", runResult: result.runResult };
             }
             break;

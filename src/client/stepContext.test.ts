@@ -1,6 +1,6 @@
 import { describe, it, expect, test } from "vitest";
 import { BaseChannel } from "async-channel";
-import type { RunResult } from "./types.js";
+import type { RunResult } from "./workflowMutation.js";
 import type { StepRequest } from "./step.js";
 import { StepExecutor } from "./step.js";
 import type { JournalEntry } from "../validators.js";

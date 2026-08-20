@@ -15,7 +15,12 @@ import {
 } from "./_generated/server.js";
 import { type Logger, logLevel } from "../logging.js";
 import { getWorkflow } from "./model.js";
-import { enqueueWorkflow, getWorkpool, workpoolOptions } from "./pool.js";
+import {
+  enqueueWorkflow,
+  getWorkpool,
+  settleStep,
+  workpoolOptions,
+} from "./pool.js";
 import schema from "./schema.js";
 import {
   journalDocument,
@@ -323,11 +328,16 @@ export async function restartHandler(
     }
   }
 
-  // Settle whatever the failed run left in progress: recovery only runs
+  // Clean up whatever the failed run left in progress: recovery only runs
   // while a workflow is live, so a terminal workflow can hold orphaned
-  // in-progress entries (e.g. a direct step whose driver died). Cancel any
-  // durable work best-effort and delete the entries so replay re-executes
-  // them — leaving them would block every future driver forever.
+  // in-progress entries (e.g. a direct step whose driver died). Leaving them
+  // would block every future driver forever. Cancel any durable work
+  // best-effort, then apply the same at-most-once rule as driver recovery:
+  // steps that may have produced external effects (actions, workpool-owned
+  // mutations, started nested workflows) settle as failed and are never
+  // re-run implicitly — use `restart({ from })` to re-run one explicitly —
+  // while provably effect-free entries are deleted so replay re-executes
+  // them.
   const orphans = await ctx.db
     .query("steps")
     .withIndex("inProgress", (q) =>
@@ -336,21 +346,47 @@ export async function restartHandler(
     .collect();
   if (orphans.length > 0) {
     const workpool = await getWorkpool(ctx, workflow.workpoolOptions);
+    const toDelete: Doc<"steps">[] = [];
     for (const orphan of orphans) {
       const { step } = orphan;
       if (step.kind === "workflow") {
         if (step.workflowId) {
-          await ctx.runMutation(api.workflow.cancel, {
-            workflowId: step.workflowId,
-          });
+          const nested = await ctx.db.get("workflows", step.workflowId);
+          if (nested && nested.runResult === undefined) {
+            await ctx.runMutation(api.workflow.cancel, {
+              workflowId: step.workflowId,
+            });
+          }
         }
       } else if (step.kind !== "event" && step.workId) {
         await workpool.cancel(ctx, step.workId);
       }
-      await deleteSteps(ctx, [orphan]);
+      const possiblyStarted =
+        step.kind === "workflow"
+          ? step.workflowId !== undefined
+          : step.kind === "function" &&
+            (step.functionType === "action" ||
+              // A workpool-owned mutation may have committed even though its
+              // completion never arrived; a direct mutation claim provably
+              // did not (it commits atomically with the journal write).
+              (step.functionType === "mutation" && step.workId !== undefined));
+      if (possiblyStarted) {
+        await settleStep(ctx, console, workflow, orphan, {
+          kind: "failed",
+          error:
+            `The workflow was restarted while this step was in progress; ` +
+            `its outcome is unknown and it will not be re-run. ` +
+            `Use restart({ from }) to re-execute it explicitly.`,
+        });
+      } else {
+        toDelete.push(orphan);
+      }
     }
+    await deleteSteps(ctx, toDelete);
     console.warn(
-      `Restart of ${args.workflowId} discarded ${orphans.length} unsettled step(s); they will re-execute on replay.`,
+      `Restart of ${args.workflowId} found ${orphans.length} unsettled step(s): ` +
+        `${orphans.length - toDelete.length} settled as failed (possibly started), ` +
+        `${toDelete.length} discarded for re-execution on replay.`,
     );
   }
 

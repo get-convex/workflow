@@ -33,12 +33,46 @@ describe("action-driven recovery", () => {
         execution: { type: "action", maxDurationMs: 60_000 },
       }),
     );
+    // The journal state at the moment the driver died: the first two steps
+    // settled, the action journaled (claimed) but with no completion coming.
     await t.run(async (ctx: any) =>
       ctx.runMutation(components.workflow.journal.startSteps, {
         workflowId,
         generationNumber: 0,
         deferExecution: true,
         steps: [
+          {
+            step: {
+              kind: "function",
+              functionType: "query",
+              handle: await createFunctionHandle(
+                internal.test.inline.getCounter,
+              ),
+              name: "test/inline:getCounter",
+              args: { key: "orphan" },
+              argsSize: 10,
+              inProgress: false,
+              runResult: { kind: "success", returnValue: 0 },
+              startedAt: Date.now(),
+              completedAt: Date.now(),
+            },
+          },
+          {
+            step: {
+              kind: "function",
+              functionType: "mutation",
+              handle: await createFunctionHandle(
+                internal.test.inline.incrementCounter,
+              ),
+              name: "test/inline:incrementCounter",
+              args: { key: "orphan" },
+              argsSize: 10,
+              inProgress: false,
+              runResult: { kind: "success", returnValue: 1 },
+              startedAt: Date.now(),
+              completedAt: Date.now(),
+            },
+          },
           {
             step: {
               kind: "function",
@@ -64,15 +98,31 @@ describe("action-driven recovery", () => {
       }),
     );
 
+    // A bare restart never re-runs a possibly-started action: the orphan
+    // settles as failed and replay surfaces that failure to the handler.
+    // Previously this hung in `inProgress` forever instead.
     await t.run((ctx: any) =>
       ctx.runMutation(components.workflow.workflow.restart, { workflowId }),
     );
     await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.run((ctx) =>
+    let status = await t.run((ctx) =>
       getStatus(ctx, components.workflow, workflowId),
     );
-    // Previously this hung in `inProgress` forever: the orphaned step had no
-    // owner and every driver refused to run past it.
+    assert(status.type === "failed");
+    expect(status.error).toContain("will not be re-run");
+
+    // Re-running the action is an explicit operator decision: restart from
+    // the orphaned step, deleting it so replay re-executes it.
+    await t.run((ctx: any) =>
+      ctx.runMutation(components.workflow.workflow.restart, {
+        workflowId,
+        from: 2,
+      }),
+    );
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    status = await t.run((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
     assert(status.type === "completed");
     expect(status.result).toMatchObject({ actionResult: "action:orphan" });
   });

@@ -182,7 +182,7 @@ async function onCompleteHandler(
 }
 
 /** Write a terminal result to a journal entry and emit the completion event. */
-async function settleStep(
+export async function settleStep(
   ctx: MutationCtx,
   console: Awaited<ReturnType<typeof getDefaultLogger>>,
   workflow: Doc<"workflows">,

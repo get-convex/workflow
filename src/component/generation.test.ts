@@ -338,9 +338,13 @@ describe("restart", () => {
     const workflowId = await createWorkflow(t, {
       runResult: { kind: "failed", error: "driver died" },
     });
-    // The orphan an interrupted action-mode driver leaves behind:
-    // in progress, no workId, nobody coming back for it.
-    const orphan = await insertStep(t, workflowId);
+    // The orphans an interrupted action-mode driver leaves behind:
+    // in progress, no workId, nobody coming back for them.
+    const actionOrphan = await insertStep(t, workflowId, { stepNumber: 0 });
+    const queryOrphan = await insertStep(t, workflowId, {
+      step: { functionType: "query" as const },
+      stepNumber: 1,
+    });
     await t.mutation(api.workflow.restart, {
       workflowId,
       startAsync: true,
@@ -349,8 +353,17 @@ describe("restart", () => {
     expect(workflow.runResult).toBeUndefined();
     expect(workflow.generationNumber).toBe(1);
     expect(workflow.driverWorkId).toBeDefined();
-    // The orphan was discarded so replay re-executes it.
-    expect(await getStep(t, orphan)).toBeNull();
+    // The action was possibly started: at-most-once means it settles as
+    // failed and is never implicitly re-run.
+    const settled = await getStep(t, actionOrphan);
+    expect(settled?.step.inProgress).toBe(false);
+    expect(settled?.step.runResult?.kind).toBe("failed");
+    expect(
+      settled?.step.runResult?.kind === "failed" &&
+        settled.step.runResult.error,
+    ).toContain("will not be re-run");
+    // The query has no external effects: discarded so replay re-executes it.
+    expect(await getStep(t, queryOrphan)).toBeNull();
   });
 
   test("restart fences stale completions from the previous generation", async () => {

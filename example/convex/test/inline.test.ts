@@ -89,26 +89,36 @@ describe("inline queries and mutations", () => {
     expect(status.result).toEqual({ first: 1, second: 2 });
   });
 
-  test("mixed inline + action: query runs inline, action via workpool", async () => {
-    const t = initConvexTest();
-    const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.test.inline.mixedInlineAndAction, {
-        key: "mixed_test",
-      }),
-    );
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.query((ctx) =>
-      getStatus(ctx, components.workflow, workflowId),
-    );
-    expect(status.type).toBe("completed");
-    assert(status.type === "completed");
-    const result = status.result as {
-      queryResult: number;
-      actionResult: string;
-    };
-    expect(result.queryResult).toBe(0);
-    expect(result.actionResult).toBe("action:mixed_test");
-  });
+  // Both modes: the inline query is resolved inside the handler's transaction
+  // while the action still blocks, so the batch handed back mixes settled and
+  // in-progress entries. The action runner must not try to start the settled
+  // one again.
+  test.each(["mutation", "action"] as const)(
+    "mixed inline + action in %s mode: query runs inline, action does not",
+    async (executionMode) => {
+      const t = initConvexTest();
+      const workflowId = await t.run((ctx) =>
+        workflow.start(
+          ctx,
+          internal.test.inline.mixedInlineAndAction,
+          { key: `mixed_test_${executionMode}` },
+          { executionMode },
+        ),
+      );
+      await t.finishAllScheduledFunctions(vi.runAllTimers);
+      const status = await t.query((ctx) =>
+        getStatus(ctx, components.workflow, workflowId),
+      );
+      expect(status.type).toBe("completed");
+      assert(status.type === "completed");
+      const result = status.result as {
+        queryResult: number;
+        actionResult: string;
+      };
+      expect(result.queryResult).toBe(0);
+      expect(result.actionResult).toBe(`action:mixed_test_${executionMode}`);
+    },
+  );
 
   test("dependent inline queries: second uses result of first", async () => {
     const t = initConvexTest();

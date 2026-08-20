@@ -91,7 +91,16 @@ export const run = internalAction({
 
       const direct: JournalEntry[] = [];
       const dispatch: JournalEntry[] = [];
+      // Entries the handler already resolved in its own transaction (inline
+      // queries/mutations, events consumed on arrival). They are only here so
+      // we can append them to the cached journal — starting them again would
+      // re-run the function and then fail the workflow on the completion fence.
+      const settled: JournalEntry[] = [];
       for (const entry of result.entries) {
+        if (!entry.step.inProgress) {
+          settled.push(entry);
+          continue;
+        }
         const scheduled = entry.schedulerOptions
           ? ("runAt" in entry.schedulerOptions &&
               entry.schedulerOptions.runAt !== undefined) ||
@@ -134,9 +143,9 @@ export const run = internalAction({
             }),
       ]);
       const byId = new Map(
-        [...directResults, ...dispatchedResults].map((entry) => [
-          entry._id,
-          entry,
+        [...settled, ...directResults, ...dispatchedResults].map((entry) => [
+          entry._id as Id<"steps">,
+          entry as Doc<"steps">,
         ]),
       );
       const completedBatch = result.entries.map((entry) => {

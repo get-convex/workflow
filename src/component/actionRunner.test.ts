@@ -3,8 +3,9 @@
 import type { WorkId } from "@convex-dev/workpool";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api.js";
-import type { Id } from "./_generated/dataModel.js";
+import type { Doc, Id } from "./_generated/dataModel.js";
 import { initConvexTest } from "./setup.test.js";
+import { executeDirectStep } from "./actionRunner.js";
 
 describe("action runner state fences", () => {
   beforeEach(() => vi.useFakeTimers());
@@ -106,6 +107,115 @@ describe("action runner state fences", () => {
     });
     expect(late.kind).toBe("stale");
     await expectStep(t, stepId, true, undefined);
+  });
+});
+
+describe("direct mutation fallback", () => {
+  test("hands an outer mutation failure to Workpool", async () => {
+    const claimed = {
+      _id: "step-id",
+      _creationTime: 0,
+      workflowId: "workflow-id",
+      generationNumber: 3,
+      stepNumber: 4,
+      step: {
+        kind: "function" as const,
+        functionType: "mutation" as const,
+        handle: "function://;test:mutation",
+        name: "mutation",
+        inProgress: true,
+        argsSize: 0,
+        args: { value: 1 },
+        startedAt: 0,
+      },
+    } as Doc<"steps">;
+    const dispatched = {
+      ...claimed,
+      step: { ...claimed.step, workId: "fallback-work-id" },
+    } as Doc<"steps">;
+    const calls: unknown[] = [];
+    const ctx = {
+      runMutation: async (_function: unknown, args: unknown) => {
+        calls.push(args);
+        if (calls.length === 1) {
+          throw new Error("Documents changed during every OCC retry");
+        }
+        return { kind: "ok" as const, entries: [dispatched] };
+      },
+    };
+
+    const result = await executeDirectStep(
+      ctx as any,
+      claimed,
+      3,
+      undefined,
+    );
+
+    expect(result).toEqual(dispatched);
+    expect(calls).toEqual([
+      { stepId: "step-id", generationNumber: 3 },
+      {
+        workflowId: "workflow-id",
+        generationNumber: 3,
+        steps: [{ stepId: "step-id" }],
+        workpoolOptions: undefined,
+      },
+    ]);
+  });
+
+  test("dispatch fencing does not re-run a mutation whose result committed", async () => {
+    const t = initConvexTest();
+    const { workflowId, stepId } = await (async () => {
+      const workflowId = await t.mutation(api.workflow.create, {
+        workflowName: "response-lost",
+        workflowHandle: "function://;workflow.test:noop",
+        workflowArgs: {},
+        createOnly: true,
+      });
+      const stepId = await t.run((ctx) =>
+        ctx.db.insert("steps", {
+          workflowId,
+          stepNumber: 0,
+          generationNumber: 0,
+          step: {
+            kind: "function" as const,
+            functionType: "mutation" as const,
+            handle: "function://;workflow.test:noop",
+            name: "mutation",
+            inProgress: true,
+            argsSize: 0,
+            args: {},
+            startedAt: 0,
+          },
+        }),
+      );
+      return { workflowId, stepId };
+    })();
+    await t.mutation(internal.actionRunner.completeStep, {
+      stepId,
+      generationNumber: 0,
+      runResult: { kind: "success", returnValue: "committed" },
+    });
+
+    const result = await t.mutation(internal.journal.dispatchSteps, {
+      workflowId,
+      generationNumber: 0,
+      steps: [{ stepId }],
+    });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.entries[0].step.inProgress).toBe(false);
+      expect(result.entries[0].step.runResult).toEqual({
+        kind: "success",
+        returnValue: "committed",
+      });
+      expect(
+        result.entries[0].step.kind === "function"
+          ? result.entries[0].step.workId
+          : undefined,
+      ).toBeUndefined();
+    }
   });
 });
 

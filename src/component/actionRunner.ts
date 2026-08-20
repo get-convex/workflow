@@ -217,7 +217,7 @@ export const run = internalAction({
   },
 });
 
-async function executeDirectStep(
+export async function executeDirectStep(
   ctx: ActionCtx,
   entry: Doc<"steps">,
   generationNumber: number,
@@ -226,11 +226,36 @@ async function executeDirectStep(
   assert(entry.step.kind === "function", "Expected a function step");
   const { functionType, handle, args } = entry.step;
   if (functionType === "mutation") {
-    const result = await ctx.runMutation(internal.actionRunner.runMutationStep, {
-      stepId: entry._id,
-      generationNumber,
-    });
-    return result.kind === "ok" ? (result.entry as Doc<"steps">) : "stale";
+    try {
+      const result = await ctx.runMutation(
+        internal.actionRunner.runMutationStep,
+        {
+          stepId: entry._id,
+          generationNumber,
+        },
+      );
+      return result.kind === "ok" ? (result.entry as Doc<"steps">) : "stale";
+    } catch {
+      // User-code errors are caught inside runMutationStep and committed as a
+      // failed step. Reaching this catch means the wrapper transaction itself
+      // never returned a committed result (for example, OCC retries were
+      // exhausted). Hand ownership to Workpool instead of failing the whole
+      // action driver. dispatchSteps re-checks the completion fence, so if the
+      // mutation did commit but its response was lost, it returns the settled
+      // entry without executing the mutation again.
+      const dispatched = await ctx.runMutation(
+        internal.journal.dispatchSteps,
+        {
+          workflowId: entry.workflowId,
+          generationNumber,
+          steps: [{ stepId: entry._id }],
+          workpoolOptions: options,
+        },
+      );
+      return dispatched.kind === "ok"
+        ? (dispatched.entries[0] as Doc<"steps">)
+        : "stale";
+    }
   }
 
   let runResult: RunResult;

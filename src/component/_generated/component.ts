@@ -67,6 +67,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           journalEntries: Array<{
             _creationTime: number;
             _id: string;
+            generationNumber?: number;
             retry?:
               | boolean
               | { base: number; initialBackoffMs: number; maxAttempts: number };
@@ -141,6 +142,8 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             _creationTime: number;
             _id: string;
             args: any;
+            driverFailures?: number;
+            driverWorkId?: string;
             execution?: { maxDurationMs: number; type: "action" };
             generationNumber: number;
             logLevel?: any;
@@ -261,6 +264,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         Array<{
           _creationTime: number;
           _id: string;
+          generationNumber?: number;
           retry?:
             | boolean
             | { base: number; initialBackoffMs: number; maxAttempts: number };
@@ -331,6 +335,25 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         }>,
         Name
       >;
+      validateActionState: FunctionReference<
+        "query",
+        "internal",
+        {
+          expectedStepNumber: number;
+          generationNumber: number;
+          workflowId: string;
+        },
+        | { kind: "ok" }
+        | { kind: "stale"; reason: string }
+        | {
+            kind: "complete";
+            runResult:
+              | { kind: "success"; returnValue: any }
+              | { error: string; kind: "failed" }
+              | { kind: "canceled" };
+          },
+        Name
+      >;
     };
     workflow: {
       cancel: FunctionReference<
@@ -395,6 +418,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           inProgress: Array<{
             _creationTime: number;
             _id: string;
+            generationNumber?: number;
             retry?:
               | boolean
               | { base: number; initialBackoffMs: number; maxAttempts: number };
@@ -468,6 +492,8 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             _creationTime: number;
             _id: string;
             args: any;
+            driverFailures?: number;
+            driverWorkId?: string;
             execution?: { maxDurationMs: number; type: "action" };
             generationNumber: number;
             logLevel?: any;

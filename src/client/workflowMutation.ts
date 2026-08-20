@@ -243,6 +243,26 @@ export function workflowMutation<
         actionState = "actionState" in args ? args.actionState : undefined;
       }
 
+      if (actionState) {
+        if (actionState.workflow._id !== workflowId) {
+          return { kind: "blocked" };
+        }
+        const expectedStepNumber = actionState.journalEntries.reduce(
+          (next, entry) => Math.max(next, entry.stepNumber + 1),
+          0,
+        );
+        const validation = await ctx.runQuery(
+          component.journal.validateActionState,
+          { workflowId, generationNumber, expectedStepNumber },
+        );
+        if (validation.kind === "complete") {
+          return { kind: "complete", runResult: validation.runResult };
+        }
+        if (validation.kind === "stale") {
+          return { kind: "blocked" };
+        }
+      }
+
       const loaded = actionState
         ? { ...actionState, ok: true }
         : await ctx.runQuery(component.journal.load, {

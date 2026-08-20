@@ -13,7 +13,11 @@ import {
 } from "../validators.js";
 import { getWorkflow } from "./model.js";
 import { logLevel } from "../logging.js";
-import { vRetryBehavior, type WorkId } from "@convex-dev/workpool";
+import {
+  vResultValidator,
+  vRetryBehavior,
+  type WorkId,
+} from "@convex-dev/workpool";
 import {
   getWorkpool,
   type OnCompleteContext,
@@ -78,6 +82,63 @@ export const load = query({
       }
     }
     return { journalEntries, workflow, logLevel, ok: true };
+  },
+});
+
+/**
+ * Fence a mutation poll that is replaying an action runner's cached journal.
+ *
+ * The query is deliberately small: the caller already has the journal, so it
+ * only checks the durable workflow generation/result and journal frontier.
+ * Because it is called from the workflow mutation, these reads participate in
+ * that mutation's serializable transaction. If another poll appends a step or
+ * changes the workflow while this poll is running, Convex retries the whole
+ * mutation and this check observes the newer frontier before replaying any
+ * inline functions.
+ */
+export const validateActionState = query({
+  args: {
+    workflowId: v.id("workflows"),
+    generationNumber: v.number(),
+    expectedStepNumber: v.number(),
+  },
+  returns: v.union(
+    v.object({ kind: v.literal("ok") }),
+    v.object({ kind: v.literal("stale"), reason: v.string() }),
+    v.object({ kind: v.literal("complete"), runResult: vResultValidator }),
+  ),
+  handler: async (ctx, args) => {
+    const workflow = await ctx.db.get("workflows", args.workflowId);
+    if (!workflow) {
+      return {
+        kind: "stale" as const,
+        reason: `Workflow not found: ${args.workflowId}`,
+      };
+    }
+    if (workflow.runResult !== undefined) {
+      return { kind: "complete" as const, runResult: workflow.runResult };
+    }
+    if (workflow.generationNumber !== args.generationNumber) {
+      return {
+        kind: "stale" as const,
+        reason: `Invalid generation number: ${args.generationNumber} for workflow ${args.workflowId}`,
+      };
+    }
+    const maxEntry = await ctx.db
+      .query("steps")
+      .withIndex("workflow", (q) => q.eq("workflowId", workflow._id))
+      .order("desc")
+      .first();
+    const nextStepNumber = maxEntry ? maxEntry.stepNumber + 1 : 0;
+    if (nextStepNumber !== args.expectedStepNumber) {
+      return {
+        kind: "stale" as const,
+        reason:
+          `Journal frontier changed for workflow ${args.workflowId}: ` +
+          `expected ${args.expectedStepNumber}, found ${nextStepNumber}`,
+      };
+    }
+    return { kind: "ok" as const };
   },
 });
 

@@ -8,7 +8,11 @@ export type ExecutionMode =
   | "action"
   | {
       type: "action";
-      maxDurationMs?: number;
+      /**
+       * How long each action runner may start new steps before the workflow
+       * continues in a fresh runner. This is not a timeout for started steps.
+       */
+      stepStartBudgetMs?: number;
     };
 
 export const vExecutionMode = v.union(
@@ -16,7 +20,7 @@ export const vExecutionMode = v.union(
   v.literal("action"),
   v.object({
     type: v.literal("action"),
-    maxDurationMs: v.optional(v.number()),
+    stepStartBudgetMs: v.optional(v.number()),
   }),
 );
 
@@ -33,18 +37,20 @@ export function normalizeExecutionMode(
   if (executionMode === undefined || executionMode === "mutation") {
     return undefined;
   }
-  const maxDurationMs =
+  const stepStartBudgetMs =
     executionMode === "action"
       ? DEFAULT_ACTION_EXECUTION_BUDGET_MS
-      : (executionMode.maxDurationMs ?? DEFAULT_ACTION_EXECUTION_BUDGET_MS);
+      : (executionMode.stepStartBudgetMs ?? DEFAULT_ACTION_EXECUTION_BUDGET_MS);
   if (
-    !Number.isFinite(maxDurationMs) ||
-    maxDurationMs <= 0 ||
-    maxDurationMs > MAX_ACTION_EXECUTION_BUDGET_MS
+    !Number.isFinite(stepStartBudgetMs) ||
+    stepStartBudgetMs <= 0 ||
+    stepStartBudgetMs > MAX_ACTION_EXECUTION_BUDGET_MS
   ) {
     throw new Error(
-      `Action execution maxDurationMs must be greater than 0 and at most ${MAX_ACTION_EXECUTION_BUDGET_MS}.`,
+      `Action execution stepStartBudgetMs must be greater than 0 and at most ${MAX_ACTION_EXECUTION_BUDGET_MS}.`,
     );
   }
-  return { type: "action", maxDurationMs };
+  // Keep the persisted representation internal so existing workflow documents
+  // remain schema-compatible while the public option names its actual role.
+  return { type: "action", maxDurationMs: stepStartBudgetMs };
 }

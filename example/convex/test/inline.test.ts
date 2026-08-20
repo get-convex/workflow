@@ -197,7 +197,7 @@ describe("action-driven workflows", () => {
         ctx,
         internal.test.inline.actionDrivenBudgetHandoff,
         { label: "budget" },
-        { executionMode: { type: "action", maxDurationMs: 100 } },
+        { executionMode: { type: "action", stepStartBudgetMs: 100 } },
       ),
     );
     await drainScheduler(t);

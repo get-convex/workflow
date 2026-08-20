@@ -105,7 +105,7 @@ export const startComparison = mutation({
       workflowArgs,
       {
         startAsync: true,
-        executionMode: { type: "action", maxDurationMs: 60_000 },
+        executionMode: { type: "action", stepStartBudgetMs: 60_000 },
       },
     );
 

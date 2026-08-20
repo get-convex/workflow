@@ -48,6 +48,15 @@ export const vWorkflowFields = {
   generationNumber: v.number(),
   execution: v.optional(vActionExecution),
   workpoolOptions: v.optional(workpoolOptions),
+  // The workpool id of the most recently enqueued driver (poll mutation or
+  // action runner). The driver's onComplete is authoritative for recovery
+  // only while its workId still matches; a superseded driver's completion is
+  // ignored. Generation alone can't identify the driver: the action runner
+  // advances the generation mid-life.
+  driverWorkId: v.optional(vWorkIdValidator),
+  // Consecutive driver infrastructure failures, for capped tail-enqueue
+  // backoff. Reset whenever a generation advances.
+  driverFailures: v.optional(v.number()),
 };
 
 export const workflowDocument = v.object({
@@ -104,6 +113,11 @@ export const vJournalFields = <WorkflowsId extends VId, EventsId extends VId>(
 ) => ({
   workflowId: vWorkflowsId,
   stepNumber: v.number(),
+  // The generation this step's execution was claimed by. Optional only for
+  // documents that predate the field; every new step sets it. Allocation and
+  // claiming are one operation, so recovery conservatively treats every
+  // claimed action as possibly started.
+  generationNumber: v.optional(v.number()),
   step: vStepFields(vWorkflowsId, vEventsId),
   retry: v.optional(v.union(v.boolean(), vRetryBehavior)),
   schedulerOptions: v.optional(

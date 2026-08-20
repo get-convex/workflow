@@ -352,7 +352,20 @@ export function workflowMutation<
           return { type: "handlerDone", runResult };
         };
         const executorWorker = async (): Promise<WorkerResult> => {
-          return await executor.run();
+          try {
+            return await executor.run();
+          } catch (error) {
+            // Executor errors (journal mismatch, journal size, ...) are
+            // deterministic: fail the workflow rather than throwing out of
+            // the poll, where they would read as a transient driver failure
+            // and be retried without ever making progress.
+            const message = formatErrorWithStack(error);
+            console.error(message);
+            return {
+              type: "handlerDone",
+              runResult: { kind: "failed", error: message },
+            };
+          }
         };
         const result = await Promise.race([handlerWorker(), executorWorker()]);
         switch (result.type) {

@@ -323,11 +323,43 @@ export async function restartHandler(
     }
   }
 
+  // Settle whatever the failed run left in progress: recovery only runs
+  // while a workflow is live, so a terminal workflow can hold orphaned
+  // in-progress entries (e.g. a direct step whose driver died). Cancel any
+  // durable work best-effort and delete the entries so replay re-executes
+  // them — leaving them would block every future driver forever.
+  const orphans = await ctx.db
+    .query("steps")
+    .withIndex("inProgress", (q) =>
+      q.eq("step.inProgress", true).eq("workflowId", args.workflowId),
+    )
+    .collect();
+  if (orphans.length > 0) {
+    const workpool = await getWorkpool(ctx, workflow.workpoolOptions);
+    for (const orphan of orphans) {
+      const { step } = orphan;
+      if (step.kind === "workflow") {
+        if (step.workflowId) {
+          await ctx.runMutation(api.workflow.cancel, {
+            workflowId: step.workflowId,
+          });
+        }
+      } else if (step.kind !== "event" && step.workId) {
+        await workpool.cancel(ctx, step.workId);
+      }
+      await deleteSteps(ctx, [orphan]);
+    }
+    console.warn(
+      `Restart of ${args.workflowId} discarded ${orphans.length} unsettled step(s); they will re-execute on replay.`,
+    );
+  }
+
   // Increment generation number and clear result
   const generationNumber = workflow.generationNumber + 1;
   await ctx.db.patch("workflows", args.workflowId, {
     generationNumber,
     runResult: undefined,
+    driverFailures: undefined,
   });
 
   console.event("retry", {
@@ -402,8 +434,12 @@ export async function completeHandler(
     overallDurationMs: Date.now() - workflow._creationTime,
   });
   if (workflow.runResult.kind === "canceled") {
-    // We bump it so no in-flight steps succeed / we don't race to complete.
-    workflow.generationNumber += 1;
+    // The terminal runResult is the cancellation fence: every completion
+    // path checks it before touching the journal, so in-flight steps can
+    // finish externally but their late completions are rejected. Workpool
+    // cancellation below is best effort — a running action is not killed
+    // (see docs/cloud-semantics-experiments notes), and the generation is
+    // deliberately not bumped.
     // TODO: can we cancel these asynchronously if there's more than one?
     const inProgress = await ctx.db
       .query("steps")

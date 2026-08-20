@@ -1,6 +1,9 @@
 # Workflow Generation Semantics
 
-Status: proposed
+Status: implemented (see `src/component/pool.ts`, `src/component/journal.ts`,
+`src/component/actionRunner.ts`; deterministic tests in
+`src/component/generation.test.ts` and
+`example/convex/test/generationRecovery.test.ts`)
 
 Audience: implementation owner for the action-driven workflow runner
 

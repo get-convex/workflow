@@ -117,6 +117,7 @@ export const startSteps = mutation({
         const stepId = await ctx.db.insert("steps", {
           workflowId: workflow._id,
           stepNumber,
+          generationNumber,
           step: stepArgs.step,
           retry: stepArgs.retry,
           schedulerOptions: stepArgs.schedulerOptions,
@@ -157,6 +158,9 @@ export const startSteps = mutation({
   },
 });
 
+// Called from outside the driver's transaction (the action runner), so
+// staleness is a return value rather than an error: a canceled or restarted
+// workflow must not fail the runner, it must make it exit cleanly.
 export const dispatchSteps = internalMutation({
   args: {
     workflowId: v.id("workflows"),
@@ -170,17 +174,25 @@ export const dispatchSteps = internalMutation({
     ),
     workpoolOptions: v.optional(workpoolOptions),
   },
-  returns: v.array(journalDocument),
+  returns: v.union(
+    v.object({ kind: v.literal("stale"), reason: v.string() }),
+    v.object({ kind: v.literal("ok"), entries: v.array(journalDocument) }),
+  ),
   handler: async (ctx, args) => {
-    const workflow = await getWorkflow(
-      ctx,
-      args.workflowId,
-      args.generationNumber,
-    );
-    if (workflow.runResult !== undefined) {
-      throw new Error(`Workflow not running: ${args.workflowId}`);
+    const workflow = await ctx.db.get("workflows", args.workflowId);
+    if (!workflow || workflow.runResult !== undefined) {
+      return {
+        kind: "stale" as const,
+        reason: `Workflow not running: ${args.workflowId}`,
+      };
     }
-    return await Promise.all(
+    if (workflow.generationNumber !== args.generationNumber) {
+      return {
+        kind: "stale" as const,
+        reason: `Invalid generation number: ${args.generationNumber} for workflow ${args.workflowId}`,
+      };
+    }
+    const entries = await Promise.all(
       args.steps.map(async (requested) => {
         let entry = await ctx.db.get("steps", requested.stepId);
         assert(entry, `Step not found: ${requested.stepId}`);
@@ -208,6 +220,62 @@ export const dispatchSteps = internalMutation({
         return entry;
       }),
     );
+    return { kind: "ok" as const, entries };
+  },
+});
+
+/**
+ * Compare-and-swap generation advancement for the action runner.
+ *
+ * The runner calls this after a batch of directly-executed steps settles,
+ * before evaluating the handler again. The advancement transaction is the
+ * mutual exclusion between drivers: two drivers holding the same generation
+ * race here, exactly one commits, and the loser sees `stale` and exits. The
+ * runner continues as the driver for the new generation, so unlike
+ * completion-driven advancement (see `pool.advanceAndEnqueue`) no successor
+ * is enqueued and `driverWorkId` is left pointing at the running action.
+ */
+export const advanceGeneration = internalMutation({
+  args: {
+    workflowId: v.id("workflows"),
+    generationNumber: v.number(),
+  },
+  returns: v.union(
+    v.object({ kind: v.literal("stale"), reason: v.string() }),
+    v.object({ kind: v.literal("advanced"), generationNumber: v.number() }),
+  ),
+  handler: async (ctx, args) => {
+    const workflow = await ctx.db.get("workflows", args.workflowId);
+    if (!workflow || workflow.runResult !== undefined) {
+      return {
+        kind: "stale" as const,
+        reason: `Workflow not running: ${args.workflowId}`,
+      };
+    }
+    if (workflow.generationNumber !== args.generationNumber) {
+      return {
+        kind: "stale" as const,
+        reason: `Invalid generation number: ${args.generationNumber} for workflow ${args.workflowId}`,
+      };
+    }
+    const inProgress = await ctx.db
+      .query("steps")
+      .withIndex("inProgress", (q) =>
+        q.eq("step.inProgress", true).eq("workflowId", args.workflowId),
+      )
+      .first();
+    if (inProgress) {
+      return {
+        kind: "stale" as const,
+        reason: `Cannot advance ${args.workflowId} past in-progress step ${inProgress._id}`,
+      };
+    }
+    const generationNumber = workflow.generationNumber + 1;
+    await ctx.db.patch("workflows", args.workflowId, {
+      generationNumber,
+      driverFailures: undefined,
+    });
+    return { kind: "advanced" as const, generationNumber };
   },
 });
 

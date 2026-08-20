@@ -290,7 +290,7 @@ describe("terminal-state fencing", () => {
     expect(workflow.generationNumber).toBe(0);
   });
 
-  test("a canceled workflow rejects late step completions and enqueues nothing", async () => {
+  test("a durable completion settles the journal on a canceled workflow but enqueues nothing", async () => {
     const t = initConvexTest();
     const workflowId = await createWorkflow(t);
     await t.mutation(api.workflow.cancel, { workflowId });
@@ -302,14 +302,36 @@ describe("terminal-state fencing", () => {
 
     await t.mutation(internal.pool.onComplete, {
       workId: workId("late-work"),
-      result: { kind: "success", returnValue: "too late" },
+      result: { kind: "success", returnValue: "finished anyway" },
+      context: { generationNumber: 0, stepId },
+    });
+    // The workpool's delivery is authoritative: the journal records the true
+    // outcome so the entry is never stranded in progress...
+    const entry = await getStep(t, stepId);
+    expect(entry?.step.inProgress).toBe(false);
+    expect(entry?.step.runResult).toMatchObject({ kind: "success" });
+    // ...but the terminal workflow never advances or enqueues a driver.
+    const workflow = await getWorkflowDoc(t, workflowId);
+    expect(workflow.generationNumber).toBe(0);
+    expect(workflow.driverWorkId).toBeUndefined();
+  });
+
+  test("a completion from a superseded work attempt is rejected", async () => {
+    const t = initConvexTest();
+    const workflowId = await createWorkflow(t);
+    // The step was re-dispatched with a fresh workId (e.g. recovery consumed
+    // a retry attempt); the old attempt's completion must not settle it.
+    const stepId = await insertStep(t, workflowId, {
+      step: { workId: workId("new-owner") },
+    });
+    await t.mutation(internal.pool.onComplete, {
+      workId: workId("old-owner"),
+      result: { kind: "success", returnValue: "stale attempt" },
       context: { generationNumber: 0, stepId },
     });
     const entry = await getStep(t, stepId);
-    // The journal entry is untouched: no result written, no advancement.
+    expect(entry?.step.inProgress).toBe(true);
     expect(entry?.step.runResult).toBeUndefined();
-    const workflow = await getWorkflowDoc(t, workflowId);
-    expect(workflow.generationNumber).toBe(0);
   });
 
   test("a failed driver report for a terminal workflow is a no-op", async () => {
@@ -345,6 +367,10 @@ describe("restart", () => {
       step: { functionType: "query" as const },
       stepNumber: 1,
     });
+    const durableOrphan = await insertStep(t, workflowId, {
+      step: { functionType: "mutation" as const, workId: workId("pool-work") },
+      stepNumber: 2,
+    });
     await t.mutation(api.workflow.restart, {
       workflowId,
       startAsync: true,
@@ -364,6 +390,26 @@ describe("restart", () => {
     ).toContain("will not be re-run");
     // The query has no external effects: discarded so replay re-executes it.
     expect(await getStep(t, queryOrphan)).toBeNull();
+    // The workpool-owned mutation is untouched: its completion is guaranteed
+    // to be delivered, and the claim-generation fence accepts it post-restart.
+    const durable = await getStep(t, durableOrphan);
+    expect(durable?.step.inProgress).toBe(true);
+    expect(
+      durable?.step.kind === "function" ? durable.step.workId : undefined,
+    ).toBe("pool-work");
+
+    // Deliver that completion after the restart: it settles the entry and
+    // advances the (now live) workflow.
+    await t.mutation(internal.pool.onComplete, {
+      workId: workId("pool-work"),
+      result: { kind: "success", returnValue: "committed" },
+      context: { generationNumber: 0, stepId: durableOrphan },
+    });
+    const delivered = await getStep(t, durableOrphan);
+    expect(delivered?.step.inProgress).toBe(false);
+    expect(delivered?.step.runResult).toMatchObject({ kind: "success" });
+    const advanced = await getWorkflowDoc(t, workflowId);
+    expect(advanced.generationNumber).toBe(2);
   });
 
   test("restart fences stale completions from the previous generation", async () => {

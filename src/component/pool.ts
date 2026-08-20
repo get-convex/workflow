@@ -152,8 +152,44 @@ async function onCompleteHandler(
   const { generationNumber } = args.context;
   const workflow = await ctx.db.get("workflows", workflowId);
   assert(workflow, `Workflow not found: ${workflowId}`);
-  // Terminal-state fence: cancellation does not bump the generation, so a
-  // completed/canceled workflow's journal must reject all late completions.
+  if (!journalEntry.step.inProgress) {
+    console.error(
+      `Step finished but journal entry not in progress: ${stepId} status: ${journalEntry.step.runResult?.kind ?? "pending"}`,
+    );
+    return;
+  }
+  // The completion fence compares against the step's claim generation (spec
+  // invariant 7), not the workflow's current generation: a durable step
+  // retained across a restart still receives its completion. Entries that
+  // predate claims fall back to the workflow generation.
+  const claimGeneration =
+    journalEntry.generationNumber ?? workflow.generationNumber;
+  if (claimGeneration !== generationNumber) {
+    console.error(
+      `Step ${stepId} was claimed by generation ${claimGeneration} but completed by ${generationNumber}; ignoring.`,
+    );
+    return;
+  }
+  if (
+    args.workId !== undefined &&
+    (journalEntry.step.kind === "function" ||
+      journalEntry.step.kind === "sleep") &&
+    journalEntry.step.workId !== args.workId
+  ) {
+    // Ownership moved (e.g. the step was re-dispatched with a fresh workId
+    // after a driver failure); only the current owner may settle it.
+    console.error(
+      `Step ${stepId} is owned by ${journalEntry.step.workId}; ignoring completion from ${args.workId}`,
+    );
+    return;
+  }
+  // Durable completions are authoritative one-shot deliveries from the
+  // workpool (or a nested workflow), so they settle the journal even when
+  // the workflow is already terminal — the journal should record the true
+  // outcome, and dropping it would strand the entry in progress forever.
+  // What a terminal workflow fences is advancement: no successor driver is
+  // ever enqueued for it.
+  await settleStep(ctx, console, workflow, journalEntry, args.result);
   if (workflow.runResult !== undefined) {
     if (workflow.runResult.kind !== "canceled") {
       console.error(
@@ -162,19 +198,6 @@ async function onCompleteHandler(
     }
     return;
   }
-  if (workflow.generationNumber !== generationNumber) {
-    console.error(
-      `Workflow: ${workflowId} already has generation number ${workflow.generationNumber} when completing ${stepId}. Expected ${generationNumber}`,
-    );
-    return;
-  }
-  if (!journalEntry.step.inProgress) {
-    console.error(
-      `Step finished but journal entry not in progress: ${stepId} status: ${journalEntry.step.runResult?.kind ?? "pending"}`,
-    );
-    return;
-  }
-  await settleStep(ctx, console, workflow, journalEntry, args.result);
 
   const effectiveWorkpoolOptions =
     args.context.workpoolOptions ?? workflow.workpoolOptions;

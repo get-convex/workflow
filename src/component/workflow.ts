@@ -328,16 +328,18 @@ export async function restartHandler(
     }
   }
 
-  // Clean up whatever the failed run left in progress: recovery only runs
-  // while a workflow is live, so a terminal workflow can hold orphaned
-  // in-progress entries (e.g. a direct step whose driver died). Leaving them
-  // would block every future driver forever. Cancel any durable work
-  // best-effort, then apply the same at-most-once rule as driver recovery:
-  // steps that may have produced external effects (actions, workpool-owned
-  // mutations, started nested workflows) settle as failed and are never
-  // re-run implicitly — use `restart({ from })` to re-run one explicitly —
-  // while provably effect-free entries are deleted so replay re-executes
-  // them.
+  // Clean up the direct claims a dead driver left in progress: nobody is
+  // coming back for them, and leaving them would block every future driver
+  // forever. Durable steps — anything with a workpool workId or a started
+  // nested workflow — are left untouched: the workpool guarantees their
+  // completions are eventually delivered (cancellation included), and the
+  // completion fence accepts them by claim generation, so they settle on
+  // their own after the restart. Direct claims follow at-most-once: actions
+  // were possibly started, so they settle as failed and are never re-run
+  // implicitly (use `restart({ from })` to re-run one explicitly); direct
+  // queries and mutations provably produced nothing (their execution commits
+  // atomically with the journal write), so they are deleted for replay to
+  // re-execute.
   const orphans = await ctx.db
     .query("steps")
     .withIndex("inProgress", (q) =>
@@ -345,32 +347,23 @@ export async function restartHandler(
     )
     .collect();
   if (orphans.length > 0) {
-    const workpool = await getWorkpool(ctx, workflow.workpoolOptions);
     const toDelete: Doc<"steps">[] = [];
+    let settledCount = 0;
+    let durableCount = 0;
     for (const orphan of orphans) {
       const { step } = orphan;
-      if (step.kind === "workflow") {
-        if (step.workflowId) {
-          const nested = await ctx.db.get("workflows", step.workflowId);
-          if (nested && nested.runResult === undefined) {
-            await ctx.runMutation(api.workflow.cancel, {
-              workflowId: step.workflowId,
-            });
-          }
-        }
-      } else if (step.kind !== "event" && step.workId) {
-        await workpool.cancel(ctx, step.workId);
-      }
-      const possiblyStarted =
+      const durable =
         step.kind === "workflow"
           ? step.workflowId !== undefined
-          : step.kind === "function" &&
-            (step.functionType === "action" ||
-              // A workpool-owned mutation may have committed even though its
-              // completion never arrived; a direct mutation claim provably
-              // did not (it commits atomically with the journal write).
-              (step.functionType === "mutation" && step.workId !== undefined));
-      if (possiblyStarted) {
+          : step.kind === "event"
+            ? step.eventId !== undefined
+            : step.workId !== undefined;
+      if (durable) {
+        durableCount += 1;
+        continue;
+      }
+      if (step.kind === "function" && step.functionType === "action") {
+        settledCount += 1;
         await settleStep(ctx, console, workflow, orphan, {
           kind: "failed",
           error:
@@ -385,7 +378,8 @@ export async function restartHandler(
     await deleteSteps(ctx, toDelete);
     console.warn(
       `Restart of ${args.workflowId} found ${orphans.length} unsettled step(s): ` +
-        `${orphans.length - toDelete.length} settled as failed (possibly started), ` +
+        `${durableCount} awaiting durable completion, ` +
+        `${settledCount} settled as failed (possibly-started actions), ` +
         `${toDelete.length} discarded for re-execution on replay.`,
     );
   }

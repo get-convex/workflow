@@ -211,8 +211,8 @@ npx convex run example:exampleWorkflow '{ "args": { "exampleArg": "James" } }'
 
 #### Action-driven execution
 
-For workflows with several short steps, pass `executionMode: "action"` to keep
-executing queries, mutations, and actions from one long-lived action runner:
+For workflows with several short steps, pass `executionMode: "action"` to reduce
+the scheduling overhead between steps:
 
 ```ts
 const workflowId = await start(
@@ -223,54 +223,30 @@ const workflowId = await start(
 );
 ```
 
-The runner defaults to a five-minute budget. Use the object form to choose a
-different budget (up to Convex's 30-minute action limit):
+Action mode starts new steps for up to five minutes at a time by default. Use
+the object form to choose a different step-start budget, up to 30 minutes:
 
 ```ts
-{ executionMode: { type: "action", maxDurationMs: 30_000 } }
+{ executionMode: { type: "action", stepStartBudgetMs: 10 * 60_000 } }
 ```
 
-The workflow handler remains a mutation. It journals pending steps and returns
-them to the runner, which executes each non-inline query, mutation, or action in
-its own function call before replaying the handler. Queries and mutations with
-`{ inline: true }` still share the handler mutation's transaction.
+This budget is not a timeout. A step that has already started can finish after
+the budget expires; the workflow then continues automatically. All workflow
+features remain available in action mode, including inline steps, sleeps,
+events, nested workflows, scheduling, and configured retries.
 
-Sleeps, events, nested workflows, scheduled steps, and work that no longer fits
-in the runner's budget are handed to the workpool. Completion resumes the same
-action-driven mode. You can give an action a conservative runtime estimate so
-the runner hands it off instead of starting it too close to its deadline:
+For long actions, provide a conservative runtime estimate to avoid exceeding
+Convex's 30-minute action limit. If a runner may start steps for 10 minutes and
+an action may need another 25 minutes, mark that estimate:
 
 ```ts
 await step.runAction(internal.example.longAction, args, {
-  timeRequired: 60_000,
+  timeRequired: 25 * 60_000,
 });
 ```
 
-Action retries retain the normal workpool semantics. The runner makes the first
-attempt directly; after a retryable failure it hands the step to the workpool
-with that attempt consumed and the exponential backoff advanced.
-
-#### Deterministic fault and performance harness
-
-The example suite includes a seeded differential harness that runs identical
-generated workflows in mutation-driven and action-driven modes. It injects
-query, mutation, and action errors and timeout-shaped failures; retry recovery,
-permanent action failure, scheduled handoffs, sleeps, and parallel rounds are
-always represented. The oracle checks normalized journals, continuation results,
-action attempt counts, exactly-once successful effects, and rollback of
-mutations that write before failing.
-
-```sh
-npm run test:workflow-harness
-WORKFLOW_HARNESS_SEED=123 WORKFLOW_HARNESS_CASES=20 \
-  WORKFLOW_HARNESS_OPERATIONS=32 npm run test:workflow-harness
-```
-
-Every failure prints a single-seed reproduction command and the generated plan.
-Benchmark runs emit one `WORKFLOW_HARNESS_METRICS` JSON record containing
-per-mode wall time, deterministic virtual scheduler time, throughput, journal
-size, injected failures, and action attempt counts. Wall-clock measurements are
-for comparison and trend tracking, not hard pass/fail thresholds.
+If an estimate does not fit safely, the workflow runs that action separately and
+resumes afterward.
 
 ### Handling the workflow's result with onComplete
 
@@ -519,17 +495,21 @@ can change between deploys, you can opt that step out of argument validation
 with `unstableArgs` (the step name and kind are still validated):
 
 ```ts
-await step.runMutation(internal.example.recordError, { message }, {
-  unstableArgs: true,
-});
+await step.runMutation(
+  internal.example.recordError,
+  { message },
+  {
+    unstableArgs: true,
+  },
+);
 ```
 
-Sometimes a library makes the step call on your behalf, so there's no call
-site at which to pass options. For example, another component's client may
-call `ctx.runMutation` internally with its own config embedded in the
-arguments, which would fail replays of in-flight workflows when that config
-changes. For this, `step.withOptions(...)` derives a new step context that
-applies default options to every step run through it:
+Sometimes a library makes the step call on your behalf, so there's no call site
+at which to pass options. For example, another component's client may call
+`ctx.runMutation` internally with its own config embedded in the arguments,
+which would fail replays of in-flight workflows when that config changes. For
+this, `step.withOptions(...)` derives a new step context that applies default
+options to every step run through it:
 
 ```ts
 const pool = new Workpool(components.scrapePool, { maxParallelism: 10 });
@@ -548,8 +528,8 @@ export const scrapeAll = workflow.define({
 ```
 
 `withOptions` supports `unstableArgs` and a default `retry` behavior for
-actions. Per-call options always take precedence, the original `step` context
-is unaffected, and calls can be chained (later defaults win).
+actions. Per-call options always take precedence, the original `step` context is
+unaffected, and calls can be chained (later defaults win).
 
 ### Checking a workflow's status
 

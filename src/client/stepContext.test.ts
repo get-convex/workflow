@@ -695,3 +695,53 @@ describe("transactionLimits", () => {
     ).rejects.toThrow("Cannot combine `inline` with `runAt` or `runAfter`.");
   });
 });
+
+describe("oversized step values", () => {
+  test("rejects every oversized argument before running any inline batch member", async () => {
+    let inlineMutationCalls = 0;
+    const fakeCtx = {
+      runQuery: () => Promise.resolve(null),
+      runMutation: () => {
+        inlineMutationCalls += 1;
+        return Promise.resolve(null);
+      },
+    };
+    const executor = new StepExecutor(
+      "wf-test",
+      0,
+      fakeCtx as any,
+      { journal: { startSteps: "handle" } } as any,
+      [],
+      new BaseChannel<StepRequest>(0),
+      Date.now(),
+      undefined,
+    );
+    const message = (
+      name: string,
+      args: Record<string, unknown>,
+      inline: boolean,
+    ): StepRequest => ({
+      name,
+      target: {
+        kind: "function",
+        functionType: inline ? "mutation" : "action",
+        function: fakeFuncRef(name),
+        args,
+      },
+      retry: undefined,
+      inline,
+      unstableArgs: false,
+      transactionLimits: undefined,
+      schedulerOptions: {},
+      resolve: () => {},
+    });
+
+    await expect(
+      executor.startSteps([
+        message("small-inline", {}, true),
+        message("oversized", { value: "x".repeat(900_000) }, false),
+      ]),
+    ).rejects.toThrow("Step arguments too large");
+    expect(inlineMutationCalls).toBe(0);
+  });
+});

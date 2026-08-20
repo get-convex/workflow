@@ -95,7 +95,7 @@ describe("context round-trips through failure paths", () => {
         internal.test.contextRoundtrip.captureOnComplete,
       );
       const wfId = (await ctx.runMutation(
-        internal.oversized.largeReturnWorkflow,
+        internal.test.oversized.largeReturnWorkflow,
         {
           args: {},
           onComplete: onCompleteHandle,
@@ -130,7 +130,7 @@ describe("context round-trips through failure paths", () => {
     const workflowId = await t.mutation(async (ctx) => {
       const wfId = await workflow.start(
         ctx,
-        internal.oversized.largeReturnWorkflow,
+        internal.test.oversized.largeReturnWorkflow,
         {},
         {
           onComplete: internal.test.contextRoundtrip.captureOnComplete,

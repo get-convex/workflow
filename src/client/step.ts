@@ -15,6 +15,10 @@ import { MAX_JOURNAL_SIZE, formatErrorWithStack } from "../shared.js";
 import type { EventId, SchedulerOptions } from "../types.js";
 import { pick } from "convex-helpers";
 import type { RunResult } from "./workflowMutation.js";
+import {
+  checkReturnValueSize,
+  checkStepArgumentsSize,
+} from "../component/oversizedValues.js";
 
 export type WorkerResult =
   | { type: "handlerDone"; runResult: RunResult }
@@ -158,6 +162,18 @@ export class StepExecutor {
   }
 
   async startSteps(messages: StepRequest[]): Promise<JournalEntry[]> {
+    // Validate the whole batch before running any inline function. Executor
+    // errors are converted into a deterministic workflow failure by the poll;
+    // checking first prevents another inline mutation in the same batch from
+    // committing alongside that failure.
+    for (const message of messages) {
+      const sizeError = checkStepArgumentsSize(
+        (message.target.args ?? {}) as Value,
+      );
+      if (sizeError) {
+        throw new Error(sizeError);
+      }
+    }
     const steps = await Promise.all(
       messages.map(async (message) => {
         const args = message.target.args ?? {};
@@ -189,7 +205,11 @@ export class StepExecutor {
                     target.args,
                     { transactionLimits: message.transactionLimits },
                   );
-            runResult = { kind: "success", returnValue: result ?? null };
+            const returnValue = (result ?? null) as Value;
+            const sizeError = checkReturnValueSize(returnValue);
+            runResult = sizeError
+              ? { kind: "failed", error: sizeError }
+              : { kind: "success", returnValue };
           } catch (error: unknown) {
             runResult = { kind: "failed", error: formatErrorWithStack(error) };
           }

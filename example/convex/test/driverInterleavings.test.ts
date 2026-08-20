@@ -21,7 +21,7 @@ const BASE_SEED = readInteger(
   0,
   0xffff_ffff,
 );
-const CASE_COUNT = readInteger("WORKFLOW_INTERLEAVING_CASES", 25, 20, 100);
+const CASE_COUNT = readInteger("WORKFLOW_INTERLEAVING_CASES", 27, 22, 100);
 
 type TestBackend = ReturnType<typeof initConvexTest>;
 type LoadedState = Awaited<ReturnType<typeof loadActionState>>;
@@ -67,7 +67,9 @@ type ScenarioKind =
   | "scheduledMutationPoll"
   | "scheduledActionPoll"
   | "awaitEventPoll"
-  | "nestedWorkflowPoll";
+  | "nestedWorkflowPoll"
+  | "oversizedArgumentPoll"
+  | "oversizedInlineReturnPoll";
 
 type Scenario = {
   seed: number;
@@ -251,6 +253,20 @@ async function evaluateScenario(scenario: Scenario): Promise<Evaluation> {
       return await evaluateEventPoll(scenario.repetitions);
     case "nestedWorkflowPoll":
       return await evaluateNestedWorkflowPoll(scenario.repetitions);
+    case "oversizedArgumentPoll":
+      return await evaluateOversizedPoll(
+        internal.test.oversized.largeArgumentWorkflow,
+        "Step arguments too large",
+        0,
+        scenario.repetitions,
+      );
+    case "oversizedInlineReturnPoll":
+      return await evaluateOversizedPoll(
+        internal.test.oversized.largeInlineReturnWorkflow,
+        "Step return value too large",
+        1,
+        scenario.repetitions,
+      );
   }
 }
 
@@ -522,7 +538,8 @@ async function evaluateMixedInlineActionPoll(
     { key: `mixed-${repetitions}` },
     repetitions,
     (entries) => {
-      if (entries.length !== 2) return `expected 2 entries, found ${entries.length}`;
+      if (entries.length !== 2)
+        return `expected 2 entries, found ${entries.length}`;
       const [query, action] = entries;
       if (
         query.step.kind !== "function" ||
@@ -585,7 +602,8 @@ async function evaluateSleepPoll(repetitions: number): Promise<Evaluation> {
     { label: `sleep-${repetitions}` },
     repetitions,
     (entries) => {
-      if (entries.length !== 1) return `expected 1 entry, found ${entries.length}`;
+      if (entries.length !== 1)
+        return `expected 1 entry, found ${entries.length}`;
       const [entry] = entries;
       if (entry.step.kind !== "sleep" || !entry.step.inProgress) {
         return "sleep was not represented as one blocking durable claim";
@@ -619,7 +637,8 @@ async function evaluateScheduledPoll(
     },
     repetitions,
     (entries) => {
-      if (entries.length !== 1) return `expected 1 entry, found ${entries.length}`;
+      if (entries.length !== 1)
+        return `expected 1 entry, found ${entries.length}`;
       const [entry] = entries;
       if (
         entry.step.kind !== "function" ||
@@ -646,7 +665,8 @@ async function evaluateEventPoll(repetitions: number): Promise<Evaluation> {
     {},
     repetitions,
     (entries) => {
-      if (entries.length !== 1) return `expected 1 entry, found ${entries.length}`;
+      if (entries.length !== 1)
+        return `expected 1 entry, found ${entries.length}`;
       const [entry] = entries;
       if (entry.step.kind !== "event" || !entry.step.inProgress) {
         return "event wait was not represented as one blocking claim";
@@ -663,13 +683,56 @@ async function evaluateNestedWorkflowPoll(
     { prompt: `nested-${repetitions}` },
     repetitions,
     (entries) => {
-      if (entries.length !== 1) return `expected 1 entry, found ${entries.length}`;
+      if (entries.length !== 1)
+        return `expected 1 entry, found ${entries.length}`;
       const [entry] = entries;
       if (entry.step.kind !== "workflow" || !entry.step.inProgress) {
         return "nested workflow was not represented as one blocking claim";
       }
     },
   );
+}
+
+async function evaluateOversizedPoll(
+  workflow: FunctionReference<"mutation", "internal">,
+  expectedError: string,
+  expectedEntries: number,
+  repetitions: number,
+): Promise<Evaluation> {
+  const harness = await MutationDriverHarness.create(
+    manualReference(workflow),
+    {},
+  );
+  const results = await parallelPolls(harness, repetitions);
+  const state = await harness.state();
+  assertJournalShape(state);
+  const rejected = rejectedCount(results);
+  const cleanFailures = results.every(
+    (result) =>
+      result.kind === "fulfilled" &&
+      result.value.kind === "complete" &&
+      result.value.runResult.kind === "failed" &&
+      result.value.runResult.error.includes(expectedError),
+  );
+  const durableFailure =
+    state.workflow.runResult?.kind === "failed" &&
+    state.workflow.runResult.error.includes(expectedError);
+  const entriesFailed = state.journalEntries.every(
+    (entry) => entry.step.runResult?.kind === "failed",
+  );
+  return {
+    score:
+      cleanFailures &&
+      durableFailure &&
+      entriesFailed &&
+      state.journalEntries.length === expectedEntries &&
+      rejected === 0
+        ? "pass"
+        : "gap",
+    evidence:
+      `${repetitions} oversized polls failed cleanly with ${state.journalEntries.length} ` +
+      `journal entries and ${rejected} errors`,
+  };
 }
 
 async function evaluateBlockingFeature(
@@ -713,8 +776,7 @@ function stepsResultCount(
   results: Awaited<ReturnType<MutationDriverHarness["pollSettled"]>>[],
 ): number {
   return results.filter(
-    (result) =>
-      result.kind === "fulfilled" && result.value.kind === "steps",
+    (result) => result.kind === "fulfilled" && result.value.kind === "steps",
   ).length;
 }
 
@@ -767,6 +829,8 @@ function generateScenarios(seed: number, count: number): Scenario[] {
     "scheduledActionPoll",
     "awaitEventPoll",
     "nestedWorkflowPoll",
+    "oversizedArgumentPoll",
+    "oversizedInlineReturnPoll",
   ];
   const kinds = required;
   return Array.from({ length: count }, (_, index) => ({

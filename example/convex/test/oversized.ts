@@ -1,10 +1,14 @@
 import { v } from "convex/values";
 import { sendEvent, defineEvent } from "@convex-dev/workflow";
-import { components, internal } from "./_generated/api.js";
-import { internalAction, internalMutation } from "./_generated/server.js";
+import { components, internal } from "../_generated/api.js";
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+} from "../_generated/server.js";
 import { vWorkflowId } from "@convex-dev/workflow";
 import { vResultValidator } from "@convex-dev/workpool";
-import { workflow } from "./example.js";
+import { workflow } from "../example.js";
 
 // Action that returns a value larger than 800KB.
 export const largeReturnAction = internalAction({
@@ -15,16 +19,56 @@ export const largeReturnAction = internalAction({
   },
 });
 
+export const largeArgumentAction = internalAction({
+  args: { value: v.string() },
+  returns: v.number(),
+  handler: async (_ctx, args): Promise<number> => {
+    return args.value.length;
+  },
+});
+
+export const largeInlineReturnQuery = internalQuery({
+  args: {},
+  returns: v.string(),
+  handler: async (): Promise<string> => {
+    return "z".repeat(900_000);
+  },
+});
+
 export const largeReturnWorkflow = workflow
   .define({
     args: {},
   })
   .handler(async (step) => {
     const result = await step.runAction(
-      internal.oversized.largeReturnAction,
+      internal.test.oversized.largeReturnAction,
       {},
     );
     return result;
+  });
+
+export const largeArgumentWorkflow = workflow
+  .define({
+    args: {},
+    returns: v.number(),
+  })
+  .handler(async (step) => {
+    return await step.runAction(internal.test.oversized.largeArgumentAction, {
+      value: "a".repeat(900_000),
+    });
+  });
+
+export const largeInlineReturnWorkflow = workflow
+  .define({
+    args: {},
+    returns: v.string(),
+  })
+  .handler(async (step) => {
+    return await step.runQuery(
+      internal.test.oversized.largeInlineReturnQuery,
+      {},
+      { inline: true },
+    );
   });
 
 export const bigEvent = defineEvent({

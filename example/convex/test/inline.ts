@@ -276,6 +276,33 @@ export const actionDrivenSleep = workflow
     });
   });
 
+export const actionDrivenInlineThenSleep = workflow
+  .define({
+    args: { key: v.string() },
+    returns: v.number(),
+  })
+  .handler(async (step, args) => {
+    const value = await step.runMutation(
+      internal.test.inline.incrementCounter,
+      { key: args.key },
+      { inline: true },
+    );
+    await step.sleep(1, { name: "after-inline" });
+    return value;
+  });
+
+export const actionDrivenEvent = workflow
+  .define({
+    args: {},
+    returns: v.string(),
+  })
+  .handler(async (step) => {
+    return await step.awaitEvent<string>({
+      name: "driver-event",
+      validator: v.string(),
+    });
+  });
+
 // ── Helper functions ──────────────────────────
 
 export const getCounter = internalQuery({

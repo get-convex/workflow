@@ -28,6 +28,7 @@ const OPERATIONS_PER_CASE = readInteger(
   6,
   64,
 );
+const SCHEDULER_DRAIN_MAX_ITERATIONS = 1_000;
 
 type Operation = {
   id: string;
@@ -173,7 +174,10 @@ async function execute(
       { executionMode: mode },
     ),
   );
-  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  await t.finishAllScheduledFunctions(
+    vi.runAllTimers,
+    SCHEDULER_DRAIN_MAX_ITERATIONS,
+  );
   const wallMs = vi.getRealSystemTime() - wallStartedAt;
   const virtualMs = Date.now() - virtualStartedAt;
 

@@ -35,6 +35,20 @@ export const largeInlineReturnQuery = internalQuery({
   },
 });
 
+export const largeInlineArgumentMutation = internalMutation({
+  args: { key: v.string(), value: v.string() },
+  returns: v.number(),
+  handler: async (ctx, args): Promise<number> => {
+    await ctx.db.insert("workflowHarnessCommits", {
+      runId: args.key,
+      operationId: "oversized-inline-argument",
+      kind: "mutation",
+      value: String(args.value.length),
+    });
+    return args.value.length;
+  },
+});
+
 export const largeReturnWorkflow = workflow
   .define({
     args: {},
@@ -69,6 +83,21 @@ export const largeInlineReturnWorkflow = workflow
       {},
       { inline: true },
     );
+  });
+
+export const largeInlineArgumentWorkflow = workflow
+  .define({
+    args: { key: v.string(), unstableArgs: v.boolean() },
+    returns: v.number(),
+  })
+  .handler(async (step, args) => {
+    const length = await step.runMutation(
+      internal.test.oversized.largeInlineArgumentMutation,
+      { key: args.key, value: "i".repeat(900_000) },
+      { inline: true, unstableArgs: args.unstableArgs },
+    );
+    await step.sleep(1);
+    return length;
   });
 
 export const bigEvent = defineEvent({

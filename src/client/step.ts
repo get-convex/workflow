@@ -18,7 +18,9 @@ import type { RunResult } from "./workflowMutation.js";
 import {
   checkReturnValueSize,
   checkStepArgumentsSize,
+  MAX_STEP_ARGUMENT_SIZE,
 } from "../component/oversizedValues.js";
+import { hashConvexValue } from "./valueHash.js";
 
 export type WorkerResult =
   | { type: "handlerDone"; runResult: RunResult }
@@ -135,17 +137,25 @@ export class StepExecutor {
         `Assertion failed: not blocked but have in-progress journal entry`,
       );
     }
-    const stepFields = pick(
-      entry.step,
-      message.unstableArgs ? ["name", "kind"] : ["name", "kind", "args"],
-    );
-    const messageFields = message.unstableArgs
-      ? { name: message.name, kind: message.target.kind }
-      : {
-          name: message.name,
-          kind: message.target.kind,
-          args: message.target.args as Value,
-        };
+    const identityFields = { name: message.name, kind: message.target.kind };
+    let stepFields: Record<string, Value | undefined>;
+    let messageFields: Record<string, Value | undefined>;
+    if (message.unstableArgs) {
+      stepFields = pick(entry.step, ["name", "kind"]);
+      messageFields = identityFields;
+    } else if (entry.step.argsHash !== undefined) {
+      stepFields = pick(entry.step, ["name", "kind", "argsHash"]);
+      messageFields = {
+        ...identityFields,
+        argsHash: hashConvexValue(message.target.args as Value),
+      };
+    } else {
+      stepFields = pick(entry.step, ["name", "kind", "args"]);
+      messageFields = {
+        ...identityFields,
+        args: message.target.args as Value,
+      };
+    }
     const stepJson = JSON.stringify(convexToJson(stepFields));
     const messageJson = JSON.stringify(convexToJson(messageFields));
     if (stepJson !== messageJson) {
@@ -166,17 +176,30 @@ export class StepExecutor {
     // errors are converted into a deterministic workflow failure by the poll;
     // checking first prevents another inline mutation in the same batch from
     // committing alongside that failure.
+    const persistedArguments: Array<{
+      args: Value;
+      argsHash?: string;
+      argsSize: number;
+    }> = [];
     for (const message of messages) {
-      const sizeError = checkStepArgumentsSize(
-        (message.target.args ?? {}) as Value,
-      );
-      if (sizeError) {
-        throw new Error(sizeError);
+      const args = (message.target.args ?? {}) as Value;
+      const argsSize = getConvexSize(args);
+      if (argsSize <= MAX_STEP_ARGUMENT_SIZE) {
+        persistedArguments.push({ args, argsSize });
+        continue;
       }
+      if (!message.inline) {
+        throw new Error(checkStepArgumentsSize(args)!);
+      }
+      persistedArguments.push({
+        args: {},
+        argsSize,
+        ...(message.unstableArgs ? {} : { argsHash: hashConvexValue(args) }),
+      });
     }
     const steps = await Promise.all(
-      messages.map(async (message) => {
-        const args = message.target.args ?? {};
+      messages.map(async (message, index) => {
+        const persisted = persistedArguments[index];
         const target = message.target;
 
         let runResult: RunResult | undefined;
@@ -218,8 +241,9 @@ export class StepExecutor {
         const commonFields = {
           inProgress: !runResult,
           name: message.name,
-          args,
-          argsSize: getConvexSize(args as Value),
+          args: persisted.args,
+          argsHash: persisted.argsHash,
+          argsSize: persisted.argsSize,
           runResult,
           startedAt: this.now,
           completedAt: runResult ? this.now : undefined,

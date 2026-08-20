@@ -75,6 +75,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             step:
               | {
                   args: any;
+                  argsHash?: string;
                   argsSize: number;
                   completedAt?: number;
                   functionType: "query" | "mutation" | "action";
@@ -91,6 +92,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   args: any;
+                  argsHash?: string;
                   argsSize: number;
                   completedAt?: number;
                   handle: string;
@@ -106,6 +108,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   args: { eventId?: string };
+                  argsHash?: string;
                   argsSize: number;
                   completedAt?: number;
                   eventId?: string;
@@ -120,6 +123,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   args: any;
+                  argsHash?: string;
                   argsSize: number;
                   completedAt?: number;
                   inProgress: boolean;
@@ -190,6 +194,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             step:
               | {
                   args: any;
+                  argsHash?: string;
                   argsSize: number;
                   completedAt?: number;
                   functionType: "query" | "mutation" | "action";
@@ -206,6 +211,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   args: any;
+                  argsHash?: string;
                   argsSize: number;
                   completedAt?: number;
                   handle: string;
@@ -221,6 +227,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   args: { eventId?: string };
+                  argsHash?: string;
                   argsSize: number;
                   completedAt?: number;
                   eventId?: string;
@@ -235,6 +242,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   args: any;
+                  argsHash?: string;
                   argsSize: number;
                   completedAt?: number;
                   inProgress: boolean;
@@ -272,6 +280,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           step:
             | {
                 args: any;
+                argsHash?: string;
                 argsSize: number;
                 completedAt?: number;
                 functionType: "query" | "mutation" | "action";
@@ -288,6 +297,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
               }
             | {
                 args: any;
+                argsHash?: string;
                 argsSize: number;
                 completedAt?: number;
                 handle: string;
@@ -303,6 +313,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
               }
             | {
                 args: { eventId?: string };
+                argsHash?: string;
                 argsSize: number;
                 completedAt?: number;
                 eventId?: string;
@@ -317,6 +328,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
               }
             | {
                 args: any;
+                argsHash?: string;
                 argsSize: number;
                 completedAt?: number;
                 inProgress: boolean;
@@ -426,6 +438,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             step:
               | {
                   args: any;
+                  argsHash?: string;
                   argsSize: number;
                   completedAt?: number;
                   functionType: "query" | "mutation" | "action";
@@ -442,6 +455,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   args: any;
+                  argsHash?: string;
                   argsSize: number;
                   completedAt?: number;
                   handle: string;
@@ -457,6 +471,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   args: { eventId?: string };
+                  argsHash?: string;
                   argsSize: number;
                   completedAt?: number;
                   eventId?: string;
@@ -471,6 +486,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 }
               | {
                   args: any;
+                  argsHash?: string;
                   argsSize: number;
                   completedAt?: number;
                   inProgress: boolean;

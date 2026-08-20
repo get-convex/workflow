@@ -190,4 +190,53 @@ describe("oversized values", () => {
     expect(loaded.journalEntries).toHaveLength(1);
     expect(loaded.journalEntries[0].step.runResult?.kind).toBe("failed");
   });
+
+  test.each([
+    { unstableArgs: false, storesHash: true },
+    { unstableArgs: true, storesHash: false },
+  ])(
+    "oversized inline arguments survive replay with compact identity ($unstableArgs)",
+    async ({ unstableArgs, storesHash }) => {
+      const t = initConvexTest();
+      const key = `oversized-inline-${unstableArgs}`;
+      const workflowId = await t.run((ctx) =>
+        workflow.start(
+          ctx,
+          internal.test.oversized.largeInlineArgumentWorkflow,
+          { key, unstableArgs },
+          { executionMode: "action" },
+        ),
+      );
+      await drainScheduler(t);
+
+      const status = await t.run((ctx) =>
+        getStatus(ctx, components.workflow, workflowId),
+      );
+      const loaded = await t.run((ctx) =>
+        ctx.runQuery(components.workflow.journal.load, { workflowId }),
+      );
+      const commits = await t.run((ctx) =>
+        ctx.db
+          .query("workflowHarnessCommits")
+          .withIndex("by_runId_and_operationId", (q) =>
+            q.eq("runId", key).eq("operationId", "oversized-inline-argument"),
+          )
+          .collect(),
+      );
+
+      assert(status.type === "completed");
+      expect(status.result).toBe(900_000);
+      expect(commits).toHaveLength(1);
+      expect(loaded.journalEntries).toHaveLength(2);
+      expect(loaded.journalEntries[0].step.args).toEqual({});
+      expect(loaded.journalEntries[0].step.argsSize).toBeGreaterThan(800 << 10);
+      if (storesHash) {
+        expect(loaded.journalEntries[0].step.argsHash).toMatch(
+          /^[a-f0-9]{64}$/,
+        );
+      } else {
+        expect(loaded.journalEntries[0].step.argsHash).toBeUndefined();
+      }
+    },
+  );
 });

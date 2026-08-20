@@ -21,7 +21,7 @@ const BASE_SEED = readInteger(
   0,
   0xffff_ffff,
 );
-const CASE_COUNT = readInteger("WORKFLOW_INTERLEAVING_CASES", 27, 22, 100);
+const CASE_COUNT = readInteger("WORKFLOW_INTERLEAVING_CASES", 27, 23, 100);
 
 type TestBackend = ReturnType<typeof initConvexTest>;
 type LoadedState = Awaited<ReturnType<typeof loadActionState>>;
@@ -69,6 +69,7 @@ type ScenarioKind =
   | "awaitEventPoll"
   | "nestedWorkflowPoll"
   | "oversizedArgumentPoll"
+  | "oversizedInlineArgumentPoll"
   | "oversizedInlineReturnPoll";
 
 type Scenario = {
@@ -260,6 +261,8 @@ async function evaluateScenario(scenario: Scenario): Promise<Evaluation> {
         0,
         scenario.repetitions,
       );
+    case "oversizedInlineArgumentPoll":
+      return await evaluateOversizedInlineArgumentPoll(scenario.repetitions);
     case "oversizedInlineReturnPoll":
       return await evaluateOversizedPoll(
         internal.test.oversized.largeInlineReturnWorkflow,
@@ -268,6 +271,51 @@ async function evaluateScenario(scenario: Scenario): Promise<Evaluation> {
         scenario.repetitions,
       );
   }
+}
+
+async function evaluateOversizedInlineArgumentPoll(
+  repetitions: number,
+): Promise<Evaluation> {
+  const key = `oversized-inline-poll-${repetitions}`;
+  const harness = await MutationDriverHarness.create(
+    manualReference(internal.test.oversized.largeInlineArgumentWorkflow),
+    { key, unstableArgs: false },
+  );
+  const results = await parallelPolls(harness, repetitions);
+  const state = await harness.state();
+  assertJournalShape(state);
+  const commits = await harness.t.query(async (ctx) =>
+    ctx.db
+      .query("workflowHarnessCommits")
+      .withIndex("by_runId_and_operationId", (q) =>
+        q.eq("runId", key).eq("operationId", "oversized-inline-argument"),
+      )
+      .collect(),
+  );
+  const [inlineMutation, sleep] = state.journalEntries;
+  const validShape =
+    state.journalEntries.length === 2 &&
+    inlineMutation?.step.kind === "function" &&
+    inlineMutation.step.functionType === "mutation" &&
+    !inlineMutation.step.inProgress &&
+    Object.keys(inlineMutation.step.args as object).length === 0 &&
+    /^[a-f0-9]{64}$/.test(inlineMutation.step.argsHash ?? "") &&
+    inlineMutation.step.argsSize > 800 << 10 &&
+    sleep?.step.kind === "sleep" &&
+    sleep.step.inProgress;
+  const rejected = rejectedCount(results);
+  return {
+    score:
+      validShape &&
+      commits.length === 1 &&
+      rejected === 0 &&
+      stepsResultCount(results) === 1
+        ? "pass"
+        : "gap",
+    evidence:
+      `oversized inline mutation committed ${commits.length} time(s), compactHash=${Boolean(inlineMutation?.step.argsHash)}, ` +
+      `journalEntries=${state.journalEntries.length}, step results=${stepsResultCount(results)}, errors=${rejected}`,
+  };
 }
 
 async function evaluateDuplicatePoll(
@@ -830,6 +878,7 @@ function generateScenarios(seed: number, count: number): Scenario[] {
     "awaitEventPoll",
     "nestedWorkflowPoll",
     "oversizedArgumentPoll",
+    "oversizedInlineArgumentPoll",
     "oversizedInlineReturnPoll",
   ];
   const kinds = required;

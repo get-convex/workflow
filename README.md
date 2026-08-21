@@ -223,21 +223,21 @@ const workflowId = await start(
 );
 ```
 
-Action mode starts new steps for up to five minutes at a time by default. Use
-the object form to choose a different step-start budget, up to 30 minutes:
+Action mode runs continuously for up to five minutes at a time by default. Use
+the object form to choose a different soft limit, up to 30 minutes:
 
 ```ts
-{ executionMode: { type: "action", stepStartBudgetMs: 10 * 60_000 } }
+{ executionMode: { type: "action", continuousSoftLimitMs: 10 * 60_000 } }
 ```
 
-This budget is not a timeout. A step that has already started can finish after
-the budget expires; the workflow then continues automatically. All workflow
+This is not a timeout. A step that has already started can finish after the soft
+limit is reached; the workflow then continues automatically. All workflow
 features remain available in action mode, including inline steps, sleeps,
 events, nested workflows, scheduling, and configured retries.
 
 For long actions, provide a conservative runtime estimate to avoid exceeding
-Convex's 30-minute action limit. If a runner may start steps for 10 minutes and
-an action may need another 25 minutes, mark that estimate:
+Convex's 30-minute action limit. If a workflow may run continuously for 10
+minutes and an action may need another 25 minutes, mark that estimate:
 
 ```ts
 await step.runAction(internal.example.longAction, args, {

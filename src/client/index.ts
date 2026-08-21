@@ -185,8 +185,8 @@ type StartOptions<Context = unknown> = CallbackOptions<Context> & {
   startAsync?: boolean;
   /**
    * Run the workflow from a long-lived action which executes simple steps
-   * directly. Use the object form to override its five-minute step-start
-   * budget. Started steps are not timed out when the budget expires.
+   * directly. Use the object form to override its five-minute continuous soft
+   * limit. Started steps are not timed out when the limit is reached.
    */
   executionMode?: ExecutionMode;
 };

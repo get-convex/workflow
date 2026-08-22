@@ -55,8 +55,22 @@ export type StepRequest = {
   resolve: (result: RunResult) => void;
 };
 
+// A step.journal.consumeNext() request: consume the next recorded journal
+// entry without executing anything, returning the entry itself.
+export type ConsumeRequest = {
+  consume: true;
+  expectedName: string | undefined;
+  resolve: (entry: JournalEntry) => void;
+  reject: (error: Error) => void;
+};
+
+export type ExecutorRequest = StepRequest | ConsumeRequest;
+
 export class StepExecutor {
-  private journalEntrySize: number;
+  // Journal size and step count up to the current replay position, so they
+  // answer identically on first execution and on every replay.
+  private journalSize: number = 0;
+  private stepCount: number = 0;
 
   constructor(
     private workflowId: string,
@@ -64,27 +78,25 @@ export class StepExecutor {
     private ctx: GenericMutationCtx<GenericDataModel>,
     private component: WorkflowComponent,
     private journalEntries: Array<JournalEntry>,
-    private receiver: BaseChannel<StepRequest>,
+    private receiver: BaseChannel<ExecutorRequest>,
     private now: number,
     private workpoolOptions: WorkpoolOptions | undefined,
-  ) {
-    this.journalEntrySize = journalEntries.reduce(
-      (size, entry) => size + getConvexSize(entry),
-      0,
-    );
-
-    if (this.journalEntrySize > MAX_JOURNAL_SIZE) {
-      // This should never happen, but we'll throw an error just in case.
-      throw new Error(journalSizeError(this.journalEntrySize, this.workflowId));
-    }
-  }
+    private definedVersion: number = 0,
+  ) {}
   async run(): Promise<WorkerResult> {
     while (true) {
       const message = await this.receiver.get();
+      if ("consume" in message) {
+        this.consumeMessage(message);
+        continue;
+      }
       // In the future we can correlate the calls to entries by handle, args,
       // etc. instead of just ordering. As is, the fn order can't change.
       const entry = this.journalEntries.shift();
       if (entry) {
+        // Newly started entries are counted in startSteps; replayed ones here.
+        this.stepCount++;
+        this.journalSize += getConvexSize(entry);
         this.completeMessage(message, entry);
         continue;
       }
@@ -92,6 +104,11 @@ export class StepExecutor {
       const size = this.receiver.bufferSize;
       for (let i = 0; i < size; i++) {
         const message = await this.receiver.get();
+        if ("consume" in message) {
+          // The journal is empty (we're at the frontier), so this rejects.
+          this.consumeMessage(message);
+          continue;
+        }
         messages.push(message);
       }
       const entries = await this.startSteps(messages);
@@ -110,16 +127,70 @@ export class StepExecutor {
 
   getGenerationState() {
     if (this.journalEntries.length <= this.receiver.bufferSize) {
-      return { now: this.now, latest: true };
+      return { now: this.now, version: this.definedVersion, latest: true };
     }
+    // We use the next entry's startedAt / version, since we're in code just
+    // before that step is invoked. We use the bufferSize, since multiple steps
+    // may be currently enqueued in one generation, but the code after it has
+    // already started executing.
+    const next = this.journalEntries[this.receiver.bufferSize];
     return {
-      // We use the next entry's startedAt, since we're in code just before that
-      // step is invoked. We use the bufferSize, since multiple steps may be
-      // currently enqueued in one generation, but the code after it has already
-      // started executing.
-      now: this.journalEntries[this.receiver.bufferSize].step.startedAt,
+      now: next.step.startedAt,
+      version: next.step.version ?? 0,
       latest: false,
     };
+  }
+
+  getJournalState() {
+    return {
+      version: this.getGenerationState().version,
+      // Technically the size may not match the stepCount if they check the
+      // size after adding a step but before it's finished - e.g. a non-awaited
+      // promise. The size only reflects finished steps.
+      size: this.journalSize,
+      stepCount: this.stepCount + this.receiver.bufferSize,
+    };
+  }
+
+  consumeMessage(message: ConsumeRequest) {
+    const expected = message.expectedName
+      ? ` (expected "${message.expectedName}")`
+      : "";
+    const entry = this.journalEntries.shift();
+    if (!entry) {
+      message.reject(
+        new Error(
+          `consumeNext: no recorded step to consume${expected}. ` +
+            `The workflow is at the live frontier. Only call ` +
+            `step.journal.consumeNext() when replaying history known to have ` +
+            `recorded the step, e.g. gated on step.journal.getVersion().`,
+        ),
+      );
+      return;
+    }
+    if (entry.step.inProgress) {
+      message.reject(
+        new Error(
+          `Assertion failed: not blocked but have in-progress journal entry`,
+        ),
+      );
+      return;
+    }
+    if (
+      message.expectedName !== undefined &&
+      entry.step.name !== message.expectedName
+    ) {
+      message.reject(
+        new Error(
+          `Journal entry mismatch: consumeNext${expected} found step ` +
+            `"${entry.step.name}" (step ${entry.stepNumber}) instead.`,
+        ),
+      );
+      return;
+    }
+    this.stepCount++;
+    this.journalSize += getConvexSize(entry);
+    message.resolve(entry);
   }
 
   completeMessage(message: StepRequest, entry: JournalEntry) {
@@ -200,6 +271,7 @@ export class StepExecutor {
           runResult,
           startedAt: this.now,
           completedAt: runResult ? this.now : undefined,
+          version: this.definedVersion,
         } satisfies Omit<Step, "kind">;
         let step: IdsToStrings<Step>;
         switch (target.kind) {
@@ -252,10 +324,11 @@ export class StepExecutor {
       },
     )) as JournalEntry[];
     for (const entry of entries) {
-      this.journalEntrySize += getConvexSize(entry);
-      if (this.journalEntrySize > MAX_JOURNAL_SIZE) {
+      this.stepCount++;
+      this.journalSize += getConvexSize(entry);
+      if (this.journalSize > MAX_JOURNAL_SIZE) {
         throw new Error(
-          journalSizeError(this.journalEntrySize, this.workflowId) +
+          journalSizeError(this.journalSize, this.workflowId) +
             ` The failing step was ${entry.step.name} (${entry._id})`,
         );
       }

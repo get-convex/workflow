@@ -103,6 +103,16 @@ export type WorkflowDefinition<
   args?: ArgsValidator;
   returns?: ReturnsValidator;
   workpoolOptions?: WorkpoolRetryOptions;
+  /**
+   * The version of this workflow definition. Bump it when you make a change
+   * that breaks replay of in-flight workflows (e.g. reordering, adding, or
+   * removing steps), then gate the old behavior on
+   * `step.journal.getVersion()`: while replaying steps recorded under an
+   * older version it returns that older version, and at the frontier it
+   * returns this value. Steps recorded before versions existed read as 0.
+   * @default 0
+   */
+  version?: number;
 };
 
 export type WorkflowHandler<

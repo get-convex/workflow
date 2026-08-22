@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- Adds a `version: number` option to workflow definitions (default 0), stamped
+  on the workflow and on each journal entry as steps first execute.
+- Adds the `step.journal` namespace for replay-side introspection:
+  - `getVersion()`: the definition version as of this point in the journal —
+    the next recorded step's stamp while replaying, the current definition's
+    `version` at the frontier (like `Date.now()` inside a workflow).
+  - `getStepCount()` / `getSize()`: steps and bytes recorded up to the current
+    replay position (identical on first execution and on replay).
+  - `consumeNext(name?)`: consume the next recorded journal entry without
+    issuing a step call, returning the entry (recorded args and raw
+    `runResult`) for inspection. For replaying past steps that new code no
+    longer performs; throws at the live frontier and on a name mismatch.
+  
 ## 0.4.7-alpha.0
 
 - Improves patching and restoration of globals to work better with convex-test.

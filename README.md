@@ -488,6 +488,67 @@ export const scrapeAll = workflow.define({
 actions. Per-call options always take precedence, the original `step` context
 is unaffected, and calls can be chained (later defaults win).
 
+### Versioning workflow code with `step.journal`
+
+Changing a workflow's code (reordering, adding, or removing steps) breaks
+replay of workflows that are already in flight. The `step.journal` namespace
+lets code observe and adapt to the recorded history instead of failing:
+
+```ts
+export const scrapeAll = workflow.define({
+  args: { urls: v.array(v.string()) },
+  version: 2, // bump when making a breaking change; defaults to 0
+  handler: async (step, { urls }) => {
+    // While replaying steps recorded under v1, relax argument matching for
+    // them; new executions (and v2 histories) validate normally.
+    const step_ =
+      step.journal.getVersion() < 2
+        ? step.withOptions({ unstableArgs: true })
+        : step;
+    for (const url of urls) {
+      await pool.enqueueAction(step_, internal.scrape.page, { url });
+    }
+  },
+});
+```
+
+`step.journal.getVersion()` behaves like `Date.now()` does inside a workflow:
+while replaying, it returns the `version` stamped on the next recorded step;
+at the frontier (no steps left to replay) it returns the current definition's
+`version`. Steps recorded before versions existed read as 0. Gate *before*
+the steps you're protecting — code after the last recorded step always sees
+the live version.
+
+If new code no longer performs a step that old histories recorded — including
+a step a library made on your behalf, whose name and arguments you never
+wrote — consume the recorded entry to replay past it:
+
+```ts
+if (step.journal.getVersion() < 2) {
+  // v1 recorded a step here that v2 code no longer performs. Returns the
+  // recorded entry ({ name, kind, args, runResult, ... }) for inspection.
+  const skipped = await step.journal.consumeNext("scrapePool/lib:enqueue");
+}
+```
+
+Passing the expected step name is strongly recommended: a mismatch throws
+instead of silently consuming the wrong step. `consumeNext` throws at the
+live frontier (when there's nothing left to replay), so only call it in a
+branch gated on replaying old history, e.g. via `getVersion()`. Nothing is
+re-executed or written: the entry stays in the journal, which is also what
+keeps the `getVersion()` gate stable on future replays.
+
+The journal can also be introspected for size, e.g. to hand off to a nested
+workflow before hitting the journal size limit:
+
+```ts
+step.journal.getStepCount(); // steps recorded up to this point
+step.journal.getSize(); // journal bytes up to this point
+```
+
+Both are position-scoped — they return the same values on first execution
+and on every replay of the same point.
+
 ### Checking a workflow's status
 
 Calling a workflow returns a `WorkflowId` string, which can then be used for

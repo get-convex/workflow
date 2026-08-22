@@ -31,6 +31,59 @@ describe("workflow", () => {
     expect(workflow.inProgress).toHaveLength(0);
   });
 
+  test("create stores the definition version", async () => {
+    const t = initConvexTest();
+    const id = await t.mutation(api.workflow.create, {
+      workflowName: "test",
+      workflowHandle: "function://;workflow.test:noop",
+      workflowArgs: {},
+      startAsync: true,
+      version: 2,
+    });
+    const { workflow } = await t.query(api.workflow.getStatus, {
+      workflowId: id,
+    });
+    expect(workflow.version).toBe(2);
+  });
+
+  test("startSteps records the step version", async () => {
+    const t = initConvexTest();
+    const id = await t.mutation(api.workflow.create, {
+      workflowName: "test",
+      workflowHandle: "function://;workflow.test:noop",
+      workflowArgs: {},
+      startAsync: true,
+    });
+    await t.mutation(api.journal.startSteps, {
+      workflowId: id,
+      generationNumber: 0,
+      steps: [
+        {
+          step: {
+            kind: "function" as const,
+            functionType: "mutation" as const,
+            handle: "function://;workflow.test:noop",
+            name: "step1",
+            inProgress: false,
+            args: {},
+            argsSize: 2,
+            runResult: { kind: "success" as const, returnValue: null },
+            startedAt: Date.now(),
+            completedAt: Date.now(),
+            version: 2,
+          },
+        },
+      ],
+    });
+    const steps = await t.query(api.workflow.listSteps, {
+      workflowId: id,
+      order: "asc",
+      paginationOpts: { cursor: null, numItems: 10 },
+    });
+    expect(steps.page).toHaveLength(1);
+    expect(steps.page[0].version).toBe(2);
+  });
+
   test("can cancel a workflow", async () => {
     const t = initConvexTest();
     const id = await t.mutation(api.workflow.create, {

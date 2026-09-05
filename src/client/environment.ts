@@ -101,6 +101,7 @@ export function setupEnvironment(
   const originals = Object.fromEntries(
     patchedKeys.map((key) => [key, global[key]]),
   );
+  const readonlyProperties = new Map<string, PropertyDescriptor>();
 
   // Patch Math with seeded random based on workflowId
   global.Math = patchMath(originals.Math as typeof Math, workflowId);
@@ -123,14 +124,40 @@ export function setupEnvironment(
   // environments (e.g. convex-test) that share the same JS global scope and
   // rely on these globals internally.
 
-  // Remove non-deterministic globals
-  delete global.process;
-  delete global.Crypto;
-  delete global.crypto;
-  delete global.CryptoKey;
-  delete global.SubtleCrypto;
+  // Disable non-deterministic globals with assignments so test runtimes can
+  // intercept the writes without losing their global isolation accessors.
+  for (const key of [
+    "process",
+    "Crypto",
+    "crypto",
+    "CryptoKey",
+    "SubtleCrypto",
+  ]) {
+    const descriptor = Object.getOwnPropertyDescriptor(global, key);
+    if (
+      descriptor &&
+      ("writable" in descriptor ? !descriptor.writable : !descriptor.set)
+    ) {
+      // Convex exposes read-only Crypto/SubtleCrypto constructors and a
+      // getter-only crypto. Preserve their descriptors when replacing them.
+      readonlyProperties.set(key, descriptor);
+      Object.defineProperty(global, key, {
+        value: undefined,
+        writable: true,
+        enumerable: descriptor.enumerable,
+        configurable: descriptor.configurable,
+      });
+    } else {
+      global[key] = undefined;
+    }
+  }
 
-  return () => Object.assign(global, originals);
+  return () => {
+    Object.assign(global, originals);
+    for (const [key, descriptor] of readonlyProperties) {
+      Object.defineProperty(global, key, descriptor);
+    }
+  };
 }
 
 function noop() {}

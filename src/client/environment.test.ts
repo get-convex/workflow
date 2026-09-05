@@ -3,9 +3,212 @@ import {
   patchMath,
   createDeterministicDate,
   createConsole,
+  setupEnvironment,
 } from "./environment.js";
 
 describe("environment patching units", () => {
+  describe("setupEnvironment", () => {
+    const disabledKeys = [
+      "process",
+      "Crypto",
+      "crypto",
+      "CryptoKey",
+      "SubtleCrypto",
+    ] as const;
+
+    it.each(
+      disabledKeys.flatMap((key) => [
+        [key, true] as const,
+        [key, false] as const,
+      ]),
+    )(
+      "preserves the %s accessor when disabling and restoring it repeatedly (setter: %s)",
+      (key, hasSetter) => {
+        const global = globalThis as Record<string, unknown>;
+        const descriptor = Object.getOwnPropertyDescriptor(global, key);
+        const original = global[key];
+        let value = original;
+        const writes: unknown[] = [];
+        const accessor = {
+          configurable: true,
+          enumerable: descriptor?.enumerable ?? true,
+          get: () => value,
+          set: hasSetter
+            ? (next: unknown) => {
+                writes.push(next);
+                value = next;
+              }
+            : undefined,
+        };
+        Object.defineProperty(global, key, accessor);
+        const snapshots = [];
+        try {
+          for (let i = 0; i < 2; i++) {
+            const restore = setupEnvironment(
+              () => ({ now: 1234, latest: true }),
+              "accessor-test",
+            );
+            try {
+              snapshots.push({
+                value: global[key],
+                descriptor: hasSetter
+                  ? Object.getOwnPropertyDescriptor(global, key)
+                  : undefined,
+              });
+            } finally {
+              restore();
+            }
+            snapshots.push({
+              value: global[key],
+              descriptor: Object.getOwnPropertyDescriptor(global, key),
+            });
+          }
+        } finally {
+          if (descriptor) {
+            Object.defineProperty(global, key, descriptor);
+          } else {
+            delete global[key];
+          }
+        }
+
+        // Assert after restoring process/console so failures cannot break Vitest.
+        expect(snapshots).toEqual([
+          { value: undefined, descriptor: hasSetter ? accessor : undefined },
+          { value: original, descriptor: accessor },
+          { value: undefined, descriptor: hasSetter ? accessor : undefined },
+          { value: original, descriptor: accessor },
+        ]);
+        expect(writes).toEqual(
+          hasSetter ? [undefined, original, undefined, original] : [],
+        );
+      },
+    );
+
+    it.each([false, true])(
+      "restores Convex runtime descriptors after repeated setup (throws: %s)",
+      (throws) => {
+        const global = globalThis as Record<string, unknown>;
+        const keys = ["Math", "Date", "console", ...disabledKeys];
+        const hostDescriptors = Object.fromEntries(
+          keys.map((key) => [
+            key,
+            Object.getOwnPropertyDescriptor(global, key),
+          ]),
+        );
+        const hostValues = Object.fromEntries(
+          keys.map((key) => [key, global[key]]),
+        );
+        const originalCrypto = global.crypto;
+        const runtimeDescriptors = {
+          // Match udf-runtime/src/00_crypto.ts: these constructors are read-only.
+          Crypto: {
+            value: global.Crypto,
+            writable: false,
+            enumerable: false,
+            configurable: true,
+          },
+          SubtleCrypto: {
+            value: global.SubtleCrypto,
+            writable: false,
+            enumerable: false,
+            configurable: true,
+          },
+          crypto: {
+            get: () => originalCrypto,
+            set: undefined,
+            enumerable: true,
+            configurable: true,
+          },
+        };
+        const disabled: boolean[] = [];
+        const restored = [];
+        const errors = [];
+        try {
+          Object.defineProperties(global, runtimeDescriptors);
+          for (let i = 0; i < 2; i++) {
+            const restore = setupEnvironment(
+              () => ({ now: 1234, latest: true }),
+              "runtime-test",
+            );
+            try {
+              disabled.push(
+                disabledKeys.every((key) => global[key] === undefined),
+              );
+              if (throws) throw new Error("handler failed");
+            } catch (error) {
+              errors.push(error);
+            } finally {
+              restore();
+            }
+            restored.push(
+              Object.fromEntries(
+                Object.keys(runtimeDescriptors).map((key) => [
+                  key,
+                  Object.getOwnPropertyDescriptor(global, key),
+                ]),
+              ),
+            );
+          }
+        } finally {
+          // Also clean up partial setup failures so they cannot break Vitest.
+          for (const [key, descriptor] of Object.entries(hostDescriptors)) {
+            if (descriptor) {
+              Object.defineProperty(global, key, descriptor);
+              if (descriptor.set) global[key] = hostValues[key];
+            } else {
+              delete global[key];
+            }
+          }
+        }
+
+        expect(disabled).toEqual([true, true]);
+        expect(restored).toEqual([runtimeDescriptors, runtimeDescriptors]);
+        expect(errors).toEqual(
+          throws
+            ? [new Error("handler failed"), new Error("handler failed")]
+            : [],
+        );
+      },
+    );
+
+    it("restores the outer environment after a nested environment throws", () => {
+      const global = globalThis as Record<string, unknown>;
+      const keys = ["Math", "Date", "console", ...disabledKeys];
+      const snapshot = () => keys.map((key) => global[key]);
+      const original = snapshot();
+      const restoreOuter = setupEnvironment(
+        () => ({ now: 1000, latest: true }),
+        "outer",
+      );
+      const outer = snapshot();
+      let innerTime;
+      let restoredOuter;
+      let caught;
+      try {
+        const restoreInner = setupEnvironment(
+          () => ({ now: 2000, latest: false }),
+          "inner",
+        );
+        try {
+          innerTime = Date.now();
+          throw new Error("handler failed");
+        } finally {
+          restoreInner();
+        }
+      } catch (error) {
+        caught = error;
+        restoredOuter = snapshot();
+      } finally {
+        restoreOuter();
+      }
+
+      expect(caught).toEqual(new Error("handler failed"));
+      expect(innerTime).toBe(2000);
+      restoredOuter!.forEach((value, i) => expect(value).toBe(outer[i]));
+      snapshot().forEach((value, i) => expect(value).toBe(original[i]));
+    });
+  });
+
   describe("patchMath", () => {
     it("should preserve all Math methods except random", () => {
       const originalMath = Math;

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.7-alpha.0
+
+- Improves patching and restoration of globals to work better with convex-test.
+  For best results, use convex-test >= 0.0.57-alpha.0
+
 ## 0.4.6
 
 - Fixes the type of `step.runWorkflow(child, args)`: it now resolves to the

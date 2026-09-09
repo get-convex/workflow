@@ -66,7 +66,9 @@ export async function createHandler(
     args: args.workflowArgs,
     generationNumber: 0,
     onComplete: args.onComplete,
-    version: args.version,
+    // Normalize so an absent value means "created before versions existed",
+    // matching how steps are stamped.
+    version: args.version ?? 0,
   });
   console.debug(
     `Created workflow ${workflowId}:`,

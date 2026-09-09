@@ -839,6 +839,32 @@ describe("step.journal", () => {
     );
   });
 
+  test("a caught consumeNext mismatch leaves the journal aligned", async () => {
+    const entries = [
+      journalEntry({
+        name: "other",
+        runResult: { kind: "success", returnValue: "first" },
+        stepNumber: 0,
+      }),
+      journalEntry({
+        name: "kept",
+        runResult: { kind: "success", returnValue: "second" },
+        stepNumber: 1,
+      }),
+    ];
+    const { ctx } = setup(entries, 1);
+
+    await expect(ctx.journal.consumeNext("legacy")).rejects.toThrow(
+      "Journal entry mismatch",
+    );
+
+    // The mismatched entry was not consumed, so replay continues from it
+    // rather than being shifted by one.
+    expect(ctx.journal.getStepCount()).toBe(0);
+    expect(await ctx.runAction(fakeFuncRef("other"), {})).toBe("first");
+    expect(await ctx.runAction(fakeFuncRef("kept"), {})).toBe("second");
+  });
+
   test("consumeNext throws at the live frontier", async () => {
     const { ctx } = setup([], 1);
 

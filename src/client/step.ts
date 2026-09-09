@@ -156,7 +156,9 @@ export class StepExecutor {
     const expected = message.expectedName
       ? ` (expected "${message.expectedName}")`
       : "";
-    const entry = this.journalEntries.shift();
+    // Peek: only remove the entry once every check below has passed, so a
+    // caught mismatch leaves the journal aligned for the rest of the replay.
+    const entry = this.journalEntries[0];
     if (!entry) {
       message.reject(
         new Error(
@@ -188,6 +190,7 @@ export class StepExecutor {
       );
       return;
     }
+    this.journalEntries.shift();
     this.stepCount++;
     this.journalSize += getConvexSize(entry);
     message.resolve(entry);

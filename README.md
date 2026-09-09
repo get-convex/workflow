@@ -499,14 +499,16 @@ export const scrapeAll = workflow.define({
   args: { urls: v.array(v.string()) },
   version: 2, // bump when making a breaking change; defaults to 0
   handler: async (step, { urls }) => {
-    // While replaying steps recorded under v1, relax argument matching for
-    // them; new executions (and v2 histories) validate normally.
-    const step_ =
-      step.journal.getVersion() < 2
-        ? step.withOptions({ unstableArgs: true })
-        : step;
     for (const url of urls) {
-      await pool.enqueueAction(step_, internal.scrape.page, { url });
+      // While replaying steps recorded under v1, relax argument matching for
+      // them; new executions (and v2 histories) validate normally. Computed
+      // per iteration so that a replay which reaches the live frontier
+      // mid-loop goes back to validating the steps it records there.
+      const lenientStep =
+        step.journal.getVersion() < 2
+          ? step.withOptions({ unstableArgs: true })
+          : step;
+      await pool.enqueueAction(lenientStep, internal.scrape.page, { url });
     }
   },
 });

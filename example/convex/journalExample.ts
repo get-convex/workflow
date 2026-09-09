@@ -27,8 +27,12 @@ export const versionedWorkflow = workflow
     if (step.journal.getVersion() < 2) {
       // v1 histories recorded a step here that v2 code no longer performs.
       // Consume the recorded entry so the rest of the history replays; the
-      // recorded args and result are returned for inspection.
-      const skipped = await step.journal.consumeNext();
+      // recorded args and result are returned for inspection. Naming the
+      // expected step makes a mismatch throw instead of consuming the wrong
+      // entry and shifting every positional match after it.
+      const skipped = await step.journal.consumeNext(
+        "journalExample:legacyStep",
+      );
       console.log(`skipped recorded step ${skipped.name}`, skipped.runResult);
     }
 

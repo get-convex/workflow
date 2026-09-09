@@ -490,9 +490,9 @@ is unaffected, and calls can be chained (later defaults win).
 
 ### Versioning workflow code with `step.journal`
 
-Changing a workflow's code (reordering, adding, or removing steps) breaks
-replay of workflows that are already in flight. The `step.journal` namespace
-lets code observe and adapt to the recorded history instead of failing:
+Changing a workflow's code (reordering, adding, or removing steps) can break
+replay for workflows that are already running. Use `step.journal` to keep those
+workflows compatible with the new code:
 
 ```ts
 export const scrapeAll = workflow.define({
@@ -500,10 +500,8 @@ export const scrapeAll = workflow.define({
   version: 2, // bump when making a breaking change; defaults to 0
   handler: async (step, { urls }) => {
     for (const url of urls) {
-      // While replaying steps recorded under v1, relax argument matching for
-      // them; new executions (and v2 histories) validate normally. Computed
-      // per iteration so that a replay which reaches the live frontier
-      // mid-loop goes back to validating the steps it records there.
+      // Skip argument validation for steps recorded before v2. Check each
+      // iteration so new steps use normal validation.
       const lenientStep =
         step.journal.getVersion() < 2
           ? step.withOptions({ unstableArgs: true })
@@ -514,42 +512,38 @@ export const scrapeAll = workflow.define({
 });
 ```
 
-`step.journal.getVersion()` behaves like `Date.now()` does inside a workflow:
-while replaying, it returns the `version` stamped on the next recorded step;
-at the frontier (no steps left to replay) it returns the current definition's
-`version`. Steps recorded before versions existed read as 0. Gate *before*
-the steps you're protecting — code after the last recorded step always sees
-the live version.
+While replaying, `step.journal.getVersion()` returns the `version` used to
+record the next step. Once all recorded steps have been replayed, it returns the
+current workflow definition's `version`. Steps recorded without a version use 0.
+Check the version _before_ the steps whose behavior changed.
 
-If new code no longer performs a step that old histories recorded — including
-a step a library made on your behalf, whose name and arguments you never
-wrote — consume the recorded entry to replay past it:
+If new code removes a step, use `step.journal.consumeNext()` to replay past it.
+This also works for steps called by a library:
 
 ```ts
 if (step.journal.getVersion() < 2) {
-  // v1 recorded a step here that v2 code no longer performs. Returns the
-  // recorded entry ({ name, kind, args, runResult, ... }) for inspection.
+  // Skip the removed v1 step and inspect its recorded arguments and result.
   const skipped = await step.journal.consumeNext("scrapePool/lib:enqueue");
 }
 ```
 
-Passing the expected step name is strongly recommended: a mismatch throws
-instead of silently consuming the wrong step. `consumeNext` throws at the
-live frontier (when there's nothing left to replay), so only call it in a
-branch gated on replaying old history, e.g. via `getVersion()`. Nothing is
-re-executed or written: the entry stays in the journal, which is also what
-keeps the `getVersion()` gate stable on future replays.
+The step name is optional. If provided, `consumeNext` checks that it matches the
+next recorded step and throws if it doesn't. Only call `consumeNext` when
+replaying old steps, as in the version check above; it throws if there are no
+recorded steps left to replay. The step is not rerun, and its history is
+preserved for future replays.
 
-The journal can also be introspected for size, e.g. to hand off to a nested
-workflow before hitting the journal size limit:
+You can also check the journal's size, e.g. to hand off to a nested workflow
+before hitting the journal size limit:
 
 ```ts
 step.journal.getStepCount(); // steps recorded up to this point
-step.journal.getSize(); // journal bytes up to this point
+step.journal.getSize(); // journal bytes from finished steps up to this point
 ```
 
-Both are position-scoped — they return the same values on first execution
-and on every replay of the same point.
+Both return the same values at the same point on first execution and replay.
+Size only includes finished steps, so parallel steps may appear in the count
+before contributing to the size.
 
 ### Checking a workflow's status
 

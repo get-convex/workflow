@@ -3,7 +3,8 @@ import { BaseChannel } from "async-channel";
 import type { RunResult } from "./workflowMutation.js";
 import type { StepRequest } from "./step.js";
 import { StepExecutor } from "./step.js";
-import type { JournalEntry } from "../validators.js";
+import { hashConvexValue } from "./valueHash.js";
+import type { JournalEntry, Step } from "../validators.js";
 import { createWorkflowCtx } from "./workflowContext.js";
 import type { WorkflowId } from "../types.js";
 import { anyApi, type FunctionReference } from "convex/server";
@@ -20,6 +21,7 @@ function journalEntry(
     name?: string;
     kind?: "function" | "workflow" | "event";
     args?: Record<string, unknown>;
+    argsHash?: string;
     runResult?: RunResult;
     stepNumber?: number;
   } = {},
@@ -36,6 +38,7 @@ function journalEntry(
     inProgress: false,
     argsSize: 10,
     args: overrides.args ?? {},
+    argsHash: overrides.argsHash,
     runResult: overrides.runResult ?? {
       kind: "success" as const,
       returnValue: "ok",
@@ -694,4 +697,146 @@ describe("transactionLimits", () => {
       ),
     ).rejects.toThrow("Cannot combine `inline` with `runAt` or `runAfter`.");
   });
+});
+
+describe("oversized step values", () => {
+  test("hashes Convex arguments with SHA-256", () => {
+    expect(hashConvexValue({})).toBe(
+      "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    );
+  });
+
+  test("rejects every oversized argument before running any inline batch member", async () => {
+    let inlineMutationCalls = 0;
+    const fakeCtx = {
+      runQuery: () => Promise.resolve(null),
+      runMutation: () => {
+        inlineMutationCalls += 1;
+        return Promise.resolve(null);
+      },
+    };
+    const executor = new StepExecutor(
+      "wf-test",
+      0,
+      fakeCtx as any,
+      { journal: { startSteps: "handle" } } as any,
+      [],
+      new BaseChannel<StepRequest>(0),
+      Date.now(),
+      undefined,
+    );
+    const message = (
+      name: string,
+      args: Record<string, unknown>,
+      inline: boolean,
+    ): StepRequest => ({
+      name,
+      target: {
+        kind: "function",
+        functionType: inline ? "mutation" : "action",
+        function: fakeFuncRef(name),
+        args,
+      },
+      retry: undefined,
+      inline,
+      unstableArgs: false,
+      transactionLimits: undefined,
+      schedulerOptions: {},
+      resolve: () => {},
+    });
+
+    await expect(
+      executor.startSteps([
+        message("small-inline", {}, true),
+        message("oversized", { value: "x".repeat(900_000) }, false),
+      ]),
+    ).rejects.toThrow("Step arguments too large");
+    expect(inlineMutationCalls).toBe(0);
+  });
+
+  test.each([
+    { unstableArgs: false, storesHash: true },
+    { unstableArgs: true, storesHash: false },
+  ])(
+    "runs oversized inline arguments and stores compact replay identity ($unstableArgs)",
+    async ({ unstableArgs, storesHash }) => {
+      let inlineMutationCalls = 0;
+      let persistedStep: Step | undefined;
+      const fakeCtx = {
+        runQuery: () => Promise.resolve(null),
+        runMutation: (fn: unknown, args: any) => {
+          if (fn === "journal-start-steps") {
+            persistedStep = args.steps[0].step;
+            return Promise.resolve([]);
+          }
+          inlineMutationCalls += 1;
+          return Promise.resolve(args.value.length);
+        },
+      };
+      const executor = new StepExecutor(
+        "wf-test",
+        0,
+        fakeCtx as any,
+        { journal: { startSteps: "journal-start-steps" } } as any,
+        [],
+        new BaseChannel<StepRequest>(0),
+        Date.now(),
+        undefined,
+      );
+      const largeArgs = { value: "x".repeat(900_000) };
+      const message: StepRequest = {
+        name: "large-inline",
+        target: {
+          kind: "function",
+          functionType: "mutation",
+          function: fakeFuncRef("large-inline"),
+          args: largeArgs,
+        },
+        retry: undefined,
+        inline: true,
+        unstableArgs,
+        transactionLimits: undefined,
+        schedulerOptions: {},
+        resolve: () => {},
+      };
+
+      const t = initConvexTest();
+      await t.run(() => executor.startSteps([message]));
+
+      expect(inlineMutationCalls).toBe(1);
+      expect(persistedStep).toBeDefined();
+      expect(persistedStep!.args).toEqual({});
+      expect(persistedStep!.argsSize).toBeGreaterThan(800 << 10);
+      if (storesHash) {
+        expect(persistedStep!.argsHash).toMatch(/^[a-f0-9]{64}$/);
+      } else {
+        expect(persistedStep!.argsHash).toBeUndefined();
+      }
+
+      const replayEntry = {
+        _id: "large-inline-entry",
+        _creationTime: Date.now(),
+        workflowId: "wf-test",
+        stepNumber: 0,
+        step: persistedStep!,
+      } as JournalEntry;
+      expect(() =>
+        executor.completeMessage(message, replayEntry),
+      ).not.toThrow();
+
+      const changedMessage = {
+        ...message,
+        target: { ...message.target, args: { value: "y".repeat(900_000) } },
+      } as StepRequest;
+      if (unstableArgs) {
+        expect(() =>
+          executor.completeMessage(changedMessage, replayEntry),
+        ).not.toThrow();
+      } else {
+        expect(() =>
+          executor.completeMessage(changedMessage, replayEntry),
+        ).toThrow("Journal entry mismatch");
+      }
+    },
+  );
 });

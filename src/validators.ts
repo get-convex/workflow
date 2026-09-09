@@ -71,6 +71,9 @@ const stepCommonFields = {
   inProgress: v.boolean(),
   argsSize: v.number(),
   args: v.any(),
+  // Oversized inline arguments don't need to be persisted for execution.
+  // Stable calls keep a digest so replay can still detect argument changes.
+  argsHash: v.optional(v.string()),
   runResult: v.optional(vResultValidator),
   startedAt: v.number(),
   completedAt: v.optional(v.number()),

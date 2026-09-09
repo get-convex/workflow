@@ -1,0 +1,147 @@
+import { v } from "convex/values";
+import { sendEvent, defineEvent } from "@convex-dev/workflow";
+import { components, internal } from "../_generated/api.js";
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+} from "../_generated/server.js";
+import { vWorkflowId } from "@convex-dev/workflow";
+import { vResultValidator } from "@convex-dev/workpool";
+import { workflow } from "../example.js";
+
+// Action that returns a value larger than 800KB.
+export const largeReturnAction = internalAction({
+  args: {},
+  returns: v.string(),
+  handler: async (): Promise<string> => {
+    return "x".repeat(900_000);
+  },
+});
+
+export const largeArgumentAction = internalAction({
+  args: { value: v.string() },
+  returns: v.number(),
+  handler: async (_ctx, args): Promise<number> => {
+    return args.value.length;
+  },
+});
+
+export const largeInlineReturnQuery = internalQuery({
+  args: {},
+  returns: v.string(),
+  handler: async (): Promise<string> => {
+    return "z".repeat(900_000);
+  },
+});
+
+export const largeInlineArgumentMutation = internalMutation({
+  args: { key: v.string(), value: v.string() },
+  returns: v.number(),
+  handler: async (ctx, args): Promise<number> => {
+    await ctx.db.insert("workflowHarnessCommits", {
+      runId: args.key,
+      operationId: "oversized-inline-argument",
+      kind: "mutation",
+      value: String(args.value.length),
+    });
+    return args.value.length;
+  },
+});
+
+export const largeReturnWorkflow = workflow
+  .define({
+    args: {},
+  })
+  .handler(async (step) => {
+    const result = await step.runAction(
+      internal.test.oversized.largeReturnAction,
+      {},
+    );
+    return result;
+  });
+
+export const largeArgumentWorkflow = workflow
+  .define({
+    args: {},
+    returns: v.number(),
+  })
+  .handler(async (step) => {
+    return await step.runAction(internal.test.oversized.largeArgumentAction, {
+      value: "a".repeat(900_000),
+    });
+  });
+
+export const largeInlineReturnWorkflow = workflow
+  .define({
+    args: {},
+    returns: v.string(),
+  })
+  .handler(async (step) => {
+    return await step.runQuery(
+      internal.test.oversized.largeInlineReturnQuery,
+      {},
+      { inline: true },
+    );
+  });
+
+export const largeInlineArgumentWorkflow = workflow
+  .define({
+    args: { key: v.string(), unstableArgs: v.boolean() },
+    returns: v.number(),
+  })
+  .handler(async (step, args) => {
+    const length = await step.runMutation(
+      internal.test.oversized.largeInlineArgumentMutation,
+      { key: args.key, value: "i".repeat(900_000) },
+      { inline: true, unstableArgs: args.unstableArgs },
+    );
+    await step.sleep(1);
+    return length;
+  });
+
+export const bigEvent = defineEvent({
+  name: "bigEvent",
+  validator: v.string(),
+});
+
+export const eventWorkflow = workflow
+  .define({
+    args: {},
+  })
+  .handler(async (step) => {
+    const result = await step.awaitEvent(bigEvent);
+    return result;
+  });
+
+export const sendBigEvent = internalMutation({
+  args: {
+    workflowId: vWorkflowId,
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await sendEvent(ctx, components.workflow, {
+      ...bigEvent,
+      workflowId: args.workflowId,
+      value: "y".repeat(900_000),
+    });
+  },
+});
+
+export const onComplete = internalMutation({
+  args: {
+    workflowId: vWorkflowId,
+    result: vResultValidator,
+    context: v.any(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const flow = await ctx.db
+      .query("flows")
+      .withIndex("workflowId", (q) => q.eq("workflowId", args.workflowId))
+      .first();
+    if (!flow) return null;
+    await ctx.db.patch("flows", flow._id, { out: args.result });
+    return null;
+  },
+});

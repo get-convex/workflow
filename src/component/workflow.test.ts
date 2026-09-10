@@ -6,6 +6,7 @@ import { initConvexTest } from "./setup.test.js";
 import type { Id } from "./_generated/dataModel.js";
 import { internalMutation } from "./_generated/server.js";
 import { v } from "convex/values";
+import { WorkflowManager, type WorkflowComponent } from "../client/index.js";
 
 describe("workflow", () => {
   beforeEach(async () => {
@@ -460,7 +461,7 @@ describe("workflow", () => {
           step: {
             kind: "workflow" as const,
             name: "nested-workflow-step",
-            handle: "function://;workflow.test:noop",
+            handle: "function://;workflow.test:nestedWorkflow",
             inProgress: true,
             argsSize: 0,
             args: { location: "New York" },
@@ -547,7 +548,7 @@ describe("workflow", () => {
           step: {
             kind: "workflow" as const,
             name: "pending-nested-workflow",
-            handle: "function://;workflow.test:noop",
+            handle: "function://;workflow.test:nestedWorkflow",
             inProgress: true,
             argsSize: 0,
             args: { location: "Boston" },
@@ -704,7 +705,7 @@ describe("workflow", () => {
           step: {
             kind: "workflow" as const,
             name: "workflow-step",
-            handle: "function://;workflow.test:noop",
+            handle: "function://;workflow.test:nestedWorkflow",
             inProgress: true,
             argsSize: 0,
             args: { location: "New York" },
@@ -766,3 +767,9 @@ describe("workflow", () => {
 });
 
 export const noop = internalMutation({ args: v.any(), handler: () => {} });
+
+export const nestedWorkflow = new WorkflowManager(
+  api as unknown as WorkflowComponent,
+)
+  .define({ args: { location: v.optional(v.string()) }, returns: v.null() })
+  .handler(async () => null);

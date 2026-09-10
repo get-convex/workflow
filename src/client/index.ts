@@ -592,8 +592,8 @@ export class WorkflowManager {
    *
    * Alternative to `start` (`import { start } from "@convex-dev/workflow"`).
    *
-   * This is slightly more efficient than calling `start` when passing
-   * `startAsync: true`, and slightly less efficient in the default case.
+   * Calls the workflow definition so its version and options are used for
+   * both immediate and asynchronous starts.
    *
    * @param ctx - The Convex context.
    * @param workflow - The workflow to start (e.g. `internal.index.exampleWorkflow`).
@@ -625,25 +625,7 @@ export class WorkflowManager {
       startAsync?: boolean;
     },
   ): Promise<WorkflowId> {
-    if (!options?.startAsync) {
-      return start(ctx, workflow, args, options);
-    }
-    const handle = await createFunctionHandle(workflow);
-    const onComplete = options?.onComplete
-      ? {
-          fnHandle: await createFunctionHandle(options.onComplete),
-          context: options.context,
-        }
-      : undefined;
-    const workflowId = await ctx.runMutation(this.component.workflow.create, {
-      workflowName: safeFunctionName(workflow),
-      workflowHandle: handle,
-      workflowArgs: args,
-      maxParallelism: this.options?.workpoolOptions?.maxParallelism,
-      onComplete,
-      startAsync: true,
-    });
-    return workflowId as unknown as WorkflowId;
+    return start(ctx, workflow, args, options);
   }
 
   /**

@@ -440,6 +440,57 @@ describe("workflow", () => {
     });
   });
 
+  test("nested workflow starts reuse the shared parallelism configuration", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.mutation(api.workflow.create, {
+      workflowName: "parent-workflow",
+      workflowHandle: "function://;workflow.test:noop",
+      workflowArgs: {},
+      maxParallelism: 2,
+      createOnly: true,
+    });
+
+    const entries = await t.mutation(api.journal.startSteps, {
+      workflowId,
+      generationNumber: 0,
+      steps: [
+        {
+          step: {
+            kind: "workflow",
+            name: "nested-workflow",
+            handle: "function://;workflow.test:nestedWorkflow",
+            inProgress: true,
+            argsSize: 0,
+            args: {},
+            startedAt: Date.now(),
+          },
+        },
+      ],
+    });
+    const step = entries[0].step;
+    if (step.kind !== "workflow" || !step.workflowId) {
+      throw new Error("Missing child workflow");
+    }
+    const child = await t.query(api.workflow.getStatus, {
+      workflowId: step.workflowId,
+    });
+    expect(child.workflow.runResult).toBeUndefined();
+    expect(child.inProgress).toHaveLength(0);
+    const config = await t.run((ctx) => ctx.db.query("config").unique());
+    expect(config?.maxParallelism).toBe(2);
+
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const completed = await t.query(api.workflow.getStatus, {
+      workflowId: step.workflowId,
+    });
+    expect(completed.workflow.runResult).toEqual({
+      kind: "success",
+      returnValue: null,
+    });
+    const finalConfig = await t.run((ctx) => ctx.db.query("config").unique());
+    expect(finalConfig?.maxParallelism).toBe(2);
+  });
+
   test("cleanup enqueues cleanup for nested workflows", async () => {
     const t = initConvexTest();
 

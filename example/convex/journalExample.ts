@@ -5,7 +5,7 @@ import { internalMutation } from "./_generated/server";
 
 // Demonstrates the step.journal namespace: versioning workflow code so that
 // in-flight workflows replay old behavior while new workflows use new code,
-// plus journal introspection (size / step count).
+// plus the number of step calls made so far.
 export const versionedWorkflow = workflow
   .define({
     args: {},
@@ -15,13 +15,12 @@ export const versionedWorkflow = workflow
     returns: v.object({
       value: v.string(),
       stepCount: v.number(),
-      size: v.number(),
     }),
   })
   .handler(async (step) => {
     console.log(
       `journal: version=${step.journal.getVersion()} ` +
-        `steps=${step.journal.getStepCount()} bytes=${step.journal.getSize()}`,
+        `steps=${step.journal.getStepCount()}`,
     );
 
     if (step.journal.getVersion() < 2) {
@@ -43,7 +42,6 @@ export const versionedWorkflow = workflow
     return {
       value,
       stepCount: step.journal.getStepCount(),
-      size: step.journal.getSize(),
     };
   });
 

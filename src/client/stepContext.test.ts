@@ -1,12 +1,12 @@
 import { describe, it, expect, test } from "vitest";
-import { BaseChannel } from "async-channel";
 import type { RunResult } from "./types.js";
 import type { ExecutorRequest, StepRequest } from "./step.js";
-import { StepExecutor } from "./step.js";
+import { ExecutorChannel, StepExecutor } from "./step.js";
 import type { JournalEntry } from "../component/schema.js";
 import { createWorkflowCtx } from "./workflowContext.js";
 import type { WorkflowId } from "../types.js";
 import { anyApi, type FunctionReference } from "convex/server";
+import { getConvexSize } from "convex/values";
 import { initConvexTest } from "./setup.test.js";
 
 // Fake function reference that satisfies the type constraints.
@@ -16,7 +16,7 @@ function fakeFuncRef(name: string) {
 
 // Narrow an ExecutorRequest to a StepRequest in tests that don't consume.
 function asStepRequest(msg: ExecutorRequest): StepRequest {
-  if ("consume" in msg) {
+  if ("consume" in msg || "getSize" in msg) {
     throw new Error("Unexpected consume request");
   }
   return msg;
@@ -87,12 +87,12 @@ function journalEntry(
 // Simulate the StepExecutor replay loop: read messages from the channel and
 // resolve them from the journal, without needing a real Convex ctx.
 async function replayFromJournal(
-  receiver: BaseChannel<ExecutorRequest>,
+  receiver: ExecutorChannel,
   entries: JournalEntry[],
 ) {
   for (const entry of entries) {
     const message = await receiver.get();
-    if ("consume" in message) {
+    if ("consume" in message || "getSize" in message) {
       throw new Error("Unexpected consume request in replayFromJournal");
     }
     // Mirrors StepExecutor.completeMessage
@@ -107,7 +107,7 @@ async function replayFromJournal(
 
 describe("StepExecutor + WorkflowCtx integration", () => {
   it("resolves a successful step", async () => {
-    const channel = new BaseChannel<ExecutorRequest>(0);
+    const channel = new ExecutorChannel(0);
     const ctx = createWorkflowCtx("wf-1" as WorkflowId, channel);
 
     const entry = journalEntry({
@@ -124,7 +124,7 @@ describe("StepExecutor + WorkflowCtx integration", () => {
   });
 
   it("throws on a failed step and the error is catchable", async () => {
-    const channel = new BaseChannel<ExecutorRequest>(0);
+    const channel = new ExecutorChannel(0);
     const ctx = createWorkflowCtx("wf-2" as any, channel);
 
     const entry = journalEntry({
@@ -142,7 +142,7 @@ describe("StepExecutor + WorkflowCtx integration", () => {
   });
 
   it("throws on a canceled step", async () => {
-    const channel = new BaseChannel<ExecutorRequest>(0);
+    const channel = new ExecutorChannel(0);
     const ctx = createWorkflowCtx("wf-3" as any, channel);
 
     const entry = journalEntry({
@@ -160,7 +160,7 @@ describe("StepExecutor + WorkflowCtx integration", () => {
   });
 
   it("handles sequential steps", async () => {
-    const channel = new BaseChannel<ExecutorRequest>(0);
+    const channel = new ExecutorChannel(0);
     const ctx = createWorkflowCtx("wf-4" as any, channel);
 
     const entries = [
@@ -193,7 +193,7 @@ describe("StepExecutor + WorkflowCtx integration", () => {
   });
 
   it("catches an error mid-workflow and continues", async () => {
-    const channel = new BaseChannel<ExecutorRequest>(0);
+    const channel = new ExecutorChannel(0);
     const ctx = createWorkflowCtx("wf-5" as any, channel);
 
     const entries = [
@@ -230,7 +230,7 @@ describe("StepExecutor + WorkflowCtx integration", () => {
   });
 
   it("handles parallel steps via Promise.all", async () => {
-    const channel = new BaseChannel<ExecutorRequest>(0);
+    const channel = new ExecutorChannel(0);
     const ctx = createWorkflowCtx("wf-6" as any, channel);
 
     const entries = [
@@ -264,7 +264,7 @@ describe("StepExecutor + WorkflowCtx integration", () => {
   });
 
   it("one failure in Promise.all rejects the batch", async () => {
-    const channel = new BaseChannel<ExecutorRequest>(0);
+    const channel = new ExecutorChannel(0);
     const ctx = createWorkflowCtx("wf-7" as any, channel);
 
     const entries = [
@@ -299,7 +299,7 @@ describe("StepExecutor + WorkflowCtx integration", () => {
   });
 
   it("error is thrown from run(), not from completeMessage", async () => {
-    const channel = new BaseChannel<ExecutorRequest>(0);
+    const channel = new ExecutorChannel(0);
     const ctx = createWorkflowCtx("wf-8" as any, channel);
 
     const entry = journalEntry({
@@ -322,7 +322,7 @@ describe("StepExecutor + WorkflowCtx integration", () => {
   });
 
   it("runMutation works the same as runAction", async () => {
-    const channel = new BaseChannel<ExecutorRequest>(0);
+    const channel = new ExecutorChannel(0);
     const ctx = createWorkflowCtx("wf-9" as any, channel);
 
     const entry = journalEntry({
@@ -339,7 +339,7 @@ describe("StepExecutor + WorkflowCtx integration", () => {
   });
 
   it("runQuery works the same as runAction", async () => {
-    const channel = new BaseChannel<ExecutorRequest>(0);
+    const channel = new ExecutorChannel(0);
     const ctx = createWorkflowCtx("wf-10" as any, channel);
 
     const entry = journalEntry({
@@ -394,7 +394,7 @@ describe("unstableArgs", () => {
       {} as any,
       {} as any,
       entries,
-      new BaseChannel<ExecutorRequest>(0),
+      new ExecutorChannel(0),
       Date.now(),
       undefined,
     );
@@ -469,7 +469,7 @@ describe("unstableArgs", () => {
   });
 
   test("unstableArgs passes through and defaults correctly", async () => {
-    const channel = new BaseChannel<ExecutorRequest>(0);
+    const channel = new ExecutorChannel(0);
     const ctx = createWorkflowCtx("wf-test" as any, channel);
 
     const calls: StepRequest[] = [];
@@ -513,7 +513,7 @@ describe("withOptions", () => {
     run: (ctx: ReturnType<typeof createWorkflowCtx>) => Promise<void>,
     count: number,
   ): Promise<StepRequest[]> {
-    const channel = new BaseChannel<ExecutorRequest>(0);
+    const channel = new ExecutorChannel(0);
     const ctx = createWorkflowCtx("wf-test" as any, channel);
     const calls: StepRequest[] = [];
     const drain = async () => {
@@ -595,7 +595,7 @@ describe("transactionLimits", () => {
   const limits = { documentsRead: 5, bytesWritten: 100 };
 
   test("passes through inline runQuery/runMutation into the StepRequest", async () => {
-    const channel = new BaseChannel<ExecutorRequest>(0);
+    const channel = new ExecutorChannel(0);
     const ctx = createWorkflowCtx("wf-test" as any, channel);
 
     const calls: StepRequest[] = [];
@@ -647,7 +647,7 @@ describe("transactionLimits", () => {
       fakeCtx as any,
       { journal: { startSteps: "handle" } } as any,
       [],
-      new BaseChannel<ExecutorRequest>(0),
+      new ExecutorChannel(0),
       Date.now(),
       undefined,
     );
@@ -679,7 +679,7 @@ describe("transactionLimits", () => {
   });
 
   test("rejects transactionLimits / inline where unsupported", async () => {
-    const channel = new BaseChannel<ExecutorRequest>(0);
+    const channel = new ExecutorChannel(0);
     const ctx = createWorkflowCtx("wf-test" as any, channel);
 
     // Actions cannot run inline.
@@ -718,7 +718,7 @@ describe("step.journal", () => {
     definedVersion?: number,
     capacity = 0,
   ) {
-    const channel = new BaseChannel<ExecutorRequest>(capacity);
+    const channel = new ExecutorChannel(capacity);
     const executor = new StepExecutor(
       "wf-test",
       0,
@@ -759,6 +759,70 @@ describe("step.journal", () => {
   test("getVersion defaults to 0 at the frontier with no defined version", async () => {
     const { ctx } = setup([]);
     expect(ctx.journal.getVersion()).toBe(0);
+  });
+
+  test.each([0, 2, 10])(
+    "size requests preserve version and time with channel capacity %s",
+    async (capacity) => {
+      const entries = [
+        journalEntry({ name: "a", version: 1, stepNumber: 0 }),
+        journalEntry({ name: "b", version: 2, stepNumber: 1 }),
+        journalEntry({ name: "c", version: 3, stepNumber: 2 }),
+      ];
+      entries.forEach((entry, index) => {
+        entry.step.startedAt = (index + 1) * 1000;
+      });
+      const firstSize = getConvexSize(entries[0]);
+      const secondSize = firstSize + getConvexSize(entries[1]);
+      const { ctx, executor } = setup(entries, 4, capacity);
+      const empty = ctx.journal.getSize();
+      expect(executor.getGenerationState()).toEqual({
+        now: 1000,
+        version: 1,
+        latest: false,
+      });
+      const first = ctx.runAction(fakeFuncRef("a"), {});
+      const afterFirst = ctx.journal.getSize();
+      expect(executor.getGenerationState()).toEqual({
+        now: 2000,
+        version: 2,
+        latest: false,
+      });
+      const second = ctx.runAction(fakeFuncRef("b"), {});
+      const afterSecond = ctx.withOptions({}).journal.getSize();
+      expect(executor.getGenerationState()).toEqual({
+        now: 3000,
+        version: 3,
+        latest: false,
+      });
+      expect(ctx.journal.getStepCount()).toBe(2);
+      expect(await empty).toBe(0);
+      expect(await afterFirst).toBe(firstSize);
+      expect(await afterSecond).toBe(secondSize);
+      await Promise.all([first, second]);
+      expect(ctx.journal.getStepCount()).toBe(2);
+      expect(ctx.journal.getVersion()).toBe(3);
+    },
+  );
+
+  test("size includes consumed entries and ignores rejected consumption", async () => {
+    const entry = journalEntry({
+      name: "failed",
+      version: 1,
+      runResult: { kind: "failed", error: "recorded failure" },
+    });
+    const expected = getConvexSize(entry);
+    const { ctx } = setup([entry], 2, 10);
+    await expect(ctx.journal.consumeNext("wrong")).rejects.toThrow(
+      "Journal entry mismatch",
+    );
+    expect(await ctx.journal.getSize()).toBe(0);
+    expect(ctx.journal.getStepCount()).toBe(0);
+    expect(ctx.journal.getVersion()).toBe(1);
+    await ctx.journal.consumeNext("failed");
+    expect(await ctx.journal.getSize()).toBe(expected);
+    expect(ctx.journal.getStepCount()).toBe(1);
+    expect(ctx.journal.getVersion()).toBe(2);
   });
 
   test("getStepCount advances with step calls", async () => {
@@ -816,7 +880,7 @@ describe("step.journal", () => {
       },
     };
     async function execute(entries: JournalEntry[]) {
-      const channel = new BaseChannel<ExecutorRequest>(10);
+      const channel = new ExecutorChannel(10);
       const executor = new StepExecutor(
         "wf-test",
         0,
@@ -960,10 +1024,13 @@ describe("step.journal", () => {
     );
   });
 
-  test("journal accessors throw without an executor (no getJournalState)", () => {
-    const channel = new BaseChannel<ExecutorRequest>(0);
+  test("journal accessors throw without an executor (no getJournalState)", async () => {
+    const channel = new ExecutorChannel(0);
     const ctx = createWorkflowCtx("wf-test" as any, channel);
     expect(() => ctx.journal.getVersion()).toThrow(
+      "step.journal is not available",
+    );
+    await expect(ctx.journal.getSize()).rejects.toThrow(
       "step.journal is not available",
     );
   });

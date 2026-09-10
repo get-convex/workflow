@@ -543,6 +543,23 @@ The count includes pending calls and recorded steps skipped with
 `consumeNext()`. It returns the same value at the same point on first execution
 and replay, including when steps run in parallel.
 
+Use `await step.journal.getSize()` to read the journal size in bytes for the
+steps requested before the call. It waits for those steps to finish, includes
+their recorded arguments and results, and returns the same size on replay. Steps
+requested afterward are excluded, even if they have already finished when the
+workflow replays.
+
+```ts
+const pending = step.runMutation(internal.example.updateUser, { userId, name });
+const size = await step.journal.getSize(); // waits for the pending step
+const updated = await pending;
+```
+
+The size read does not add a journal entry or change the step count. It ends the
+current batch of steps, so later calls may wait for it to resolve before they
+start. This can help decide when to hand off to another workflow before reaching
+the journal size limit.
+
 ### Checking a workflow's status
 
 Calling a workflow returns a `WorkflowId` string, which can then be used for

@@ -67,10 +67,8 @@ export type ConsumeRequest = {
 export type ExecutorRequest = StepRequest | ConsumeRequest;
 
 export class StepExecutor {
-  // Journal size and step count up to the current replay position, so they
-  // answer identically on first execution and on every replay.
+  // Internal accounting for the journal size limit, including pending steps.
   private journalSize: number = 0;
-  private stepCount: number = 0;
 
   constructor(
     private workflowId: string,
@@ -94,8 +92,6 @@ export class StepExecutor {
       // etc. instead of just ordering. As is, the fn order can't change.
       const entry = this.journalEntries.shift();
       if (entry) {
-        // Newly started entries are counted in startSteps; replayed ones here.
-        this.stepCount++;
         this.journalSize += getConvexSize(entry);
         this.completeMessage(message, entry);
         continue;
@@ -144,11 +140,6 @@ export class StepExecutor {
   getJournalState() {
     return {
       version: this.getGenerationState().version,
-      // Technically the size may not match the stepCount if they check the
-      // size after adding a step but before it's finished - e.g. a non-awaited
-      // promise. The size only reflects finished steps.
-      size: this.journalSize,
-      stepCount: this.stepCount + this.receiver.bufferSize,
     };
   }
 
@@ -191,7 +182,6 @@ export class StepExecutor {
       return;
     }
     this.journalEntries.shift();
-    this.stepCount++;
     this.journalSize += getConvexSize(entry);
     message.resolve(entry);
   }
@@ -327,7 +317,6 @@ export class StepExecutor {
       },
     )) as JournalEntry[];
     for (const entry of entries) {
-      this.stepCount++;
       this.journalSize += getConvexSize(entry);
       if (this.journalSize > MAX_JOURNAL_SIZE) {
         throw new Error(

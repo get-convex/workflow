@@ -66,8 +66,8 @@ export async function createHandler(
     args: args.workflowArgs,
     generationNumber: 0,
     onComplete: args.onComplete,
-    // Normalize so an absent value means "created before versions existed",
-    // matching how steps are stamped.
+    // Current clients pass the definition's version. Default to 0 for
+    // legacy callers that do not provide one.
     version: args.version ?? 0,
   });
   console.debug(
@@ -140,7 +140,6 @@ function publicWorkflow(workflow: Doc<"workflows">): PublicWorkflow {
     runResult: workflow.runResult,
   } satisfies PublicWorkflow;
 }
-
 
 export const list = query({
   args: {

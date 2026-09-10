@@ -713,8 +713,12 @@ describe("step.journal", () => {
   // Wire a real StepExecutor to a WorkflowCtx and run the executor loop in
   // the background, like workflowMutation does. The executor never reaches
   // startSteps in these tests (no frontier steps), so no real ctx is needed.
-  function setup(entries: JournalEntry[], definedVersion?: number) {
-    const channel = new BaseChannel<ExecutorRequest>(0);
+  function setup(
+    entries: JournalEntry[],
+    definedVersion?: number,
+    capacity = 0,
+  ) {
+    const channel = new BaseChannel<ExecutorRequest>(capacity);
     const executor = new StepExecutor(
       "wf-test",
       0,
@@ -757,7 +761,7 @@ describe("step.journal", () => {
     expect(ctx.journal.getVersion()).toBe(0);
   });
 
-  test("getStepCount and getSize advance with the replay position", async () => {
+  test("getStepCount advances with step calls", async () => {
     const entries = [
       journalEntry({ name: "a", stepNumber: 0 }),
       journalEntry({ name: "b", stepNumber: 1 }),
@@ -765,14 +769,97 @@ describe("step.journal", () => {
     const { ctx } = setup(entries, 1);
 
     expect(ctx.journal.getStepCount()).toBe(0);
-    expect(ctx.journal.getSize()).toBe(0);
     await ctx.runAction(fakeFuncRef("a"), {});
     expect(ctx.journal.getStepCount()).toBe(1);
-    const sizeAfterOne = ctx.journal.getSize();
-    expect(sizeAfterOne).toBeGreaterThan(0);
     await ctx.runAction(fakeFuncRef("b"), {});
     expect(ctx.journal.getStepCount()).toBe(2);
-    expect(ctx.journal.getSize()).toBeGreaterThan(sizeAfterOne);
+  });
+
+  test.each([0, 2, 10])(
+    "counts all pending calls with channel capacity %s",
+    async (capacity) => {
+      const entries = Array.from({ length: 20 }, (_, stepNumber) =>
+        journalEntry({ name: `step${stepNumber}`, stepNumber }),
+      );
+      const { ctx } = setup(entries, 1, capacity);
+      const derived = ctx
+        .withOptions({ unstableArgs: true })
+        .withOptions({ retry: false });
+      const pending = Array.from({ length: 20 }, (_, index) => {
+        const caller = index % 2 ? derived : ctx;
+        const result = caller.runAction(fakeFuncRef(`step${index}`), {});
+        expect(ctx.journal.getStepCount()).toBe(index + 1);
+        expect(derived.journal.getStepCount()).toBe(index + 1);
+        return result;
+      });
+      await pending[0];
+      expect(ctx.journal.getStepCount()).toBe(20);
+      await Promise.all(pending);
+      expect(ctx.journal.getStepCount()).toBe(20);
+    },
+  );
+
+  test("step count is identical for parallel inline execution and replay", async () => {
+    const recorded: JournalEntry[] = [];
+    const fakeCtx = {
+      runQuery: async () => "ok",
+      runMutation: async (
+        _fn: unknown,
+        args: { steps: { step: JournalEntry["step"] }[] },
+      ) => {
+        const entries = args.steps.map(({ step }, index) => ({
+          ...journalEntry({ stepNumber: index }),
+          step,
+        }));
+        recorded.push(...entries);
+        return entries;
+      },
+    };
+    async function execute(entries: JournalEntry[]) {
+      const channel = new BaseChannel<ExecutorRequest>(10);
+      const executor = new StepExecutor(
+        "wf-test",
+        0,
+        fakeCtx as any,
+        { journal: { startSteps: "handle" } } as any,
+        [...entries],
+        channel,
+        1000,
+        undefined,
+      );
+      const ctx = createWorkflowCtx(
+        "wf-test" as WorkflowId,
+        channel,
+        executor.getJournalState.bind(executor),
+      );
+      const handler = (async () => {
+        const pending = Array.from({ length: 8 }, (_, index) =>
+          ctx.runQuery(fakeFuncRef(`q${index}`), {}, { inline: true }),
+        );
+        const counts = [ctx.journal.getStepCount()];
+        await pending[0];
+        counts.push(ctx.journal.getStepCount());
+        await Promise.all(pending);
+        counts.push(ctx.journal.getStepCount());
+        return counts;
+      })();
+      void executor.run();
+      return handler;
+    }
+    const t = initConvexTest();
+    const first = await t.run(() => execute([]));
+    expect(recorded).toHaveLength(8);
+    const replay = await execute(recorded);
+    expect(first).toEqual([8, 8, 8]);
+    expect(replay).toEqual(first);
+  });
+
+  test("invalid calls do not increment the step count", async () => {
+    const { ctx } = setup([], 1);
+    await expect(
+      (ctx.runAction as any)(fakeFuncRef("a"), {}, { inline: true }),
+    ).rejects.toThrow("Cannot run an action inline.");
+    expect(ctx.journal.getStepCount()).toBe(0);
   });
 
   test("consumeNext consumes the next recorded step and returns it", async () => {

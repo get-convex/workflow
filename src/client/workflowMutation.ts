@@ -178,7 +178,7 @@ export function workflowMutation<
           onComplete,
           startAsync: args.startAsync ?? undefined,
           createOnly: !args.startAsync, // either start async or run inline here
-          version: registered.version,
+          version: registered.version ?? 0,
         })) as WorkflowId;
         if (args.startAsync) {
           return workflowId;

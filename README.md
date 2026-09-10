@@ -533,17 +533,15 @@ replaying old steps, as in the version check above; it throws if there are no
 recorded steps left to replay. The step is not rerun, and its history is
 preserved for future replays.
 
-You can also check the journal's size, e.g. to hand off to a nested workflow
-before hitting the journal size limit:
+You can also check how many step calls the workflow has made so far:
 
 ```ts
-step.journal.getStepCount(); // steps recorded up to this point
-step.journal.getSize(); // journal bytes from finished steps up to this point
+step.journal.getStepCount();
 ```
 
-Both return the same values at the same point on first execution and replay.
-Size only includes finished steps, so parallel steps may appear in the count
-before contributing to the size.
+The count includes pending calls and recorded steps skipped with
+`consumeNext()`. It returns the same value at the same point on first execution
+and replay, including when steps run in parallel.
 
 ### Checking a workflow's status
 

@@ -191,15 +191,11 @@ export type WorkflowCtx = {
      */
     getVersion: () => number;
     /**
-     * The number of steps recorded up to the current replay point.
+     * The number of step calls made so far, including pending calls and
+     * recorded steps successfully skipped with consumeNext(). This count
+     * is the same at the same point on first execution and replay.
      */
     getStepCount: () => number;
-    /**
-     * The journal size in bytes up to the current replay point. Useful for
-     * bounding growth against the journal size limit, e.g. handing off to a
-     * child workflow when it gets large.
-     */
-    getSize: () => number;
     /**
      * Consume the next recorded journal entry without issuing a step call,
      * returning the entry (including its recorded `args` and raw
@@ -251,15 +247,16 @@ export type WorkflowCtx = {
 
 export type JournalState = {
   version: number;
-  size: number;
-  stepCount: number;
 };
+
+type RunStep = (request: Omit<StepRequest, "resolve">) => Promise<unknown>;
 
 export function createWorkflowCtx(
   workflowId: WorkflowId,
   sender: BaseChannel<ExecutorRequest>,
   getJournalState?: () => JournalState,
   defaults?: StepDefaults,
+  progress = { stepCount: 0 },
 ): WorkflowCtx {
   const journalState = () => {
     if (!getJournalState) {
@@ -267,12 +264,20 @@ export function createWorkflowCtx(
     }
     return getJournalState();
   };
+  const runStep: RunStep = (request) => {
+    // Count at the call site, before enqueueing can yield or block. Derived
+    // contexts share this counter, independently of executor batching.
+    progress.stepCount++;
+    return run(sender, request);
+  };
   return {
     workflowId,
     journal: {
       getVersion: () => journalState().version,
-      getSize: () => journalState().size,
-      getStepCount: () => journalState().stepCount,
+      getStepCount: () => {
+        journalState();
+        return progress.stepCount;
+      },
       consumeNext: async (name?: string) => {
         let send: Promise<void>;
         const p = new Promise<JournalEntry>((resolve, reject) => {
@@ -284,29 +289,34 @@ export function createWorkflowCtx(
           });
         });
         await send!;
-        return publicStep(await p);
+        const entry = await p;
+        progress.stepCount++;
+        return publicStep(entry);
       },
     },
     withOptions: (opts) =>
-      createWorkflowCtx(workflowId, sender, getJournalState, {
-        ...defaults,
-        ...opts,
-      }),
+      createWorkflowCtx(
+        workflowId,
+        sender,
+        getJournalState,
+        { ...defaults, ...opts },
+        progress,
+      ),
     runQuery: async (query, args, opts?) => {
-      return runFunction(sender, "query", query, args, opts, defaults);
+      return runFunction(runStep, "query", query, args, opts, defaults);
     },
 
     runMutation: async (mutation, args, opts?) => {
-      return runFunction(sender, "mutation", mutation, args, opts, defaults);
+      return runFunction(runStep, "mutation", mutation, args, opts, defaults);
     },
 
     runAction: async (action, args, opts?) => {
-      return runFunction(sender, "action", action, args, opts, defaults);
+      return runFunction(runStep, "action", action, args, opts, defaults);
     },
 
     runWorkflow: async (workflow, args, opts?) => {
       const { name, unstableArgs, ...schedulerOptions } = opts ?? {};
-      return run(sender, {
+      return runStep({
         name: name ?? safeFunctionName(workflow),
         target: {
           kind: "workflow",
@@ -322,7 +332,7 @@ export function createWorkflowCtx(
     },
 
     sleep: async (duration, opts?) => {
-      await run(sender, {
+      await runStep({
         name: opts?.name ?? "sleep",
         target: {
           kind: "sleep",
@@ -337,7 +347,7 @@ export function createWorkflowCtx(
     },
 
     awaitEvent: async (event) => {
-      const result = await run(sender, {
+      const result = await runStep({
         name: event.name ?? event.id ?? "Event",
         target: {
           kind: "event",
@@ -360,7 +370,7 @@ export function createWorkflowCtx(
 async function runFunction<
   F extends FunctionReference<FunctionType, FunctionVisibility>,
 >(
-  sender: BaseChannel<ExecutorRequest>,
+  runStep: RunStep,
   functionType: FunctionType,
   f: F,
   args: Record<string, unknown> | undefined,
@@ -391,7 +401,7 @@ async function runFunction<
   if (!inline && transactionLimits) {
     throw new Error("Cannot set transaction limits for non-inline functions.");
   }
-  return run(sender, {
+  return runStep({
     name: name ?? safeFunctionName(f),
     target: {
       kind: "function",

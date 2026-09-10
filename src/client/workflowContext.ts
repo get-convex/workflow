@@ -1,5 +1,4 @@
 import type { RetryBehavior, RetryOption } from "@convex-dev/workpool";
-import { BaseChannel } from "async-channel";
 import { parse } from "convex-helpers/validators";
 import type {
   ArgsAndOptions,
@@ -19,7 +18,7 @@ import type {
 import type { JournalEntry } from "../component/schema.js";
 import { publicStep } from "../shared.js";
 import { safeFunctionName } from "./safeFunctionName.js";
-import type { ExecutorRequest, StepRequest } from "./step.js";
+import type { ExecutorChannel, StepRequest } from "./step.js";
 import type {
   RunResult,
   TransactionLimits,
@@ -197,6 +196,14 @@ export type WorkflowCtx = {
      */
     getStepCount: () => number;
     /**
+     * The journal size in bytes for steps requested before this call,
+     * including recorded steps skipped with consumeNext(). Waits for those
+     * steps to finish and returns the same size when replaying this point.
+     * Later steps are excluded, even if they have already finished on replay.
+     * This read does not add a journal entry or increment getStepCount().
+     */
+    getSize: () => Promise<number>;
+    /**
      * Consume the next recorded journal entry without issuing a step call,
      * returning the entry (including its recorded `args` and raw
      * `runResult`) for inspection. Nothing is re-executed and nothing new is
@@ -253,7 +260,7 @@ type RunStep = (request: Omit<StepRequest, "resolve">) => Promise<unknown>;
 
 export function createWorkflowCtx(
   workflowId: WorkflowId,
-  sender: BaseChannel<ExecutorRequest>,
+  sender: ExecutorChannel,
   getJournalState?: () => JournalState,
   defaults?: StepDefaults,
   progress = { stepCount: 0 },
@@ -277,6 +284,15 @@ export function createWorkflowCtx(
       getStepCount: () => {
         journalState();
         return progress.stepCount;
+      },
+      getSize: async () => {
+        journalState();
+        let send: Promise<void>;
+        const result = new Promise<number>((resolve) => {
+          send = sender.push({ getSize: true, resolve });
+        });
+        await send!;
+        return await result;
       },
       consumeNext: async (name?: string) => {
         let send: Promise<void>;
@@ -418,7 +434,7 @@ async function runFunction<
 }
 
 async function run(
-  sender: BaseChannel<ExecutorRequest>,
+  sender: ExecutorChannel,
   request: Omit<StepRequest, "resolve">,
 ): Promise<unknown> {
   let send: Promise<void>;

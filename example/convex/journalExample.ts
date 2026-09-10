@@ -5,7 +5,7 @@ import { internalMutation } from "./_generated/server";
 
 // Demonstrates the step.journal namespace: versioning workflow code so that
 // in-flight workflows replay old behavior while new workflows use new code,
-// plus the number of step calls made so far.
+// plus the step count and journal size.
 export const versionedWorkflow = workflow
   .define({
     args: {},
@@ -15,6 +15,7 @@ export const versionedWorkflow = workflow
     returns: v.object({
       value: v.string(),
       stepCount: v.number(),
+      size: v.number(),
     }),
   })
   .handler(async (step) => {
@@ -34,14 +35,17 @@ export const versionedWorkflow = workflow
       console.log(`skipped recorded step ${skipped.name}`, skipped.runResult);
     }
 
-    const value: string = await step.runMutation(
-      internal.journalExample.smallStep,
-      { value: "hello" },
-    );
+    const pendingValue = step.runMutation(internal.journalExample.smallStep, {
+      value: "hello",
+    });
+    // This waits for the pending step and measures its completed entry.
+    const size = await step.journal.getSize();
+    const value: string = await pendingValue;
 
     return {
       value,
       stepCount: step.journal.getStepCount(),
+      size,
     };
   });
 

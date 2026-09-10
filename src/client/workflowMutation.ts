@@ -1,5 +1,4 @@
 import { type WorkpoolOptions } from "@convex-dev/workpool";
-import { BaseChannel } from "async-channel";
 import { assert } from "convex-helpers";
 import { validate, ValidationError } from "convex-helpers/validators";
 import {
@@ -22,11 +21,7 @@ import { formatErrorWithStack } from "../shared.js";
 import { vWorkflowId, type OnCompleteArgs, type WorkflowId } from "../types.js";
 import { setupEnvironment } from "./environment.js";
 import type { WorkflowDefinition, WorkflowHandler } from "./index.js";
-import {
-  StepExecutor,
-  type ExecutorRequest,
-  type WorkerResult,
-} from "./step.js";
+import { StepExecutor, ExecutorChannel, type WorkerResult } from "./step.js";
 import {
   type InferFromOptionalValidator,
   type RunResult,
@@ -229,9 +224,7 @@ export function workflowMutation<
           `Assertion failed: not blocked but have in-progress journal entry`,
         );
       }
-      const channel = new BaseChannel<ExecutorRequest>(
-        workpoolOptions.maxParallelism ?? 10,
-      );
+      const channel = new ExecutorChannel(workpoolOptions.maxParallelism ?? 10);
       const executor = new StepExecutor(
         workflowId,
         generationNumber,

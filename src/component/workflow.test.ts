@@ -539,24 +539,26 @@ describe("workflow", () => {
       startAsync: true,
     });
 
-    // Create a workflow step without workflowId (not yet started nested workflow) using startSteps
-    await t.mutation(api.journal.startSteps, {
-      workflowId,
-      generationNumber: 0,
-      steps: [
-        {
-          step: {
-            kind: "workflow" as const,
-            name: "pending-nested-workflow",
-            handle: "function://;workflow.test:nestedWorkflow",
-            inProgress: true,
-            argsSize: 0,
-            args: { location: "Boston" },
-            startedAt: Date.now(),
-          },
+    // Seed the pending step directly: startSteps always starts the child now.
+    const stepId = await t.run((ctx) =>
+      ctx.db.insert("steps", {
+        workflowId,
+        stepNumber: 0,
+        step: {
+          kind: "workflow",
+          name: "pending-nested-workflow",
+          handle: "function://;workflow.test:noop",
+          inProgress: true,
+          argsSize: 0,
+          args: { location: "Boston" },
+          startedAt: Date.now(),
         },
-      ],
-    });
+      }),
+    );
+
+    const entry = await t.run((ctx) => ctx.db.get("steps", stepId));
+    expect(entry?.step).toMatchObject({ kind: "workflow" });
+    expect(entry?.step).not.toHaveProperty("workflowId");
 
     // Cancel the workflow
     await t.mutation(api.workflow.cancel, { workflowId });
@@ -565,10 +567,11 @@ describe("workflow", () => {
     const cleaned = await t.mutation(api.workflow.cleanup, { workflowId });
     expect(cleaned).toBe(true);
 
-    // Verify the workflow is deleted
+    // Verify the workflow and pending step are deleted
     await t.run(async (ctx) => {
       const workflow = await ctx.db.get("workflows", workflowId);
       expect(workflow).toBeNull();
+      expect(await ctx.db.get("steps", stepId)).toBeNull();
     });
   });
 

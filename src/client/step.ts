@@ -64,11 +64,53 @@ export type ConsumeRequest = {
   reject: (error: Error) => void;
 };
 
-export type ExecutorRequest = StepRequest | ConsumeRequest;
+// A read at the current journal position. It is never persisted as a step.
+export type SizeRequest = {
+  getSize: true;
+  resolve: (size: number) => void;
+};
+
+export type ExecutorRequest = StepRequest | ConsumeRequest | SizeRequest;
+
+export class ExecutorChannel {
+  private channel: BaseChannel<ExecutorRequest>;
+  requestedSteps = 0;
+
+  constructor(capacity: number) {
+    this.channel = new BaseChannel(capacity);
+  }
+
+  get bufferSize() {
+    return this.channel.bufferSize;
+  }
+
+  get() {
+    return this.channel.get();
+  }
+
+  push(request: ExecutorRequest) {
+    if (!("getSize" in request)) {
+      // Include requests waiting for channel capacity, but not metadata reads.
+      this.requestedSteps++;
+      if ("consume" in request) {
+        const reject = request.reject;
+        request = {
+          ...request,
+          reject: (error) => {
+            this.requestedSteps--;
+            reject(error);
+          },
+        };
+      }
+    }
+    return this.channel.push(request);
+  }
+}
 
 export class StepExecutor {
   // Internal accounting for the journal size limit, including pending steps.
   private journalSize: number = 0;
+  private replayedSteps = 0;
 
   constructor(
     private workflowId: string,
@@ -76,14 +118,22 @@ export class StepExecutor {
     private ctx: GenericMutationCtx<GenericDataModel>,
     private component: WorkflowComponent,
     private journalEntries: Array<JournalEntry>,
-    private receiver: BaseChannel<ExecutorRequest>,
+    private receiver: ExecutorChannel,
     private now: number,
     private workpoolOptions: WorkpoolOptions | undefined,
     private definedVersion: number = 0,
   ) {}
   async run(): Promise<WorkerResult> {
+    let sizeRequest: SizeRequest | undefined;
     while (true) {
-      const message = await this.receiver.get();
+      const message = sizeRequest ?? (await this.receiver.get());
+      sizeRequest = undefined;
+      if ("getSize" in message) {
+        // Earlier steps have all completed, either inline or on replay.
+        // Later recorded entries have not contributed to journalSize yet.
+        message.resolve(this.journalSize);
+        continue;
+      }
       if ("consume" in message) {
         this.consumeMessage(message);
         continue;
@@ -92,6 +142,7 @@ export class StepExecutor {
       // etc. instead of just ordering. As is, the fn order can't change.
       const entry = this.journalEntries.shift();
       if (entry) {
+        this.replayedSteps++;
         this.journalSize += getConvexSize(entry);
         this.completeMessage(message, entry);
         continue;
@@ -100,6 +151,12 @@ export class StepExecutor {
       const size = this.receiver.bufferSize;
       for (let i = 0; i < size; i++) {
         const message = await this.receiver.get();
+        if ("getSize" in message) {
+          // Flush the preceding steps before answering the read. If they
+          // block, replay recreates this request after they finish.
+          sizeRequest = message;
+          break;
+        }
         if ("consume" in message) {
           // The journal is empty (we're at the frontier), so this rejects.
           this.consumeMessage(message);
@@ -122,14 +179,14 @@ export class StepExecutor {
   }
 
   getGenerationState() {
-    if (this.journalEntries.length <= this.receiver.bufferSize) {
+    const pendingSteps = this.receiver.requestedSteps - this.replayedSteps;
+    if (this.journalEntries.length <= pendingSteps) {
       return { now: this.now, version: this.definedVersion, latest: true };
     }
     // We use the next entry's startedAt / version, since we're in code just
-    // before that step is invoked. We use the bufferSize, since multiple steps
-    // may be currently enqueued in one generation, but the code after it has
-    // already started executing.
-    const next = this.journalEntries[this.receiver.bufferSize];
+    // before that step is invoked. Count requested steps rather than channel
+    // messages so size reads do not advance version or deterministic time.
+    const next = this.journalEntries[pendingSteps];
     return {
       now: next.step.startedAt,
       version: next.step.version ?? 0,
@@ -182,6 +239,7 @@ export class StepExecutor {
       return;
     }
     this.journalEntries.shift();
+    this.replayedSteps++;
     this.journalSize += getConvexSize(entry);
     message.resolve(entry);
   }

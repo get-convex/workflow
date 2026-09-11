@@ -157,3 +157,62 @@ test("unversioned definitions still use zero", async () => {
   const after = await t.query(component.workflow.getStatus, { workflowId: id });
   expect(after.workflow.runResult).toEqual({ kind: "success", returnValue: 0 });
 });
+
+test("a version guard consumes a removed step from a journal shorter than the channel capacity", async () => {
+  const replayRef = anyApi.versions.replay as WorkflowRef;
+  const replayFunctions = {
+    ...functions,
+    replay: manager
+      .define({ args: {}, version: 1, returns: v.array(v.number()) })
+      .handler(async (step) => {
+        await step.runMutation(
+          anyApi.versions.value,
+          {},
+          { name: "removed", inline: true },
+        );
+        await step.awaitEvent({ name: "resume" });
+        return [];
+      }),
+  };
+  const t = convexTest(defineSchema({}), {
+    "./_generated/api.ts": async () => ({}),
+    "./versions.ts": async () => replayFunctions,
+  });
+  workflowTest.register(t);
+
+  const id = await t.run((ctx) => manager.start(ctx, replayRef, {}));
+  const before = await t.query(component.workflow.listSteps, {
+    workflowId: id,
+    order: "asc",
+    paginationOpts: { cursor: null, numItems: 10 },
+  });
+  // Both entries fit inside the default channel capacity of ten.
+  expect(before.page.map(({ name, version }) => ({ name, version }))).toEqual([
+    { name: "removed", version: 1 },
+    { name: "resume", version: 1 },
+  ]);
+
+  // Simulate deploying v2 while this v1 workflow is waiting for its event.
+  replayFunctions.replay = manager
+    .define({ args: {}, version: 2, returns: v.array(v.number()) })
+    .handler(async (step) => {
+      const versions = [step.journal.getVersion()];
+      if (step.journal.getVersion() < 2) {
+        await step.journal.consumeNext("removed");
+      }
+      versions.push(step.journal.getVersion());
+      await step.awaitEvent({ name: "resume" });
+      versions.push(step.journal.getVersion());
+      return versions;
+    });
+
+  await t.run((ctx) =>
+    manager.sendEvent(ctx, { workflowId: id, name: "resume" }),
+  );
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  const after = await t.query(component.workflow.getStatus, { workflowId: id });
+  expect(after.workflow.runResult).toEqual({
+    kind: "success",
+    returnValue: [1, 1, 2],
+  });
+});

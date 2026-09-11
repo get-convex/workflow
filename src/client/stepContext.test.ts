@@ -740,21 +740,24 @@ describe("step.journal", () => {
     return { ctx, executor };
   }
 
-  test("getVersion returns the next recorded step's version while replaying, and the defined version at the frontier", async () => {
-    const entries = [
-      journalEntry({ name: "a", version: 1, stepNumber: 0 }),
-      journalEntry({ name: "b", stepNumber: 1 }), // pre-version entry
-    ];
-    const { ctx } = setup(entries, 3);
+  test.each([0, 1, 2, 10])(
+    "getVersion follows recorded steps with channel capacity %s",
+    async (capacity) => {
+      const entries = [
+        journalEntry({ name: "a", version: 1, stepNumber: 0 }),
+        journalEntry({ name: "b", stepNumber: 1 }), // pre-version entry
+      ];
+      const { ctx } = setup(entries, 3, capacity);
 
-    expect(ctx.journal.getVersion()).toBe(1);
-    await ctx.runAction(fakeFuncRef("a"), {});
-    // Next recorded step has no version stamp: reads as 0.
-    expect(ctx.journal.getVersion()).toBe(0);
-    await ctx.runAction(fakeFuncRef("b"), {});
-    // Frontier: the current definition's version.
-    expect(ctx.journal.getVersion()).toBe(3);
-  });
+      expect(ctx.journal.getVersion()).toBe(1);
+      await ctx.runAction(fakeFuncRef("a"), {});
+      // Next recorded step has no version stamp: reads as 0.
+      expect(ctx.journal.getVersion()).toBe(0);
+      await ctx.runAction(fakeFuncRef("b"), {});
+      // Frontier: the current definition's version.
+      expect(ctx.journal.getVersion()).toBe(3);
+    },
+  );
 
   test("getVersion defaults to 0 at the frontier with no defined version", async () => {
     const { ctx } = setup([]);

@@ -8,9 +8,9 @@
  * @module
  */
 
+import type * as actionRunner from "../actionRunner.js";
 import type * as event from "../event.js";
 import type * as journal from "../journal.js";
-import type * as logging from "../logging.js";
 import type * as model from "../model.js";
 import type * as oversizedValues from "../oversizedValues.js";
 import type * as pool from "../pool.js";
@@ -25,9 +25,9 @@ import type {
 import { anyApi, componentsGeneric } from "convex/server";
 
 const fullApi: ApiFromModules<{
+  actionRunner: typeof actionRunner;
   event: typeof event;
   journal: typeof journal;
-  logging: typeof logging;
   model: typeof model;
   oversizedValues: typeof oversizedValues;
   pool: typeof pool;

@@ -209,6 +209,45 @@ You can also call workflows directly from code, the CLI or dashboard:
 npx convex run example:exampleWorkflow '{ "args": { "exampleArg": "James" } }'
 ```
 
+#### Action-driven execution
+
+For workflows with several short steps, pass `executionMode: "action"` to reduce
+the scheduling overhead between steps:
+
+```ts
+const workflowId = await start(
+  ctx,
+  internal.example.exampleWorkflow,
+  { exampleArg: "James" },
+  { executionMode: "action" },
+);
+```
+
+Action mode runs continuously for up to five minutes at a time by default. Use
+the object form to choose a different soft limit, up to 30 minutes:
+
+```ts
+{ executionMode: { type: "action", continuousSoftLimitMs: 10 * 60_000 } }
+```
+
+This is not a timeout. A step that has already started can finish after the soft
+limit is reached; the workflow then continues automatically. All workflow
+features remain available in action mode, including inline steps, sleeps,
+events, nested workflows, scheduling, and configured retries.
+
+For long actions, provide a conservative runtime estimate to avoid exceeding
+Convex's 30-minute action limit. If a workflow may run continuously for 10
+minutes and an action may need another 25 minutes, mark that estimate:
+
+```ts
+await step.runAction(internal.example.longAction, args, {
+  timeRequired: 25 * 60_000,
+});
+```
+
+If an estimate does not fit safely, the workflow runs that action separately and
+resumes afterward.
+
 ### Handling the workflow's result with onComplete
 
 You can handle the workflow's result with `onComplete` by using the `start()`
@@ -456,17 +495,21 @@ can change between deploys, you can opt that step out of argument validation
 with `unstableArgs` (the step name and kind are still validated):
 
 ```ts
-await step.runMutation(internal.example.recordError, { message }, {
-  unstableArgs: true,
-});
+await step.runMutation(
+  internal.example.recordError,
+  { message },
+  {
+    unstableArgs: true,
+  },
+);
 ```
 
-Sometimes a library makes the step call on your behalf, so there's no call
-site at which to pass options. For example, another component's client may
-call `ctx.runMutation` internally with its own config embedded in the
-arguments, which would fail replays of in-flight workflows when that config
-changes. For this, `step.withOptions(...)` derives a new step context that
-applies default options to every step run through it:
+Sometimes a library makes the step call on your behalf, so there's no call site
+at which to pass options. For example, another component's client may call
+`ctx.runMutation` internally with its own config embedded in the arguments,
+which would fail replays of in-flight workflows when that config changes. For
+this, `step.withOptions(...)` derives a new step context that applies default
+options to every step run through it:
 
 ```ts
 const pool = new Workpool(components.scrapePool, { maxParallelism: 10 });
@@ -485,8 +528,8 @@ export const scrapeAll = workflow.define({
 ```
 
 `withOptions` supports `unstableArgs` and a default `retry` behavior for
-actions. Per-call options always take precedence, the original `step` context
-is unaffected, and calls can be chained (later defaults win).
+actions. Per-call options always take precedence, the original `step` context is
+unaffected, and calls can be chained (later defaults win).
 
 ### Checking a workflow's status
 

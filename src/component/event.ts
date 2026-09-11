@@ -5,7 +5,7 @@ import { mutation, type MutationCtx } from "./_generated/server.js";
 import { vResultValidator } from "@convex-dev/workpool";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { assert } from "convex-helpers";
-import { enqueueWorkflow, getWorkpool, workpoolOptions } from "./pool.js";
+import { advanceAndEnqueue, workpoolOptions } from "./pool.js";
 import { checkForOversizedResult } from "./oversizedValues.js";
 
 export async function awaitEvent(
@@ -140,6 +140,23 @@ export const send = mutation({
         break;
       }
       case "waiting": {
+        const workflow = await ctx.db.get("workflows", workflowId);
+        assert(workflow, `Workflow ${workflowId} not found`);
+        if (workflow.runResult !== undefined) {
+          // Terminal fence: a canceled/completed workflow's journal never
+          // changes, and no driver is enqueued for it. Consume the event so
+          // a send against a dead workflow doesn't linger as deliverable.
+          await ctx.db.patch("events", event._id, {
+            state: {
+              kind: "consumed",
+              stepId: event.state.stepId,
+              waitingAt: event.state.waitingAt,
+              sentAt: Date.now(),
+              consumedAt: Date.now(),
+            },
+          });
+          break;
+        }
         const step = await ctx.db.get("steps", event.state.stepId);
         assert(
           step,
@@ -160,19 +177,12 @@ export const send = mutation({
             consumedAt: Date.now(),
           },
         });
-        const anyMoreEvents = await ctx.db
-          .query("events")
-          .withIndex("workflowId_state", (q) =>
-            q.eq("workflowId", workflowId).eq("state.kind", "waiting"),
-          )
-          .order("desc")
-          .first();
-        if (!anyMoreEvents) {
-          const workflow = await ctx.db.get("workflows", workflowId);
-          assert(workflow, `Workflow ${workflowId} not found`);
-          const workpool = await getWorkpool(ctx, args.workpoolOptions);
-          await enqueueWorkflow(ctx, workflow, workpool);
-        }
+        // Consuming this event settled a step; if it was the generation's
+        // last in-progress step, this advances and enqueues the driver
+        // (and correctly does neither while other steps are still running).
+        const effectiveWorkpoolOptions =
+          args.workpoolOptions ?? workflow.workpoolOptions;
+        await advanceAndEnqueue(ctx, workflow, effectiveWorkpoolOptions);
         break;
       }
     }

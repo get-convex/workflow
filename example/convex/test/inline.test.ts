@@ -8,6 +8,10 @@ import { initConvexTest } from "../setup.test";
 
 const workflow = new WorkflowManager(components.workflow);
 
+async function drainScheduler(t: ReturnType<typeof initConvexTest>) {
+  await t.finishAllScheduledFunctions(vi.runAllTimers, 1_000);
+}
+
 describe("inline queries and mutations", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -23,7 +27,7 @@ describe("inline queries and mutations", () => {
         key: "seq_test",
       }),
     );
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    await drainScheduler(t);
     const status = await t.query((ctx) =>
       getStatus(ctx, components.workflow, workflowId),
     );
@@ -39,7 +43,7 @@ describe("inline queries and mutations", () => {
         key: "par_test",
       }),
     );
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    await drainScheduler(t);
     const status = await t.query((ctx) =>
       getStatus(ctx, components.workflow, workflowId),
     );
@@ -62,7 +66,7 @@ describe("inline queries and mutations", () => {
         key: "race_test",
       }),
     );
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    await drainScheduler(t);
     const status = await t.query((ctx) =>
       getStatus(ctx, components.workflow, workflowId),
     );
@@ -79,7 +83,7 @@ describe("inline queries and mutations", () => {
         key: "mut_test",
       }),
     );
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    await drainScheduler(t);
     const status = await t.query((ctx) =>
       getStatus(ctx, components.workflow, workflowId),
     );
@@ -89,26 +93,36 @@ describe("inline queries and mutations", () => {
     expect(status.result).toEqual({ first: 1, second: 2 });
   });
 
-  test("mixed inline + action: query runs inline, action via workpool", async () => {
-    const t = initConvexTest();
-    const workflowId = await t.run((ctx) =>
-      workflow.start(ctx, internal.test.inline.mixedInlineAndAction, {
-        key: "mixed_test",
-      }),
-    );
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
-    const status = await t.query((ctx) =>
-      getStatus(ctx, components.workflow, workflowId),
-    );
-    expect(status.type).toBe("completed");
-    assert(status.type === "completed");
-    const result = status.result as {
-      queryResult: number;
-      actionResult: string;
-    };
-    expect(result.queryResult).toBe(0);
-    expect(result.actionResult).toBe("action:mixed_test");
-  });
+  // Both modes: the inline query is resolved inside the handler's transaction
+  // while the action still blocks, so the batch handed back mixes settled and
+  // in-progress entries. The action runner must not try to start the settled
+  // one again.
+  test.each(["mutation", "action"] as const)(
+    "mixed inline + action in %s mode: query runs inline, action does not",
+    async (executionMode) => {
+      const t = initConvexTest();
+      const workflowId = await t.run((ctx) =>
+        workflow.start(
+          ctx,
+          internal.test.inline.mixedInlineAndAction,
+          { key: `mixed_test_${executionMode}` },
+          { executionMode },
+        ),
+      );
+      await drainScheduler(t);
+      const status = await t.query((ctx) =>
+        getStatus(ctx, components.workflow, workflowId),
+      );
+      expect(status.type).toBe("completed");
+      assert(status.type === "completed");
+      const result = status.result as {
+        queryResult: number;
+        actionResult: string;
+      };
+      expect(result.queryResult).toBe(0);
+      expect(result.actionResult).toBe(`action:mixed_test_${executionMode}`);
+    },
+  );
 
   test("dependent inline queries: second uses result of first", async () => {
     const t = initConvexTest();
@@ -117,12 +131,190 @@ describe("inline queries and mutations", () => {
         key: "dep_test",
       }),
     );
-    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    await drainScheduler(t);
     const status = await t.query((ctx) =>
       getStatus(ctx, components.workflow, workflowId),
     );
     expect(status.type).toBe("completed");
     assert(status.type === "completed");
     expect(status.result).toEqual({ first: 0, second: 0 });
+  });
+});
+
+describe("action-driven workflows", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("executes sequential queries, mutations, and actions from one runner", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.run((ctx) =>
+      workflow.start(
+        ctx,
+        internal.test.inline.actionDrivenSequence,
+        { key: "action_sequence" },
+        { executionMode: "action" },
+      ),
+    );
+    await drainScheduler(t);
+    const status = await t.run((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
+    assert(status.type === "completed");
+    expect(status.result).toEqual({
+      before: 0,
+      incremented: 1,
+      actionResult: "action:action_sequence",
+      after: 1,
+    });
+  });
+
+  test("hands a failed direct action to workpool with remaining retries", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.run((ctx) =>
+      workflow.start(
+        ctx,
+        internal.test.inline.actionDrivenRetry,
+        { key: "action_retry" },
+        { executionMode: "action" },
+      ),
+    );
+    await drainScheduler(t);
+    const status = await t.run((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
+    assert(status.type === "completed");
+    expect(status.result).toBe("attempt:2");
+  });
+
+  test("hands off actions whose requested time does not fit", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.run((ctx) =>
+      workflow.start(
+        ctx,
+        internal.test.inline.actionDrivenBudgetHandoff,
+        { label: "budget" },
+        { executionMode: { type: "action", continuousSoftLimitMs: 100 } },
+      ),
+    );
+    await drainScheduler(t);
+    const status = await t.run((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
+    assert(status.type === "completed");
+    expect(status.result).toBe("action:budget");
+  });
+
+  test("resumes the action runner after a sleep", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.run((ctx) =>
+      workflow.start(
+        ctx,
+        internal.test.inline.actionDrivenSleep,
+        { label: "after-sleep" },
+        { executionMode: "action" },
+      ),
+    );
+    await drainScheduler(t);
+    const status = await t.run((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
+    assert(status.type === "completed");
+    expect(status.result).toBe("action:after-sleep");
+  });
+
+  test("commits an inline mutation once before handing off to sleep", async () => {
+    const t = initConvexTest();
+    const key = "action_inline_sleep";
+    const workflowId = await t.run((ctx) =>
+      workflow.start(
+        ctx,
+        internal.test.inline.actionDrivenInlineThenSleep,
+        { key },
+        { executionMode: "action" },
+      ),
+    );
+    await drainScheduler(t);
+    const status = await t.run((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
+    const counter = await t.query(internal.test.inline.getCounter, { key });
+    assert(status.type === "completed");
+    expect(status.result).toBe(1);
+    expect(counter).toBe(1);
+  });
+
+  test("rolls back a limited inline subtransaction and continues", async () => {
+    const t = initConvexTest();
+    const key = "action_inline_limit";
+    const workflowId = await t.run((ctx) =>
+      workflow.start(
+        ctx,
+        internal.test.inline.catchTransactionLimit,
+        { key },
+        { executionMode: "action" },
+      ),
+    );
+    await drainScheduler(t);
+    const status = await t.run((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
+    const counter = await t.query(internal.test.inline.getCounter, { key });
+    assert(status.type === "completed");
+    expect(status.result).toEqual({ caught: true, finalValue: 1 });
+    expect(counter).toBe(1);
+  });
+
+  test("resumes the action runner after an event arrives", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.run((ctx) =>
+      workflow.start(
+        ctx,
+        internal.test.inline.actionDrivenEvent,
+        {},
+        { executionMode: "action" },
+      ),
+    );
+    await drainScheduler(t);
+    const waiting = await t.run((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
+    assert(waiting.type === "inProgress");
+    expect(waiting.running.some((step) => step.kind === "event")).toBe(true);
+
+    await t.run((ctx) =>
+      workflow.sendEvent(ctx, {
+        workflowId,
+        name: "driver-event",
+        value: "delivered",
+      }),
+    );
+    await drainScheduler(t);
+    const completed = await t.run((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
+    assert(completed.type === "completed");
+    expect(completed.result).toBe("delivered");
+  });
+
+  test("resumes after an action-driven nested workflow", async () => {
+    const t = initConvexTest();
+    const workflowId = await t.run((ctx) =>
+      workflow.start(
+        ctx,
+        internal.nestedWorkflow.parentWorkflow,
+        { prompt: "nested" },
+        { executionMode: "action" },
+      ),
+    );
+    await drainScheduler(t);
+    const status = await t.run((ctx) =>
+      getStatus(ctx, components.workflow, workflowId),
+    );
+    assert(status.type === "completed");
+    expect(status.result).toBe(6);
   });
 });

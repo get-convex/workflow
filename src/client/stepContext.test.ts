@@ -1,9 +1,9 @@
 import { describe, it, expect, test } from "vitest";
 import { BaseChannel } from "async-channel";
-import type { RunResult } from "./types.js";
+import type { RunResult } from "./workflowMutation.js";
 import type { StepRequest } from "./step.js";
 import { StepExecutor } from "./step.js";
-import type { JournalEntry } from "../component/schema.js";
+import type { JournalEntry } from "../validators.js";
 import { createWorkflowCtx } from "./workflowContext.js";
 import type { WorkflowId } from "../types.js";
 import { anyApi, type FunctionReference } from "convex/server";

@@ -1,5 +1,5 @@
 import type { FunctionReference, FunctionReturnType } from "convex/server";
-import type { GenericId, Infer, Validator, Value } from "convex/values";
+import type { Infer, Validator } from "convex/values";
 import type { ComponentApi } from "../component/_generated/component.js";
 import type { WorkflowId } from "../types.js";
 
@@ -14,21 +14,6 @@ export type InferFromOptionalValidator<ReturnsValidator> = [
 ] extends [Validator<any, any, any>]
   ? Infer<ReturnsValidator>
   : unknown;
-
-export type RunResult<Returns = unknown> =
-  | { kind: "success"; returnValue: Returns }
-  | { kind: "failed"; error: string }
-  | { kind: "canceled" };
-
-/**
- * The value returned by the workflow mutation.
- *
- * Direct calls return the workflow ID. Internal polls return `complete` when
- * the handler finishes, carrying its validated result for the workflow driver.
- */
-export type WorkflowMutationResult<Returns = unknown> =
-  | WorkflowId
-  | { kind: "complete"; runResult: RunResult<Returns> };
 
 type ReturnValueFromWorkflowMutation<Result> = Result extends {
   kind: "complete";
@@ -51,15 +36,6 @@ type ReturnValueFromWorkflowMutation<Result> = Result extends {
 export type WorkflowReturnType<
   Workflow extends FunctionReference<"mutation", any, any>,
 > = ReturnValueFromWorkflowMutation<FunctionReturnType<Workflow>>;
-
-export type IdsToStrings<T> =
-  T extends GenericId<string>
-    ? string
-    : T extends (infer U)[]
-      ? IdsToStrings<U>[]
-      : T extends Record<string, Value | undefined>
-        ? { [K in keyof T]: IdsToStrings<T[K]> }
-        : T;
 
 /**
  * Per-transaction resource limits for an inline query or mutation.

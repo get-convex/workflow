@@ -13,15 +13,21 @@ import {
   type MutationCtx,
   query,
 } from "./_generated/server.js";
-import { type Logger, logLevel } from "./logging.js";
+import { type Logger, logLevel } from "../logging.js";
 import { getWorkflow } from "./model.js";
-import { getWorkpool } from "./pool.js";
-import schema, {
+import {
+  enqueueWorkflow,
+  getWorkpool,
+  settleStep,
+  workpoolOptions,
+} from "./pool.js";
+import schema from "./schema.js";
+import {
   journalDocument,
   vOnComplete,
   workflowDocument,
   type JournalEntry,
-} from "./schema.js";
+} from "../validators.js";
 import { getDefaultLogger } from "./utils.js";
 import {
   type WorkflowId,
@@ -38,6 +44,7 @@ import { api, internal } from "./_generated/api.js";
 import { formatErrorWithStack } from "../shared.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { paginator } from "convex-helpers/server/pagination";
+import { vActionExecution } from "../execution.js";
 
 const createArgs = v.object({
   workflowName: v.string(),
@@ -47,6 +54,8 @@ const createArgs = v.object({
   onComplete: v.optional(vOnComplete),
   startAsync: v.optional(v.boolean()),
   createOnly: v.optional(v.boolean()),
+  execution: v.optional(vActionExecution),
+  workpoolOptions: v.optional(workpoolOptions),
   // TODO: ttl
 });
 export const create = mutation({
@@ -68,6 +77,8 @@ export async function createHandler(
     args: args.workflowArgs,
     generationNumber: 0,
     onComplete: args.onComplete,
+    execution: args.execution,
+    workpoolOptions: args.workpoolOptions,
   });
   console.debug(
     `Created workflow ${workflowId}:`,
@@ -79,17 +90,25 @@ export async function createHandler(
       !args.createOnly,
       "Cannot startAsync and createOnly at the same time",
     );
-    const workpool = await getWorkpool(ctx, args);
-    await workpool.enqueueMutation(
+    const effectiveWorkpoolOptions = {
+      ...args.workpoolOptions,
+      maxParallelism:
+        args.maxParallelism ?? args.workpoolOptions?.maxParallelism,
+    };
+    const workpool = await getWorkpool(ctx, effectiveWorkpoolOptions);
+    if (schedulerOptions && args.execution) {
+      throw new Error(
+        "Scheduler options are not supported when starting an action-driven workflow.",
+      );
+    }
+    const workflow = await ctx.db.get("workflows", workflowId);
+    assert(workflow, `Workflow not found: ${workflowId}`);
+    await enqueueWorkflow(
       ctx,
-      args.workflowHandle as FunctionHandle<"mutation">,
-      { workflowId, generationNumber: 0 },
-      {
-        name: args.workflowName,
-        onComplete: internal.pool.handlerOnComplete,
-        context: { workflowId, generationNumber: 0 },
-        ...schedulerOptions,
-      },
+      workflow,
+      workpool,
+      effectiveWorkpoolOptions,
+      schedulerOptions,
     );
   } else if (!args.createOnly) {
     // If we can't start it, may as well not create it, eh? Fail fast...
@@ -126,7 +145,7 @@ export const getStatus = query({
   },
 });
 
-function publicWorkflowId(workflowId: Id<"workflows">): WorkflowId {
+function publicWorkflowId(workflowId: Id<"workflows"> | string): WorkflowId {
   return workflowId as any;
 }
 
@@ -309,11 +328,68 @@ export async function restartHandler(
     }
   }
 
+  // Clean up the direct claims a dead driver left in progress: nobody is
+  // coming back for them, and leaving them would block every future driver
+  // forever. Durable steps — anything with a workpool workId or a started
+  // nested workflow — are left untouched: the workpool guarantees their
+  // completions are eventually delivered (cancellation included), and the
+  // completion fence accepts them by claim generation, so they settle on
+  // their own after the restart. Direct claims follow at-most-once: actions
+  // were possibly started, so they settle as failed and are never re-run
+  // implicitly (use `restart({ from })` to re-run one explicitly); direct
+  // queries and mutations provably produced nothing (their execution commits
+  // atomically with the journal write), so they are deleted for replay to
+  // re-execute.
+  const orphans = await ctx.db
+    .query("steps")
+    .withIndex("inProgress", (q) =>
+      q.eq("step.inProgress", true).eq("workflowId", args.workflowId),
+    )
+    .collect();
+  if (orphans.length > 0) {
+    const toDelete: Doc<"steps">[] = [];
+    let settledCount = 0;
+    let durableCount = 0;
+    for (const orphan of orphans) {
+      const { step } = orphan;
+      const durable =
+        step.kind === "workflow"
+          ? step.workflowId !== undefined
+          : step.kind === "event"
+            ? step.eventId !== undefined
+            : step.workId !== undefined;
+      if (durable) {
+        durableCount += 1;
+        continue;
+      }
+      if (step.kind === "function" && step.functionType === "action") {
+        settledCount += 1;
+        await settleStep(ctx, console, workflow, orphan, {
+          kind: "failed",
+          error:
+            `The workflow was restarted while this step was in progress; ` +
+            `its outcome is unknown and it will not be re-run. ` +
+            `Use restart({ from }) to re-execute it explicitly.`,
+        });
+      } else {
+        toDelete.push(orphan);
+      }
+    }
+    await deleteSteps(ctx, toDelete);
+    console.warn(
+      `Restart of ${args.workflowId} found ${orphans.length} unsettled step(s): ` +
+        `${durableCount} awaiting durable completion, ` +
+        `${settledCount} settled as failed (possibly-started actions), ` +
+        `${toDelete.length} discarded for re-execution on replay.`,
+    );
+  }
+
   // Increment generation number and clear result
   const generationNumber = workflow.generationNumber + 1;
   await ctx.db.patch("workflows", args.workflowId, {
     generationNumber,
     runResult: undefined,
+    driverFailures: undefined,
   });
 
   console.event("retry", {
@@ -322,18 +398,11 @@ export async function restartHandler(
     from: args.from,
   });
 
-  if (args.startAsync) {
-    const workpool = await getWorkpool(ctx, {});
-    await workpool.enqueueMutation(
-      ctx,
-      workflow.workflowHandle as FunctionHandle<"mutation">,
-      { workflowId: args.workflowId, generationNumber },
-      {
-        name: workflow.name,
-        onComplete: internal.pool.handlerOnComplete,
-        context: { workflowId: args.workflowId, generationNumber },
-      },
-    );
+  if (args.startAsync || workflow.execution) {
+    const workpool = await getWorkpool(ctx, workflow.workpoolOptions);
+    const restarted = await ctx.db.get("workflows", args.workflowId);
+    assert(restarted, `Workflow not found: ${args.workflowId}`);
+    await enqueueWorkflow(ctx, restarted, workpool, workflow.workpoolOptions);
   } else {
     await ctx.runMutation(
       workflow.workflowHandle as FunctionHandle<"mutation">,
@@ -395,8 +464,12 @@ export async function completeHandler(
     overallDurationMs: Date.now() - workflow._creationTime,
   });
   if (workflow.runResult.kind === "canceled") {
-    // We bump it so no in-flight steps succeed / we don't race to complete.
-    workflow.generationNumber += 1;
+    // The terminal runResult is the cancellation fence: every completion
+    // path checks it before touching the journal, so in-flight steps can
+    // finish externally but their late completions are rejected. Workpool
+    // cancellation below is best effort — a running action is not killed
+    // (see docs/cloud-semantics-experiments notes), and the generation is
+    // deliberately not bumped.
     // TODO: can we cancel these asynchronously if there's more than one?
     const inProgress = await ctx.db
       .query("steps")

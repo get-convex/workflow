@@ -12,22 +12,35 @@ import {
 import {
   asObjectValidator,
   v,
+  type Infer,
   type ObjectType,
   type PropertyValidators,
   type Validator,
 } from "convex/values";
-import { createLogger } from "../component/logging.js";
-import { type JournalEntry } from "../component/schema.js";
+import {
+  createLogger,
+  logLevel as logLevelValidator,
+  type LogLevel,
+} from "../logging.js";
+import {
+  journalDocument,
+  type JournalEntry,
+  type Workflow,
+  workflowDocument,
+} from "../validators.js";
 import { formatErrorWithStack } from "../shared.js";
 import { vWorkflowId, type OnCompleteArgs, type WorkflowId } from "../types.js";
+import {
+  normalizeExecutionMode,
+  vExecutionMode,
+  type ExecutionMode,
+} from "../execution.js";
 import { setupEnvironment } from "./environment.js";
 import type { WorkflowDefinition, WorkflowHandler } from "./index.js";
 import { StepExecutor, type StepRequest, type WorkerResult } from "./step.js";
 import {
   type InferFromOptionalValidator,
-  type RunResult,
   type WorkflowComponent,
-  type WorkflowMutationResult,
 } from "./types.js";
 import { createWorkflowCtx } from "./workflowContext.js";
 
@@ -42,6 +55,8 @@ export type WorkflowArgs<V extends PropertyValidators, Context = unknown> = {
    * current transaction.
    */
   startAsync?: boolean;
+  /** Select the durable action runner instead of mutation-by-mutation execution. */
+  executionMode?: ExecutionMode;
 } & (
   | {
       /**
@@ -64,14 +79,28 @@ const vWorkflowArgs = v.union(
   v.object({
     workflowId: vWorkflowId,
     generationNumber: v.number(),
+    actionState: v.optional(
+      v.object({
+        workflow: workflowDocument,
+        journalEntries: v.array(journalDocument),
+        logLevel: logLevelValidator,
+      }),
+    ),
   }),
   v.object({
     args: v.any(),
     startAsync: v.optional(v.boolean()),
     onComplete: v.optional(v.string()),
     context: v.optional(v.any()),
+    executionMode: v.optional(vExecutionMode),
   }),
 );
+export type WorkflowMutationArgs = Infer<typeof vWorkflowArgs>;
+
+export type RunResult<Returns = unknown> =
+  | { kind: "success"; returnValue: Returns }
+  | { kind: "failed"; error: string }
+  | { kind: "canceled" };
 
 const vRunResult = (
   returns: Validator<any, "required", any> | PropertyValidators | undefined,
@@ -88,11 +117,30 @@ const vRunResult = (
     v.object({ kind: v.literal("canceled") }),
   );
 
+/**
+ * The value returned by the workflow mutation.
+ *
+ * Direct calls return the workflow ID. Internal polls return `complete` when
+ * the handler finishes, carrying its validated result for the workflow driver.
+ */
+export type WorkflowMutationResult<Returns = unknown> =
+  | WorkflowId
+  | { kind: "steps"; entries: JournalEntry[] }
+  | { kind: "blocked" }
+  | { kind: "complete"; runResult: RunResult<Returns> };
+
 const vWorkflowReturns = (
   returns: Validator<any, "required", any> | PropertyValidators | undefined,
 ) =>
   v.union(
     vWorkflowId,
+    v.object({
+      kind: v.literal("steps"),
+      entries: v.array(journalDocument),
+    }),
+    v.object({
+      kind: v.literal("blocked"),
+    }),
     v.object({
       kind: v.literal("complete"),
       runResult: vRunResult(returns),
@@ -157,6 +205,13 @@ export function workflowMutation<
         assert(validate(vWorkflowArgs, args, { throw: true }));
       }
       let workflowId: WorkflowId, generationNumber: number;
+      let actionState:
+        | {
+            workflow: Workflow;
+            journalEntries: JournalEntry[];
+            logLevel: LogLevel;
+          }
+        | undefined;
 
       // Direct call { args: {...}, onComplete?, context?, startAsync? }
       if ("args" in args) {
@@ -166,48 +221,81 @@ export function workflowMutation<
           typeof args.onComplete === "string"
             ? { fnHandle: args.onComplete, context: args.context }
             : undefined;
+        const execution = normalizeExecutionMode(args.executionMode);
         workflowId = (await ctx.runMutation(component.workflow.create, {
           workflowName: metadata.name,
           workflowHandle: await createFunctionHandle(fn),
           workflowArgs: args.args,
           maxParallelism: workpoolOptions.maxParallelism,
           onComplete,
-          startAsync: args.startAsync ?? undefined,
-          createOnly: !args.startAsync, // either start async or run inline here
+          startAsync: execution ? true : (args.startAsync ?? undefined),
+          createOnly: execution ? false : !args.startAsync,
+          execution,
+          workpoolOptions,
         })) as WorkflowId;
-        if (args.startAsync) {
+        if (args.startAsync || execution) {
           return workflowId;
         }
         generationNumber = 0;
       } else {
         workflowId = args.workflowId;
         generationNumber = args.generationNumber;
+        actionState = "actionState" in args ? args.actionState : undefined;
       }
 
-      const { workflow, logLevel, journalEntries, ok } = await ctx.runQuery(
-        component.journal.load,
-        { workflowId, shortCircuit: true },
-      );
+      if (actionState) {
+        if (actionState.workflow._id !== workflowId) {
+          return { kind: "blocked" };
+        }
+        const expectedStepNumber = actionState.journalEntries.reduce(
+          (next, entry) => Math.max(next, entry.stepNumber + 1),
+          0,
+        );
+        const validation = await ctx.runQuery(
+          component.journal.validateActionState,
+          { workflowId, generationNumber, expectedStepNumber },
+        );
+        if (validation.kind === "complete") {
+          return { kind: "complete", runResult: validation.runResult };
+        }
+        if (validation.kind === "stale") {
+          return { kind: "blocked" };
+        }
+      }
+
+      const loaded = actionState
+        ? { ...actionState, ok: true }
+        : await ctx.runQuery(component.journal.load, {
+            workflowId,
+            shortCircuit: true,
+          });
+      const { workflow, logLevel, journalEntries, ok } = loaded;
       const inProgress = journalEntries.filter(({ step }) => step.inProgress);
       const console = createLogger(logLevel);
       if (!ok) {
         console.error(`Failed to load journal for ${workflowId}`);
+        const runResult = {
+          kind: "failed" as const,
+          error: "Failed to load journal",
+        };
         await ctx.runMutation(component.workflow.complete, {
           workflowId,
           generationNumber,
-          runResult: { kind: "failed", error: "Failed to load journal" },
+          runResult,
         });
-        return workflowId;
+        return actionState ? { kind: "complete", runResult } : workflowId;
       }
       if (workflow.generationNumber !== generationNumber) {
         console.error(
           `Invalid generation number: ${generationNumber} running workflow ${workflow.name} (${workflowId})`,
         );
-        return workflowId;
+        return actionState ? { kind: "blocked" } : workflowId;
       }
-      if (workflow.runResult?.kind === "success") {
+      if (workflow.runResult) {
         console.log(`Workflow ${workflowId} completed, returning.`);
-        return workflowId;
+        return actionState
+          ? { kind: "complete", runResult: workflow.runResult }
+          : workflowId;
       }
       if (inProgress.length > 0) {
         console.log(
@@ -216,7 +304,7 @@ export function workflowMutation<
               .map((entry) => `${entry.step.name} (${entry._id})`)
               .join(", "),
         );
-        return workflowId;
+        return actionState ? { kind: "blocked" } : workflowId;
       }
       for (const journalEntry of journalEntries) {
         assert(
@@ -233,10 +321,11 @@ export function workflowMutation<
         generationNumber,
         ctx,
         component,
-        journalEntries as JournalEntry[],
+        [...(journalEntries as JournalEntry[])],
         channel,
         Date.now(),
         workpoolOptions,
+        Boolean(actionState),
       );
       const restoreEnvironment = setupEnvironment(
         executor.getGenerationState.bind(executor),
@@ -283,7 +372,20 @@ export function workflowMutation<
           return { type: "handlerDone", runResult };
         };
         const executorWorker = async (): Promise<WorkerResult> => {
-          return await executor.run();
+          try {
+            return await executor.run();
+          } catch (error) {
+            // Executor errors (journal mismatch, journal size, ...) are
+            // deterministic: fail the workflow rather than throwing out of
+            // the poll, where they would read as a transient driver failure
+            // and be retried without ever making progress.
+            const message = formatErrorWithStack(error);
+            console.error(message);
+            return {
+              type: "handlerDone",
+              runResult: { kind: "failed", error: message },
+            };
+          }
         };
         const result = await Promise.race([handlerWorker(), executorWorker()]);
         switch (result.type) {
@@ -300,13 +402,13 @@ export function workflowMutation<
           }
           case "executorBlocked": {
             // Nothing to do, we already started steps in the StepExecutor.
-            break;
+            if (actionState) return { kind: "steps", entries: result.entries };
           }
         }
       } finally {
         restoreEnvironment();
       }
-      return workflowId;
+      return actionState ? { kind: "blocked" } : workflowId;
     },
   }) as RegisteredMutation<
     "internal",

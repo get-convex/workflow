@@ -9,20 +9,16 @@ import {
   type GenericMutationCtx,
 } from "convex/server";
 import { convexToJson, getConvexSize, type Value } from "convex/values";
-import { type JournalEntry, type Step } from "../component/schema.js";
-import type {
-  IdsToStrings,
-  RunResult,
-  TransactionLimits,
-  WorkflowComponent,
-} from "./types.js";
+import { type JournalEntry, type Step } from "../validators.js";
+import type { TransactionLimits, WorkflowComponent } from "./types.js";
 import { MAX_JOURNAL_SIZE, formatErrorWithStack } from "../shared.js";
 import type { EventId, SchedulerOptions } from "../types.js";
 import { pick } from "convex-helpers";
+import type { RunResult } from "./workflowMutation.js";
 
 export type WorkerResult =
   | { type: "handlerDone"; runResult: RunResult }
-  | { type: "executorBlocked" };
+  | { type: "executorBlocked"; entries: JournalEntry[] };
 
 export type StepRequest = {
   name: string;
@@ -51,12 +47,17 @@ export type StepRequest = {
   unstableArgs: boolean;
   transactionLimits: TransactionLimits | undefined;
   schedulerOptions: SchedulerOptions;
+  timeRequired?: number;
 
   resolve: (result: RunResult) => void;
 };
 
 export class StepExecutor {
   private journalEntrySize: number;
+  // Every entry created during this poll, in stepNumber order. The action
+  // runner appends these to its cached journal, so entries that completed
+  // inline must be included even though they never block the executor.
+  private createdEntries: JournalEntry[] = [];
 
   constructor(
     private workflowId: string,
@@ -67,6 +68,7 @@ export class StepExecutor {
     private receiver: BaseChannel<StepRequest>,
     private now: number,
     private workpoolOptions: WorkpoolOptions | undefined,
+    private deferExecution = false,
   ) {
     this.journalEntrySize = journalEntries.reduce(
       (size, entry) => size + getConvexSize(entry),
@@ -104,6 +106,7 @@ export class StepExecutor {
       }
       return {
         type: "executorBlocked",
+        entries: this.createdEntries,
       };
     }
   }
@@ -201,7 +204,7 @@ export class StepExecutor {
           startedAt: this.now,
           completedAt: runResult ? this.now : undefined,
         } satisfies Omit<Step, "kind">;
-        let step: IdsToStrings<Step>;
+        let step: Step;
         switch (target.kind) {
           case "function":
             step = {
@@ -237,8 +240,12 @@ export class StepExecutor {
         }
         return {
           retry: message.retry,
-          schedulerOptions: message.schedulerOptions,
+          timeRequired: message.timeRequired,
           step,
+          ...(message.schedulerOptions.runAfter ||
+          message.schedulerOptions.runAt
+            ? { schedulerOptions: message.schedulerOptions }
+            : {}),
         };
       }),
     );
@@ -249,8 +256,10 @@ export class StepExecutor {
         generationNumber: this.generationNumber,
         steps,
         workpoolOptions: this.workpoolOptions,
+        deferExecution: this.deferExecution || undefined,
       },
     )) as JournalEntry[];
+    this.createdEntries.push(...entries);
     for (const entry of entries) {
       this.journalEntrySize += getConvexSize(entry);
       if (this.journalEntrySize > MAX_JOURNAL_SIZE) {

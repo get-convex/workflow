@@ -209,6 +209,100 @@ export const catchTransactionLimitStatus = internalQuery({
   },
 });
 
+export const actionDrivenSequence = workflow
+  .define({
+    args: { key: v.string() },
+    returns: v.object({
+      before: v.number(),
+      incremented: v.number(),
+      actionResult: v.string(),
+      after: v.number(),
+    }),
+  })
+  .handler(async (step, args) => {
+    const before = await step.runQuery(internal.test.inline.getCounter, {
+      key: args.key,
+    });
+    const incremented = await step.runMutation(
+      internal.test.inline.incrementCounter,
+      { key: args.key },
+    );
+    const actionResult = await step.runAction(internal.test.inline.someAction, {
+      label: args.key,
+    });
+    const after = await step.runQuery(internal.test.inline.getCounter, {
+      key: args.key,
+    });
+    return { before, incremented, actionResult, after };
+  });
+
+export const actionDrivenRetry = workflow
+  .define({
+    args: { key: v.string() },
+    returns: v.string(),
+  })
+  .handler(async (step, args) => {
+    return await step.runAction(
+      internal.test.inline.flakyAction,
+      { key: args.key },
+      {
+        retry: { maxAttempts: 3, initialBackoffMs: 10, base: 2 },
+      },
+    );
+  });
+
+export const actionDrivenBudgetHandoff = workflow
+  .define({
+    args: { label: v.string() },
+    returns: v.string(),
+  })
+  .handler(async (step, args) => {
+    return await step.runAction(
+      internal.test.inline.someAction,
+      { label: args.label },
+      { timeRequired: 60_000 },
+    );
+  });
+
+export const actionDrivenSleep = workflow
+  .define({
+    args: { label: v.string() },
+    returns: v.string(),
+  })
+  .handler(async (step, args) => {
+    await step.sleep(1);
+    return await step.runAction(internal.test.inline.someAction, {
+      label: args.label,
+    });
+  });
+
+export const actionDrivenInlineThenSleep = workflow
+  .define({
+    args: { key: v.string() },
+    returns: v.number(),
+  })
+  .handler(async (step, args) => {
+    const value = await step.runMutation(
+      internal.test.inline.incrementCounter,
+      { key: args.key },
+      { inline: true },
+    );
+    await step.sleep(1, { name: "after-inline" });
+    return value;
+  });
+
+export const actionDrivenEvent = workflow
+  .define({
+    args: {},
+    returns: v.string(),
+  })
+  .handler(async (step) => {
+    return await step.awaitEvent<string>({
+      name: "driver-event",
+      validator: v.string(),
+    });
+  });
+
 // ── Helper functions ──────────────────────────
 
 export const getCounter = internalQuery({
@@ -252,5 +346,22 @@ export const someAction = internalAction({
     // TODO: use setTimeout after https://github.com/get-convex/convex-test/pull/78
     // await new Promise((resolve) => setTimeout(resolve, 500));
     return `action:${label}`;
+  },
+});
+
+export const flakyAction = internalAction({
+  args: { key: v.string() },
+  returns: v.string(),
+  handler: async (ctx, { key }): Promise<string> => {
+    const attempt: number = await ctx.runMutation(
+      internal.test.inline.incrementCounter,
+      {
+        key,
+      },
+    );
+    if (attempt === 1) {
+      throw new Error("retry me");
+    }
+    return `attempt:${attempt}`;
   },
 });

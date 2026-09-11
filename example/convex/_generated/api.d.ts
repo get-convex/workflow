@@ -18,8 +18,10 @@ import type * as passingSignals from "../passingSignals.js";
 import type * as test_contextRoundtrip from "../test/contextRoundtrip.js";
 import type * as test_inline from "../test/inline.js";
 import type * as test_oldSyntax from "../test/oldSyntax.js";
+import type * as test_randomized from "../test/randomized.js";
 import type * as transcription from "../transcription.js";
 import type * as userConfirmation from "../userConfirmation.js";
+import type * as workflowDemo from "../workflowDemo.js";
 
 import type {
   ApiFromModules,
@@ -38,8 +40,10 @@ declare const fullApi: ApiFromModules<{
   "test/contextRoundtrip": typeof test_contextRoundtrip;
   "test/inline": typeof test_inline;
   "test/oldSyntax": typeof test_oldSyntax;
+  "test/randomized": typeof test_randomized;
   transcription: typeof transcription;
   userConfirmation: typeof userConfirmation;
+  workflowDemo: typeof workflowDemo;
 }>;
 
 /**
@@ -70,4 +74,5 @@ export declare const internal: FilterApi<
 
 export declare const components: {
   workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
+  staticHosting: import("@convex-dev/static-hosting/_generated/component.js").ComponentApi<"staticHosting">;
 };

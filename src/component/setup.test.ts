@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { test } from "vitest";
 import { convexTest } from "convex-test";
+import workpool from "@convex-dev/workpool/test";
 import schema from "./schema.js";
 export const modules = import.meta.glob("./**/*.*s");
 
@@ -12,7 +13,7 @@ export const componentModules = import.meta.glob(
 );
 export function initConvexTest() {
   const t = convexTest(schema, modules);
-  t.registerComponent("workpool", componentSchema, componentModules);
+  workpool.register(t, "workpool");
   return t;
 }
 

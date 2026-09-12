@@ -186,6 +186,7 @@ export async function enqueueWorkflow(
     {
       name,
       onComplete: internal.pool.handlerOnComplete,
+      onCompleteExcludeKinds: ["success"],
       context: { workflowId, generationNumber },
     },
   );

@@ -26,7 +26,7 @@ export function checkForOversizedResult(result: RunResult): RunResult {
   if (result.kind !== "success") {
     return result;
   }
-  const sizeError = checkReturnValueSize(result.returnValue);
+  const sizeError = checkReturnValueSize(result.returnValue as Value);
   if (!sizeError) {
     return result;
   }

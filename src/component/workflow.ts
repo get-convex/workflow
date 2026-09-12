@@ -87,6 +87,7 @@ export async function createHandler(
       {
         name: args.workflowName,
         onComplete: internal.pool.handlerOnComplete,
+        onCompleteExcludeKinds: ["success"],
         context: { workflowId, generationNumber: 0 },
         ...schedulerOptions,
       },
@@ -331,6 +332,7 @@ export async function restartHandler(
       {
         name: workflow.name,
         onComplete: internal.pool.handlerOnComplete,
+        onCompleteExcludeKinds: ["success"],
         context: { workflowId: args.workflowId, generationNumber },
       },
     );

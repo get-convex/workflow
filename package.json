@@ -59,7 +59,7 @@
     }
   },
   "peerDependencies": {
-    "@convex-dev/workpool": "^0.4.4",
+    "@convex-dev/workpool": "^0.4.12",
     "convex": "^1.36.1",
     "convex-helpers": "^0.1.99"
   },
@@ -68,7 +68,7 @@
   },
   "devDependencies": {
     "@convex-dev/eslint-plugin": "^4.0.0",
-    "@convex-dev/workpool": "0.4.7",
+    "@convex-dev/workpool": "0.4.12",
     "@edge-runtime/vm": "5.0.0",
     "@eslint/eslintrc": "3.3.5",
     "@eslint/js": "9.39.4",
@@ -89,7 +89,7 @@
     "path-exists-cli": "2.0.0",
     "pkg-pr-new": "0.0.66",
     "prettier": "3.8.3",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "typescript-eslint": "8.58.2",
     "vitest": "5.0.0"
   },

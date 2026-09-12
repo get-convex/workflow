@@ -6,6 +6,7 @@ import { initConvexTest } from "./setup.test.js";
 import type { Id } from "./_generated/dataModel.js";
 import { internalMutation } from "./_generated/server.js";
 import { v } from "convex/values";
+import { enqueueWorkflow, getWorkpool, handlerOnComplete } from "./pool.js";
 
 describe("workflow", () => {
   beforeEach(async () => {
@@ -13,8 +14,68 @@ describe("workflow", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
+
+  test.each(
+    ["start", "restart", "resume"].flatMap((route) =>
+      ["success", "failed"].map((kind) => ({ route, kind })),
+    ),
+  )(
+    "$route only calls handlerOnComplete for failed handlers ($kind)",
+    async ({ route, kind }) => {
+      const t = initConvexTest();
+      // Keep the real callback implementation, while observing whether workpool
+      // invokes it. A failure must still complete the workflow with an error.
+      const callback = vi.spyOn(
+        handlerOnComplete as typeof handlerOnComplete & {
+          _handler: (...args: unknown[]) => unknown;
+        },
+        "_handler",
+      );
+      const id = await t.mutation(api.workflow.create, {
+        workflowName: "callback exclusion",
+        workflowHandle: `function://;workflow.test:${kind === "success" ? "noop" : "failingHandler"}`,
+        workflowArgs: {},
+        startAsync: route === "start",
+        createOnly: route !== "start",
+      });
+      if (route === "restart") {
+        await t.mutation(api.workflow.complete, {
+          workflowId: id,
+          generationNumber: 0,
+          runResult: { kind: "failed", error: "previous attempt" },
+        });
+        await t.mutation(api.workflow.restart, {
+          workflowId: id,
+          startAsync: true,
+        });
+      } else if (route === "resume") {
+        await t.run(async (ctx) => {
+          const workflow = await ctx.db.get("workflows", id);
+          await enqueueWorkflow(
+            ctx,
+            workflow!,
+            await getWorkpool(ctx, undefined),
+          );
+        });
+      }
+      await t.finishAllScheduledFunctions(vi.runAllTimers);
+      if (kind === "success") {
+        expect(callback).not.toHaveBeenCalled();
+      } else {
+        expect(callback).toHaveBeenCalledOnce();
+        const status = await t.query(api.workflow.getStatus, {
+          workflowId: id,
+        });
+        expect(status.workflow.runResult).toMatchObject({
+          kind: "failed",
+          error: expect.stringContaining("handler failed"),
+        });
+      }
+    },
+  );
 
   test("can create a workflow async", async () => {
     const t = initConvexTest();
@@ -713,3 +774,11 @@ describe("workflow", () => {
 });
 
 export const noop = internalMutation({ args: v.any(), handler: () => {} });
+
+export const failingHandler = internalMutation({
+  args: { workflowId: v.id("workflows"), generationNumber: v.number() },
+  returns: v.null(),
+  handler: () => {
+    throw new Error("handler failed");
+  },
+});

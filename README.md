@@ -544,10 +544,11 @@ The count includes pending calls and recorded steps skipped with
 and replay, including when steps run in parallel.
 
 Use `await step.journal.getSize()` to read the journal size in bytes for the
-steps requested before the call. It waits for those steps to finish, includes
-their recorded arguments and results, and returns the same size on replay. Steps
-requested afterward are excluded, even if they have already finished when the
-workflow replays.
+steps requested before the call, including recorded steps skipped with
+`consumeNext()`. It waits for those steps to finish, includes their recorded
+arguments and results, and returns the same size on replay. Steps requested
+afterward are excluded, even if they have already finished when the workflow
+replays.
 
 ```ts
 const pending = step.runMutation(internal.example.updateUser, { userId, name });

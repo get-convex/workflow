@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.8
+
+- When paired with the latest Workpool (0.4.12), it will avoid registering an
+  onComplete callback for the successful execution of workflow handlers,
+  reducing unnecessary scheduled functions. (#283)
+
 ## 0.4.7
 
 - Improves patching and restoration of globals to work better with convex-test.

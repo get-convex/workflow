@@ -13,6 +13,7 @@ export default [
       "vitest.config.ts",
       "**/_generated/",
       "example/e2e.mjs",
+      "experiments/workpool/generated/**",
     ],
   },
   {
@@ -89,6 +90,10 @@ export default [
     },
   },
   // Example config files (vite.config.ts, etc.) - Node environment
+  {
+    files: ["experiments/workpool/*.mjs"],
+    languageOptions: { globals: globals.node },
+  },
   {
     files: ["example/vite.config.ts", "example/**/*.config.{js,ts}"],
     languageOptions: {

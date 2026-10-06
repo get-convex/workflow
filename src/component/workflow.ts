@@ -167,6 +167,8 @@ function publicStep(step: JournalEntry): WorkflowStep {
         kind: "workflow",
         nestedWorkflowId: publicWorkflowId(step.step.workflowId!),
       };
+    // It didn't used to be set
+    case undefined:
     case "function":
       return {
         ...commonFields,
@@ -179,8 +181,10 @@ function publicStep(step: JournalEntry): WorkflowStep {
         kind: "sleep",
         workId: step.step.workId!,
       };
-    default:
+    default: {
+      const _: never = step.step;
       throw new Error(`Unknown step kind: ${(step.step as any).kind}`);
+    }
   }
 }
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.9
+
+- Update types for convex 1.46 FunctionReference_future
+
 ## 0.4.8
 
 - When paired with the latest Workpool (0.4.12), it will avoid registering an

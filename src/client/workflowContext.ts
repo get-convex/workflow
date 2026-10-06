@@ -5,6 +5,7 @@ import type {
   ArgsAndOptions,
   FunctionArgs,
   FunctionReference,
+  FunctionReference_future,
   FunctionReturnType,
   FunctionType,
   FunctionVisibility,
@@ -84,7 +85,11 @@ export type WorkflowCtx = {
    * @param args - The arguments to the query function.
    * @param opts - Options for scheduling and naming the query.
    */
-  runQuery<Query extends FunctionReference<"query", FunctionVisibility>>(
+  runQuery<
+    Query extends
+      | FunctionReference<"query", FunctionVisibility>
+      | FunctionReference_future<"query", FunctionVisibility>,
+  >(
     query: Query,
     ...args: ArgsAndOptions<Query, RunOptions & InlineArgs>
   ): Promise<FunctionReturnType<Query>>;
@@ -97,7 +102,9 @@ export type WorkflowCtx = {
    * @param opts - Options for scheduling and naming the mutation.
    */
   runMutation<
-    Mutation extends FunctionReference<"mutation", FunctionVisibility>,
+    Mutation extends
+      | FunctionReference<"mutation", FunctionVisibility>
+      | FunctionReference_future<"mutation", FunctionVisibility>,
   >(
     mutation: Mutation,
     ...args: ArgsAndOptions<Mutation, RunOptions & InlineArgs>
@@ -110,7 +117,11 @@ export type WorkflowCtx = {
    * @param args - The arguments to the action function.
    * @param opts - Options for retrying, scheduling and naming the action.
    */
-  runAction<Action extends FunctionReference<"action", FunctionVisibility>>(
+  runAction<
+    Action extends
+      | FunctionReference<"action", FunctionVisibility>
+      | FunctionReference_future<"action", FunctionVisibility>,
+  >(
     action: Action,
     ...args: ArgsAndOptions<Action, RunOptions & RetryOption>
   ): Promise<FunctionReturnType<Action>>;
@@ -252,7 +263,9 @@ export function createWorkflowCtx(
 }
 
 async function runFunction<
-  F extends FunctionReference<FunctionType, FunctionVisibility>,
+  F extends
+    | FunctionReference<FunctionType, FunctionVisibility>
+    | FunctionReference_future<FunctionType, FunctionVisibility>,
 >(
   sender: BaseChannel<StepRequest>,
   functionType: FunctionType,

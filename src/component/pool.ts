@@ -11,7 +11,7 @@ import { assert } from "convex-helpers";
 import { validate } from "convex-helpers/validators";
 import {
   type FunctionHandle,
-  type FunctionReference,
+  type FunctionReference_future,
   type RegisteredAction,
 } from "convex/server";
 import { type Infer, v } from "convex/values";
@@ -198,7 +198,7 @@ export type OnComplete =
     infer Args,
     infer ReturnValue
   >
-    ? FunctionReference<"action", "internal", Args, ReturnValue>
+    ? FunctionReference_future<"action", "internal", Args, ReturnValue>
     : never;
 
 const handlerOnCompleteContext = v.object({

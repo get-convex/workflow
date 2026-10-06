@@ -3,6 +3,7 @@ import { BaseChannel } from "async-channel";
 import {
   createFunctionHandle,
   type FunctionReference,
+  type FunctionReference_future,
   type FunctionType,
   type FunctionVisibility,
   type GenericDataModel,
@@ -30,7 +31,9 @@ export type StepRequest = {
     | {
         kind: "function";
         functionType: FunctionType;
-        function: FunctionReference<FunctionType, FunctionVisibility>;
+        function:
+          | FunctionReference<FunctionType, FunctionVisibility>
+          | FunctionReference_future<FunctionType, FunctionVisibility>;
         args: Record<string, unknown>;
       }
     | {

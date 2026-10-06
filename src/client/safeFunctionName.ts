@@ -1,5 +1,6 @@
 import {
   type FunctionReference,
+  type FunctionReference_future,
   type FunctionType,
   type FunctionVisibility,
   getFunctionAddress,
@@ -7,7 +8,9 @@ import {
 } from "convex/server";
 
 export function safeFunctionName(
-  f: FunctionReference<FunctionType, FunctionVisibility>,
+  f:
+    | FunctionReference<FunctionType, FunctionVisibility>
+    | FunctionReference_future<FunctionType, FunctionVisibility>,
 ) {
   const address = getFunctionAddress(f);
   return (

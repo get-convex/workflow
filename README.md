@@ -531,7 +531,9 @@ The step name is optional. If provided, `consumeNext` checks that it matches the
 next recorded step and throws if it doesn't. Only call `consumeNext` when
 replaying old steps, as in the version check above; it throws if there are no
 recorded steps left to replay. The step is not rerun, and its history is
-preserved for future replays.
+preserved for future replays. The returned step includes its recorded `args` and
+a required `result`: a success, failure, or cancellation. Recorded failures are
+returned in `result`, without throwing.
 
 You can also check how many step calls the workflow has made so far:
 

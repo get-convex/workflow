@@ -12,9 +12,9 @@
     recorded steps skipped with `consumeNext()` (identical on first execution
     and on replay).
   - `consumeNext(name?)`: consume the next recorded journal entry without
-    issuing a step call, returning the entry (recorded args and raw `runResult`)
-    for inspection. For replaying past steps that new code no longer performs;
-    throws at the live frontier and on a name mismatch.
+    issuing a step call, returning the entry (recorded args and required
+    `result`) for inspection. For replaying past steps that new code no longer
+    performs; throws at the live frontier and on a name mismatch.
   
 ## 0.4.10
 

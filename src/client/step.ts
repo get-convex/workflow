@@ -17,8 +17,16 @@ import type {
   TransactionLimits,
   WorkflowComponent,
 } from "./types.js";
-import { MAX_JOURNAL_SIZE, formatErrorWithStack } from "../shared.js";
-import type { EventId, SchedulerOptions } from "../types.js";
+import {
+  MAX_JOURNAL_SIZE,
+  formatErrorWithStack,
+  publicStep,
+} from "../shared.js";
+import type {
+  ConsumedWorkflowStep,
+  EventId,
+  SchedulerOptions,
+} from "../types.js";
 import { pick } from "convex-helpers";
 
 export type WorkerResult =
@@ -59,11 +67,11 @@ export type StepRequest = {
 };
 
 // A step.journal.consumeNext() request: consume the next recorded journal
-// entry without executing anything, returning the entry itself.
+// entry without executing anything, returning its metadata and result.
 export type ConsumeRequest = {
   consume: true;
   expectedName: string | undefined;
-  resolve: (entry: JournalEntry) => void;
+  resolve: (step: ConsumedWorkflowStep) => void;
   reject: (error: Error) => void;
 };
 
@@ -184,9 +192,16 @@ export class StepExecutor {
       );
       return;
     }
+    const { runResult, ...step } = publicStep(entry);
+    if (runResult === undefined) {
+      message.reject(
+        new Error(`Assertion failed: no outcome for completed step`),
+      );
+      return;
+    }
     this.journalEntries.shift();
     this.journalSize += getConvexSize(entry);
-    message.resolve(entry);
+    message.resolve({ ...step, result: runResult });
   }
 
   completeMessage(message: StepRequest, entry: JournalEntry) {

@@ -31,7 +31,7 @@ export const versionedWorkflow = workflow
       const skipped = await step.journal.consumeNext(
         "journalExample:legacyStep",
       );
-      console.log(`skipped recorded step ${skipped.name}`, skipped.runResult);
+      console.log(`skipped recorded step ${skipped.name}`, skipped.result);
     }
 
     const value: string = await step.runMutation(

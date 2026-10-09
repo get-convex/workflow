@@ -46,6 +46,7 @@ export {
   vEventId,
   vWorkflowId,
   vWorkflowStep,
+  type ConsumedWorkflowStep,
   type EventId,
   type WorkflowId,
   type WorkflowStep,

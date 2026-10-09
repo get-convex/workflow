@@ -12,13 +12,11 @@ import type {
 } from "convex/server";
 import type { Validator } from "convex/values";
 import type {
+  ConsumedWorkflowStep,
   EventId,
   SchedulerOptions,
   WorkflowId,
-  WorkflowStep,
 } from "../types.js";
-import type { JournalEntry } from "../component/schema.js";
-import { publicStep } from "../shared.js";
 import { safeFunctionName } from "./safeFunctionName.js";
 import type { ExecutorRequest, StepRequest } from "./step.js";
 import type {
@@ -209,9 +207,10 @@ export type WorkflowCtx = {
     getStepCount: () => number;
     /**
      * Consume the next recorded journal entry without issuing a step call,
-     * returning the entry (including its recorded `args` and raw
-     * `runResult`) for inspection. Nothing is re-executed and nothing new is
-     * recorded; the entry stays in the journal for future replays.
+     * returning the entry (including its recorded `args` and required
+     * `result`) for inspection. The result is a success, failure, or
+     * cancellation. Nothing is re-executed and nothing new is recorded;
+     * the entry stays in the journal for future replays.
      *
      * Use this when your code no longer issues a step that old histories
      * recorded — e.g. you removed a function call (or a library call whose
@@ -232,7 +231,7 @@ export type WorkflowCtx = {
      *   `getVersion()`. Do not call it inside `Promise.all`; it's
      *   positional, like the rest of replay matching.
      */
-    consumeNext: (name?: string) => Promise<WorkflowStep>;
+    consumeNext: (name?: string) => Promise<ConsumedWorkflowStep>;
   };
 
   /**
@@ -291,7 +290,7 @@ export function createWorkflowCtx(
       },
       consumeNext: async (name?: string) => {
         let send: Promise<void>;
-        const p = new Promise<JournalEntry>((resolve, reject) => {
+        const p = new Promise<ConsumedWorkflowStep>((resolve, reject) => {
           send = sender.push({
             consume: true,
             expectedName: name,
@@ -302,7 +301,7 @@ export function createWorkflowCtx(
         await send!;
         const entry = await p;
         progress.stepCount++;
-        return publicStep(entry);
+        return entry;
       },
     },
     withOptions: (opts) =>

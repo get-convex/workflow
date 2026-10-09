@@ -887,7 +887,8 @@ describe("step.journal", () => {
     expect(skipped.name).toBe("legacy");
     expect(skipped.kind).toBe("function");
     expect(skipped.args).toEqual({ x: 1 });
-    expect(skipped.runResult).toEqual({ kind: "success", returnValue: "old" });
+    expect(skipped.result).toEqual({ kind: "success", returnValue: "old" });
+    expect(skipped).not.toHaveProperty("runResult");
     expect(skipped.version).toBe(1);
     expect(skipped.stepNumber).toBe(0);
 
@@ -917,8 +918,37 @@ describe("step.journal", () => {
     const { ctx } = setup(entries, 1);
 
     const skipped = await ctx.journal.consumeNext("failed");
-    expect(skipped.runResult).toEqual({ kind: "failed", error: "boom" });
+    expect(skipped.result).toEqual({ kind: "failed", error: "boom" });
   });
+
+  test("consumeNext returns a recorded cancellation rather than throwing", async () => {
+    const entries = [
+      journalEntry({ name: "canceled", runResult: { kind: "canceled" } }),
+    ];
+    const { ctx } = setup(entries, 1);
+
+    const skipped = await ctx.journal.consumeNext("canceled");
+    expect(skipped.result).toEqual({ kind: "canceled" });
+  });
+
+  test.each(["in-progress", "missing result"])(
+    "consumeNext rejects a %s entry without consuming it",
+    async (state) => {
+      const entry = journalEntry({ name: "legacy" });
+      entry.step.runResult = undefined;
+      entry.step.inProgress = state === "in-progress";
+      const { ctx } = setup([entry], 1);
+      const error =
+        state === "in-progress"
+          ? "in-progress journal entry"
+          : "no outcome for completed step";
+
+      await expect(ctx.journal.consumeNext("legacy")).rejects.toThrow(error);
+      expect(ctx.journal.getStepCount()).toBe(0);
+      // Retrying still sees the same entry, rather than the live frontier.
+      await expect(ctx.journal.consumeNext("legacy")).rejects.toThrow(error);
+    },
+  );
 
   test("consumeNext throws on a name mismatch", async () => {
     const entries = [journalEntry({ name: "other", stepNumber: 0 })];

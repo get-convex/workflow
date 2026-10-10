@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.10
+
+- Updates the /test entrypoint for compatibility with convex-test's new
+  `defineTestApp` capability.
+
 ## 0.4.9
 
 - Update types for convex 1.46 FunctionReference_future

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Adds `await step.journal.getSize()` to measure the completed journal entries
+  for preceding step calls. It waits for pending steps, returns the same bytes
+  on replay, and does not record a step or change the step count.
 - Adds a `version: number` option to workflow definitions (default 0), stamped
   on the workflow and on each journal entry as steps first execute.
 - Adds the `step.journal` namespace for replay-side introspection:

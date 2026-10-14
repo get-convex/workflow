@@ -553,14 +553,6 @@ async function cleanupStepsFrom(
       });
       return;
     }
-    const oversized = await ctx.db
-      .query("oversizedValues")
-      .withIndex("stepId", (q) => q.eq("stepId", entry._id))
-      .first();
-    if (oversized) {
-      await ctx.storage.delete(oversized.storageId);
-      await ctx.db.delete("oversizedValues", oversized._id);
-    }
   }
 }
 
@@ -573,6 +565,14 @@ async function deleteSteps(ctx: MutationCtx, batch: Doc<"steps">[]) {
         await ctx.db.delete("events", entry.step.eventId);
       } else if (entry.step.kind === "workflow" && entry.step.workflowId) {
         nestedWorkflowIds.push(entry.step.workflowId);
+      }
+      const oversized = await ctx.db
+        .query("oversizedValues")
+        .withIndex("stepId", (q) => q.eq("stepId", entry._id))
+        .first();
+      if (oversized) {
+        await ctx.storage.delete(oversized.storageId);
+        await ctx.db.delete("oversizedValues", oversized._id);
       }
     }),
   );

@@ -854,10 +854,10 @@ Here are a few limitations to keep in mind:
 - If the implementation of the workflow meaningfully changes (steps added,
   removed, or reordered) then it will fail with a determinism violation. The
   implementation should stay stable for the lifetime of active workflows. See
-  [this issue](https://github.com/get-convex/workflow/issues/35) for ideas on
+  [this issue](https://github.com/convex/workflow/issues/35) for ideas on
   how to make this better.
 
-Open a [GitHub issue](https://github.com/get-convex/workflow/issues) with any
+Open a [GitHub issue](https://github.com/convex/workflow/issues) with any
 feedback or bugs you find.
 
 <!-- END: Include on https://convex.dev/components -->

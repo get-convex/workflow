@@ -7,9 +7,9 @@
     "workflow",
     "durable-execution"
   ],
-  "homepage": "https://github.com/get-convex/workflow",
-  "repository": "github:get-convex/workflow",
-  "bugs": "https://github.com/get-convex/workflow/issues",
+  "homepage": "https://github.com/convex/workflow",
+  "repository": "github:convex/workflow",
+  "bugs": "https://github.com/convex/workflow/issues",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
